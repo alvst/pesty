@@ -21,7 +21,7 @@ Your clipboard history as a beautiful, color-coded strip that slides up from the
 
 <img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard manager demo - color-coded clipboard strip with keyboard navigation on macOS" />
 
-### ⭐ If Pesty saved you a Paste subscription, star the repo - it genuinely helps.
+### ⭐ If Pesty saved you money, star the repo - it genuinely helps.
 
 </div>
 
