@@ -3,31 +3,42 @@ import SwiftUI
 @MainActor
 enum SourceColor {
     private static let palette: [Color] = [
-        Color(red: 0.85, green: 0.66, blue: 0.22),
-        Color(red: 0.34, green: 0.56, blue: 0.82),
-        Color(red: 0.72, green: 0.38, blue: 0.58),
-        Color(red: 0.27, green: 0.62, blue: 0.55),
-        Color(red: 0.80, green: 0.40, blue: 0.34),
-        Color(red: 0.45, green: 0.40, blue: 0.74),
-        Color(red: 0.49, green: 0.62, blue: 0.30),
-        Color(red: 0.84, green: 0.52, blue: 0.27),
-        Color(red: 0.30, green: 0.49, blue: 0.74),
-        Color(red: 0.62, green: 0.42, blue: 0.30),
-        Color(red: 0.74, green: 0.36, blue: 0.42),
-        Color(red: 0.40, green: 0.55, blue: 0.62)
+        Color(red: 0.24, green: 0.61, blue: 0.95),
+        Color(red: 0.22, green: 0.29, blue: 0.93),
+        Color(red: 0.06, green: 0.12, blue: 0.31),
+        Color(red: 0.12, green: 0.53, blue: 0.51),
+        Color(red: 0.43, green: 0.33, blue: 0.80),
+        Color(red: 0.69, green: 0.37, blue: 0.59),
+        Color(red: 0.78, green: 0.40, blue: 0.34),
+        Color(red: 0.82, green: 0.62, blue: 0.20)
     ]
 
-    private static let key = "appColorMap"
-    private static var map: [String: Int] = {
-        UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-    }()
+    private static let knownColors: [String: Color] = [
+        "com.apple.dt.Xcode": palette[0],
+        "com.apple.Safari": palette[0],
+        "com.apple.finder": palette[0],
+        "com.openai.chat": palette[2],
+        "com.openai.chatgpt": palette[2],
+        "com.apple.Terminal": palette[2],
+        "com.apple.Preview": palette[4],
+        "com.apple.Notes": palette[7]
+    ]
+    private static var cache: [String: Color] = [:]
 
     static func color(for bundleID: String?) -> Color {
         guard let id = bundleID, !id.isEmpty else { return palette[0] }
-        if let i = map[id] { return palette[i % palette.count] }
-        let i = map.count % palette.count
-        map[id] = i
-        UserDefaults.standard.set(map, forKey: key)
-        return palette[i]
+        if let color = cache[id] { return color }
+        let color = knownColors[id] ?? palette[stableIndex(for: id)]
+        cache[id] = color
+        return color
+    }
+
+    private static func stableIndex(for identifier: String) -> Int {
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in identifier.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(palette.count))
     }
 }

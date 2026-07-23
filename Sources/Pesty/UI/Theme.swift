@@ -5,7 +5,7 @@ enum Theme {
     static let cardSpacing: CGFloat = 12
     static let cornerRadius: CGFloat = 16
     static let cardCorner: CGFloat = 13
-    static let headerHeight: CGFloat = 54
+    static let headerHeight: CGFloat = 68
 
     static let panelTint = Color.black.opacity(0.16)
     static let cardBody = Color.black.opacity(0.38)

@@ -36,34 +36,39 @@ struct ClipCardView: View {
 
     private var header: some View {
         ZStack {
-            headerColor.opacity(0.84)
+            headerColor
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.type.label)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     Text(item.createdAt.clipRelativeLong)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.headerSubText)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
                 appIconTile
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
         }
         .frame(height: Theme.headerHeight)
     }
 
     private var appIconTile: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(Color.black.opacity(0.22))
-            .frame(width: 38, height: 38)
+        RoundedRectangle(cornerRadius: 15, style: .continuous)
+            .fill(Color.white.opacity(0.14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14))
+            )
+            .frame(width: 56, height: 56)
             .overlay(
                 Image(nsImage: AppIconProvider.icon(forBundleID: item.sourceBundleID))
                     .resizable()
-                    .frame(width: 28, height: 28)
+                    .interpolation(.high)
+                    .frame(width: 48, height: 48)
             )
     }
 
