@@ -215,6 +215,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
 
         switch code {
+        case kVK_Space:
+            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            return nil
         case kVK_Escape:
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
