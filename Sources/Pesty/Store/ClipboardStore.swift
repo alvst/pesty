@@ -17,6 +17,9 @@ final class ClipboardStore {
     var source: BarSource = .history
     var searchText: String = ""
     var selectedID: UUID?
+    /// Used by the strip to restore its opening position without animating from
+    /// whichever card was selected the last time the bar was visible.
+    var initialScrollTargetID: UUID?
 
     private var storeURL: URL
     private var imagesDir: URL
@@ -185,6 +188,12 @@ final class ClipboardStore {
     }
 
     func selectFirst() { selectedID = visibleItems.first?.id }
+
+    func prepareForBarPresentation() {
+        let firstID = visibleItems.first?.id
+        initialScrollTargetID = firstID
+        selectedID = firstID
+    }
 
     func moveSelection(by delta: Int) {
         let items = visibleItems

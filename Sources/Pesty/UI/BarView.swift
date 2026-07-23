@@ -162,6 +162,15 @@ struct BarView: View {
             }
             .onChange(of: store.selectedID) { _, id in
                 guard let id else { return }
+                if store.initialScrollTargetID == id {
+                    store.initialScrollTargetID = nil
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: .leading)
+                    }
+                    return
+                }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
                     proxy.scrollTo(id, anchor: .center)
                 }
