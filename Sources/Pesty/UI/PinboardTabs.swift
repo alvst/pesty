@@ -20,7 +20,25 @@ struct PinboardTabs: View {
                         store.source = .pinboard(board.id); store.selectFirst()
                     }
                     .contextMenu {
-                        Button("Rename…") { rename(board) }
+                        Button { rename(board) } label: {
+                            Label("Rename…", systemImage: "pencil")
+                        }
+                        Menu {
+                            ForEach(PinboardColorOption.all) { color in
+                                Button { store.setPinboardColor(board.id, to: color.hex) } label: {
+                                    HStack {
+                                        Circle().fill(Color(hex: color.hex) ?? .accentColor)
+                                            .frame(width: 12, height: 12)
+                                        Text(color.name)
+                                        if board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label("Color", systemImage: "paintpalette")
+                        }
                         Button("Delete Pinboard", role: .destructive) {
                             store.deletePinboard(board.id)
                         }
@@ -77,6 +95,24 @@ struct PinboardTabs: View {
             store.renamePinboard(board.id, to: name)
         }
     }
+}
+
+private struct PinboardColorOption: Identifiable {
+    let name: String
+    let hex: String
+
+    var id: String { hex }
+
+    static let all = [
+        Self(name: "Red", hex: "#FF3B5C"),
+        Self(name: "Orange", hex: "#FF8A2B"),
+        Self(name: "Yellow", hex: "#F5B700"),
+        Self(name: "Green", hex: "#34C759"),
+        Self(name: "Blue", hex: "#0A84FF"),
+        Self(name: "Purple", hex: "#BF3BE0"),
+        Self(name: "Pink", hex: "#FF2D55"),
+        Self(name: "Gray", hex: "#98989F")
+    ]
 }
 
 @MainActor
