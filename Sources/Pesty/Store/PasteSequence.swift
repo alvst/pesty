@@ -72,7 +72,11 @@ final class PasteSequence {
         }
         isCollecting = false
         entries[index].isPasted = true
-        return entries[index]
+        let result = entries[index]
+        if pendingCount == 0, !Settings.shared.keepPastedStackItems {
+            entries.removeAll()
+        }
+        return result
     }
 
     func reAdd(_ entry: PasteStackEntry) {

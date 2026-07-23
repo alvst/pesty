@@ -11,7 +11,7 @@ final class BarPanel: NSPanel {
         // SwiftUI receives a keyDown event. Handle Copy at the panel level as a
         // reliable counterpart to the navigation monitor in AppController.
         if event.keyCode == kVK_ANSI_C, event.modifierFlags.contains(.command) {
-            AppController.shared.copySelected()
+            AppController.shared.commandCopy()
             return true
         }
         return super.performKeyEquivalent(with: event)

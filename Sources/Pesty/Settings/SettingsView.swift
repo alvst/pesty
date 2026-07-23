@@ -55,7 +55,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
             Spacer()
-            Text("Pesty (Bundle.main.appVersion)")
+            Text("Pesty \(Bundle.main.appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }
@@ -150,7 +150,7 @@ private struct GeneralSettings: View {
 
                 settingsGroup("Behavior") {
                     settingCard {
-                        VStack(spacing: 0) {
+                        VStack(alignment: .leading, spacing: 0) {
                             #if !MAS
                             settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
                             Divider()
@@ -231,6 +231,7 @@ private struct GeneralSettings: View {
         Toggle(title, isOn: isOn)
             .font(.system(size: 14))
             .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func settingRow<Content: View>(_ title: String,
@@ -290,7 +291,11 @@ private struct ShortcutsSettings: View {
                         Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
                             .font(.system(size: 14))
                             .padding(.vertical, 10)
-                        Text("Open Paste Stack from the bar, hover over clips to add them, then use this shortcut to paste the next item.")
+                        Divider()
+                        Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                        Text("While Paste Stack is open, select a clip and press ⌘C to add it. Keep pasted items enabled to re-add completed clips later.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 5)

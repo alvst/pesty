@@ -76,7 +76,7 @@ struct PasteStackView: View {
                 Image(systemName: "cursorarrow.rays")
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(Theme.selection)
-                Text("Hover over clips in Pesty to add them here")
+                Text("Select a clip in Pesty, then press ⌘C to add it here")
                     .font(.system(size: 12, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)

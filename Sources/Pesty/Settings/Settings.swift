@@ -91,6 +91,7 @@ final class Settings {
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
         static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
         static let stackPasteInReverse = "stackPasteInReverse"
+        static let keepPastedStackItems = "keepPastedStackItems"
         static let quickPasteModifier = "quickPasteModifier"
         static let plainTextModifier = "plainTextModifier"
         static let launchAtLogin = "launchAtLogin"
@@ -155,6 +156,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(stackPasteInReverse, forKey: Keys.stackPasteInReverse) }
     }
 
+    var keepPastedStackItems: Bool {
+        didSet { guard isLoaded else { return }; d.set(keepPastedStackItems, forKey: Keys.keepPastedStackItems) }
+    }
+
     var quickPasteModifier: Int {
         didSet { guard isLoaded else { return }; d.set(quickPasteModifier, forKey: Keys.quickPasteModifier) }
     }
@@ -215,6 +220,7 @@ final class Settings {
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
             Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
             Keys.stackPasteInReverse: false,
+            Keys.keepPastedStackItems: true,
             Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
             Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
             Keys.launchAtLogin: false,
@@ -235,6 +241,7 @@ final class Settings {
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
         sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         stackPasteInReverse = d.bool(forKey: Keys.stackPasteInReverse)
+        keepPastedStackItems = d.bool(forKey: Keys.keepPastedStackItems)
         quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)
         plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)

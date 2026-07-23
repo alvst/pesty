@@ -212,6 +212,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         copyToast.show()
     }
 
+    func commandCopy() {
+        if pasteSequence.isBuilding, let item = store.selectedItem {
+            addToPasteStack(item)
+            return
+        }
+        copySelected()
+    }
+
     func beginDragOut() {
         // Let AppKit establish the dragging session before taking the source
         // panel offscreen; the drag then continues naturally into another app.
@@ -231,7 +239,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             pasteStackController = PasteStackWindowController()
         }
         // Showing a sibling panel causes the bar to resign key. Keep the bar
-        // visible for that transition so clips remain available to hover-add.
+        // visible for that transition so its selected clip can be added with ⌘C.
         suppressAutoHide = true
         pasteStackController?.show()
         DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
@@ -349,7 +357,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             pasteSelected(); return nil
         case kVK_ANSI_C:
             if cmd {
-                copySelected()
+                commandCopy()
                 return nil
             }
         case kVK_LeftArrow, kVK_UpArrow:
