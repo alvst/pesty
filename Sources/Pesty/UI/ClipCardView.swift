@@ -36,7 +36,7 @@ struct ClipCardView: View {
 
     private var header: some View {
         ZStack {
-            headerColor
+            headerColor.opacity(0.84)
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.type.label)

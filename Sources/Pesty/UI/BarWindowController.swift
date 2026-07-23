@@ -25,7 +25,17 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovable = false
-        panel.contentView = NSHostingView(rootView: BarView())
+        let content = NSHostingView(rootView: BarView())
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.contentView = content
+            glass.cornerRadius = Theme.cornerRadius
+            glass.tintColor = NSColor.black.withAlphaComponent(0.12)
+            glass.style = .regular
+            panel.contentView = glass
+        } else {
+            panel.contentView = content
+        }
         super.init(window: panel)
         panel.delegate = self
     }
