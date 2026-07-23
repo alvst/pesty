@@ -7,9 +7,9 @@ enum Theme {
     static let cardCorner: CGFloat = 13
     static let headerHeight: CGFloat = 68
 
-    static let panelTint = Color.black.opacity(0.16)
-    static let cardBody = Color.black.opacity(0.38)
-    static let cardBorder = Color.white.opacity(0.14)
+    static let panelTint = Color.black.opacity(0.08)
+    static let cardBody = Color(red: 0.20, green: 0.21, blue: 0.23).opacity(0.88)
+    static let cardBorder = Color.white.opacity(0.18)
     static let selection = Color(red: 0.20, green: 0.55, blue: 1.0)
 
     static let textPrimary = Color.white.opacity(0.95)
