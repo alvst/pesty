@@ -2,14 +2,96 @@ import SwiftUI
 import AppKit
 
 struct SettingsView: View {
+    @State private var section: SettingsSection = .general
+
     var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AboutView()
-                .tabItem { Label("About", systemImage: "info.circle") }
+        HStack(spacing: 0) {
+            settingsSidebar
+            Divider()
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title)
+                            .font(.system(size: 20, weight: .bold))
+                        Text(section.subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                Divider()
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 620, height: 720)
+        .frame(width: 760, height: 680)
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 9) {
+                Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                    .resizable()
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text("Pesty")
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .padding(.bottom, 18)
+
+            ForEach(SettingsSection.allCases) { item in
+                Button { section = item } label: {
+                    Label(item.title, systemImage: item.symbol)
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+            Text("Pesty (Bundle.main.appVersion)")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 174)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(.thinMaterial)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch section {
+        case .general: GeneralSettings()
+        case .shortcuts: ShortcutsSettings()
+        case .sync: SyncSettings()
+        case .about: AboutView()
+        }
+    }
+}
+
+private enum SettingsSection: CaseIterable, Identifiable {
+    case general, shortcuts, sync, about
+    var id: Self { self }
+    var title: String {
+        switch self { case .general: "General"; case .shortcuts: "Shortcuts"; case .sync: "Sync"; case .about: "About" }
+    }
+    var subtitle: String {
+        switch self {
+        case .general: "History, behavior, and app preferences"
+        case .shortcuts: "Keyboard controls for Pesty and Paste Stack"
+        case .sync: "Keep your clipboard history available on every Mac"
+        case .about: "Pesty for macOS"
+        }
+    }
+    var symbol: String {
+        switch self { case .general: "gearshape"; case .shortcuts: "keyboard"; case .sync: "icloud"; case .about: "info.circle" }
     }
 }
 
@@ -25,29 +107,6 @@ private struct GeneralSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                settingsGroup("Activation") {
-                    settingCard {
-                        settingRow("Show Pesty") {
-                            HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
-                                               modifiers: $settings.hotkeyModifiers)
-                        }
-                    }
-                }
-
-                settingsGroup("Paste Stack") {
-                    settingCard {
-                        settingRow("Paste next stack item") {
-                            HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
-                                               modifiers: $settings.sequenceHotkeyModifiers)
-                        }
-                        Divider()
-                        settingToggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
-                        Text("Open Paste Stack from the bar, hover over clips to add them, then use this shortcut to paste the next item. Default: ⌘⌥V.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .padding(.top, 8)
-                    }
-                }
-
                 settingsGroup("Keep History") {
                     settingCard {
                         VStack(alignment: .leading, spacing: 14) {
@@ -89,26 +148,6 @@ private struct GeneralSettings: View {
                     }
                 }
 
-                settingsGroup("Quick Paste") {
-                    settingCard {
-                        VStack(spacing: 0) {
-                            settingRow("Paste items 1–9") {
-                                HStack(spacing: 6) {
-                                    modifierPicker(selection: $settings.quickPasteModifier)
-                                    Text("+ 1…9").foregroundStyle(.secondary)
-                                }
-                            }
-                            Divider()
-                            settingRow("Paste as plain text") {
-                                modifierPicker(selection: $settings.plainTextModifier)
-                            }
-                        }
-                        Text("Hold the plain-text modifier while using Quick Paste to remove formatting. With the defaults, ⌘⇧1 pastes the first item as plain text.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .padding(.top, 12)
-                    }
-                }
-
                 settingsGroup("Behavior") {
                     settingCard {
                         VStack(spacing: 0) {
@@ -131,19 +170,6 @@ private struct GeneralSettings: View {
                             }
                             .padding(.vertical, 12)
                         }
-                    }
-                }
-
-                settingsGroup("Sync") {
-                    settingCard {
-                        Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
-                            get: { settings.iCloudSync },
-                            set: { _ in AppController.shared.toggleICloudSync() }))
-                        Text(ClipboardStore.shared.iCloudAvailable
-                             ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
-                             : "Sign in to iCloud and enable iCloud Drive to use sync.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .padding(.top, 8)
                     }
                 }
 
@@ -177,9 +203,11 @@ private struct GeneralSettings: View {
                 }
                 #endif
             }
-            .padding(28)
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.clear)
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
@@ -196,15 +224,6 @@ private struct GeneralSettings: View {
         }
     }
     #endif
-
-    private func modifierPicker(selection: Binding<Int>) -> some View {
-        Picker("", selection: selection) {
-            ForEach(ShortcutModifier.allCases) { modifier in
-                Text("\(modifier.symbol) \(modifier.title)").tag(modifier.carbonValue)
-            }
-        }
-        .labelsHidden().pickerStyle(.menu).frame(minWidth: 118)
-    }
 
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         Toggle(title, isOn: isOn)
@@ -231,7 +250,163 @@ private struct GeneralSettings: View {
         VStack(alignment: .leading, spacing: 0) { content() }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.08))
+            }
+            .shadow(color: .black.opacity(0.045), radius: 5, y: 2)
+    }
+}
+
+private struct ShortcutsSettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                SettingsFormGroup("Open Pesty") {
+                    SettingsSurface {
+                        LabeledContent("Show the Pesty bar") {
+                            HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
+                                               modifiers: $settings.hotkeyModifiers)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 9)
+                    }
+                }
+
+                SettingsFormGroup("Paste Stack") {
+                    SettingsSurface {
+                        LabeledContent("Paste next stack item") {
+                            HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
+                                               modifiers: $settings.sequenceHotkeyModifiers)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 9)
+                        Divider()
+                        Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                        Text("Open Paste Stack from the bar, hover over clips to add them, then use this shortcut to paste the next item.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 5)
+                            .padding(.bottom, 8)
+                    }
+                }
+
+                SettingsFormGroup("Quick Paste") {
+                    SettingsSurface {
+                        VStack(spacing: 0) {
+                            LabeledContent("Paste items 1–9") {
+                                HStack(spacing: 6) {
+                                    ShortcutModifierPicker(selection: $settings.quickPasteModifier)
+                                    Text("+ 1…9").foregroundStyle(.secondary)
+                                }
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                            Divider()
+                            LabeledContent("Paste as plain text") {
+                                ShortcutModifierPicker(selection: $settings.plainTextModifier)
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                        }
+                        Text("Hold the plain-text modifier while using Quick Paste to remove formatting. With the defaults, ⌘⇧1 pastes the first item as plain text.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.bottom, 8)
+                    }
+                }
+            }
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+}
+
+private struct SyncSettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                SettingsFormGroup("iCloud Drive") {
+                    SettingsSurface {
+                        Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
+                            get: { settings.iCloudSync },
+                            set: { _ in AppController.shared.toggleICloudSync() }))
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                        Text(ClipboardStore.shared.iCloudAvailable
+                             ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
+                             : "Sign in to iCloud and enable iCloud Drive to use sync.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
+                    }
+                }
+            }
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+}
+
+private struct SettingsFormGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title).font(.system(size: 16, weight: .semibold))
+            content
+        }
+    }
+}
+
+private struct SettingsSurface<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.08))
+            }
+            .shadow(color: .black.opacity(0.045), radius: 5, y: 2)
+    }
+}
+
+private struct ShortcutModifierPicker: View {
+    @Binding var selection: Int
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(ShortcutModifier.allCases) { modifier in
+                Text("\(modifier.symbol) \(modifier.title)").tag(modifier.carbonValue)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 118)
     }
 }
 

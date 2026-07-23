@@ -54,6 +54,10 @@ struct ClipCardView: View {
                 store.selectedID = item.id
             }
         }
+        .onDrag {
+            AppController.shared.beginDragOut()
+            return ClipDragProvider.make(for: item)
+        }
         .contextMenu { menu }
     }
 

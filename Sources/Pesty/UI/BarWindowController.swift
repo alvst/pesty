@@ -94,6 +94,14 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         guard Settings.shared.hideOnClickOutside,
               !isPresenting,
               !AppController.shared.suppressAutoHide else { return }
-        AppController.shared.hideBar()
+        // Key focus briefly moves to Quick Look or the Paste Stack tray while
+        // both remain companion surfaces to the bar. Defer one run loop so the
+        // new key window is known before deciding whether focus really left Pesty.
+        DispatchQueue.main.async {
+            guard QuickLookService.shared.isVisible || NSApp.keyWindow is PasteStackPanel else {
+                AppController.shared.hideBar()
+                return
+            }
+        }
     }
 }

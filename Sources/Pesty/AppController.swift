@@ -212,6 +212,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         copyToast.show()
     }
 
+    func beginDragOut() {
+        // Let AppKit establish the dragging session before taking the source
+        // panel offscreen; the drag then continues naturally into another app.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.hideBar()
+        }
+    }
+
     func beginPasteSequence() {
         pasteSequence.begin()
         showPasteStack()
@@ -233,6 +241,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteSequence.finishCollecting()
         pasteStackController?.hide()
     }
+
+    var isPasteStackVisible: Bool { pasteStackController?.isVisible == true }
 
     func newPasteStack() {
         pasteSequence.newStack()
@@ -283,7 +293,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
-        win.setContentSize(NSSize(width: 620, height: 720))
+        win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
         win.isReleasedWhenClosed = false
         settingsWindow = win

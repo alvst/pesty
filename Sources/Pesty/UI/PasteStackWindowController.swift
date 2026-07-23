@@ -8,6 +8,7 @@ final class PasteStackPanel: NSPanel {
 
 @MainActor
 final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
+    var isVisible: Bool { window?.isVisible == true }
     init() {
         let panel = PasteStackPanel(
             contentRect: NSRect(x: 0, y: 0, width: 318, height: 420),
