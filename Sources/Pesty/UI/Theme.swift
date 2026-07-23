@@ -4,7 +4,9 @@ enum Theme {
     static let cardWidth: CGFloat = 215
     static let cardSpacing: CGFloat = 12
     static let cornerRadius: CGFloat = 16
-    static let cardCorner: CGFloat = 13
+    // A softer card shape lets the selected blue outline read as an intentional
+    // focus ring instead of a tight rectangle around the current clip.
+    static let cardCorner: CGFloat = 19
     static let headerHeight: CGFloat = 68
 
     static let panelTint = Color.white.opacity(0.10)
