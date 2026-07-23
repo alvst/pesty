@@ -60,6 +60,20 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
     }
 }
 
+enum HistoryRetentionMode: Int, CaseIterable, Identifiable {
+    case itemCount
+    case timePeriod
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .itemCount: "Number"
+        case .timePeriod: "Time"
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class Settings {
@@ -69,6 +83,8 @@ final class Settings {
     @ObservationIgnored private var isLoaded = false
 
     enum Keys {
+        static let historyLimit = "historyLimit"
+        static let historyRetentionMode = "historyRetentionMode"
         static let historyRetention = "historyRetention"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
@@ -84,11 +100,30 @@ final class Settings {
         static let iCloudSync = "iCloudSync"
     }
 
+    var historyLimit: Int {
+        didSet {
+            guard isLoaded else { return }
+            if historyLimit < 20 { historyLimit = 20; return }
+            d.set(historyLimit, forKey: Keys.historyLimit)
+            ClipboardStore.shared.applyHistoryPolicy()
+        }
+    }
+
+    var historyRetentionMode: HistoryRetentionMode {
+        didSet {
+            guard isLoaded else { return }
+            d.set(historyRetentionMode.rawValue, forKey: Keys.historyRetentionMode)
+            ClipboardStore.shared.applyHistoryPolicy()
+        }
+    }
+
     var historyRetention: HistoryRetention {
         didSet {
             guard isLoaded else { return }
             d.set(historyRetention.rawValue, forKey: Keys.historyRetention)
-            ClipboardStore.shared.applyHistoryRetention()
+            if historyRetentionMode == .timePeriod {
+                ClipboardStore.shared.applyHistoryPolicy()
+            }
         }
     }
 
@@ -150,6 +185,8 @@ final class Settings {
 
     private init() {
         d.register(defaults: [
+            Keys.historyLimit: 500,
+            Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
             Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
@@ -164,6 +201,8 @@ final class Settings {
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
+        historyLimit = d.integer(forKey: Keys.historyLimit)
+        historyRetentionMode = HistoryRetentionMode(rawValue: d.integer(forKey: Keys.historyRetentionMode)) ?? .itemCount
         historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)

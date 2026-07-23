@@ -34,16 +34,31 @@ private struct GeneralSettings: View {
                 settingsGroup("Keep History") {
                     settingCard {
                         VStack(alignment: .leading, spacing: 14) {
-                            Picker("Keep history", selection: $settings.historyRetention) {
-                                ForEach(HistoryRetention.allCases) { retention in
-                                    Text(retention.title).tag(retention)
+                            Picker("Keep history by", selection: $settings.historyRetentionMode) {
+                                ForEach(HistoryRetentionMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
                                 }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            Text(settings.historyRetention.description)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if settings.historyRetentionMode == .itemCount {
+                                Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
+                                    LabeledContent("Number of clips", value: "\(settings.historyLimit) items")
+                                        .font(.system(size: 14))
+                                }
+                                Text("Pesty keeps the most recent \(settings.historyLimit) clips.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Picker("Keep history for", selection: $settings.historyRetention) {
+                                    ForEach(HistoryRetention.allCases) { retention in
+                                        Text(retention.title).tag(retention)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                                Text(settings.historyRetention.description)
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                             Divider()
                             HStack {
                                 Text("Erase saved clips now")

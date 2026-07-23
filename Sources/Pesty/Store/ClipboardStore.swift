@@ -52,7 +52,7 @@ final class ClipboardStore {
         storeURL = base.appendingPathComponent("store.json")
         prepareDirectories()
         load()
-        if pruneExpiredHistory() { saveNow() }
+        if applyHistoryPolicyNow() { saveNow() }
         if Settings.shared.iCloudSync { startWatching() }
     }
 
@@ -87,27 +87,35 @@ final class ClipboardStore {
             var existing = history.remove(at: idx)
             existing.createdAt = item.createdAt
             history.insert(existing, at: 0)
-            pruneExpiredHistory()
+            applyHistoryPolicyNow()
             if source == .history && searchText.isEmpty { selectedID = existing.id }
             scheduleSave()
             return
         }
         history.insert(item, at: 0)
-        pruneExpiredHistory()
+        applyHistoryPolicyNow()
         if source == .history && searchText.isEmpty {
             selectedID = item.id
         }
         scheduleSave()
     }
 
-    func applyHistoryRetention() { pruneExpiredHistory(); scheduleSave() }
+    func applyHistoryPolicy() { _ = applyHistoryPolicyNow(); scheduleSave() }
 
     @discardableResult
-    func pruneExpiredHistory() -> Bool {
-        guard let cutoff = Settings.shared.historyRetention.cutoffDate else { return false }
-        let removed = history.filter { $0.createdAt < cutoff }
-        guard !removed.isEmpty else { return false }
-        history.removeAll { $0.createdAt < cutoff }
+    private func applyHistoryPolicyNow() -> Bool {
+        let removed: [ClipItem]
+        switch Settings.shared.historyRetentionMode {
+        case .itemCount:
+            guard history.count > Settings.shared.historyLimit else { return false }
+            removed = Array(history[Settings.shared.historyLimit...])
+            history.removeLast(history.count - Settings.shared.historyLimit)
+        case .timePeriod:
+            guard let cutoff = Settings.shared.historyRetention.cutoffDate else { return false }
+            removed = history.filter { $0.createdAt < cutoff }
+            guard !removed.isEmpty else { return false }
+            history.removeAll { $0.createdAt < cutoff }
+        }
         for item in removed { deleteImageFile(item) }
         return true
     }
@@ -305,7 +313,7 @@ final class ClipboardStore {
         var merged: [ClipItem] = []
         for it in combined where seen.insert(contentKey(it)).inserted { merged.append(it) }
         history = merged
-        pruneExpiredHistory()
+        applyHistoryPolicyNow()
 
         var byID: [UUID: Pinboard] = Dictionary(uniqueKeysWithValues: pinboards.map { ($0.id, $0) })
         for b in snap.pinboards {

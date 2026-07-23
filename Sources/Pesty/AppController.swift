@@ -163,7 +163,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
-        if store.pruneExpiredHistory() { store.saveNow() }
+        store.applyHistoryPolicy()
         store.selectFirst()
 
         if barController == nil {
