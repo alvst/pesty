@@ -37,7 +37,7 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            if sequence.isBuilding { sequenceStatus }
+            if sequence.hasEntries { sequenceStatus }
             sequenceButton
             moreMenu
         }
@@ -113,29 +113,19 @@ struct BarView: View {
 
     private var sequenceButton: some View {
         Button {
-            if sequence.isBuilding {
-                if sequence.count == 0 {
-                    AppController.shared.cancelPasteSequence()
-                } else {
-                    AppController.shared.startPasteSequence()
-                }
-            } else {
-                AppController.shared.beginPasteSequence()
-            }
+            AppController.shared.beginPasteSequence()
         } label: {
-            Image(systemName: sequence.isBuilding ? (sequence.count == 0 ? "xmark" : "play.fill") : "list.number")
+            Image(systemName: sequence.hasEntries ? "rectangle.stack.fill" : "rectangle.stack.badge.plus")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(sequence.isBuilding ? Theme.selection : Theme.textSecondary)
+                .foregroundStyle(sequence.hasEntries ? Theme.selection : Theme.textSecondary)
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
-        .help(sequence.isBuilding
-              ? (sequence.count == 0 ? "Cancel paste sequence" : "Start paste sequence")
-              : "Build a paste sequence")
+        .help(sequence.hasEntries ? "Show Paste Stack" : "Open Paste Stack")
     }
 
     private var sequenceStatus: some View {
-        Text(sequence.count == 0 ? "Select clips in order" : "\(sequence.count) queued")
+        Text("\(sequence.pendingCount) ready")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.selection)
             .lineLimit(1)

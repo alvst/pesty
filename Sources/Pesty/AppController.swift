@@ -14,6 +14,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
+    private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
     private let copyToast = CopyToastController()
 
@@ -160,11 +161,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleGlobalShortcut() {
-        if pasteSequence.isRunning {
-            pasteNextInSequence()
-        } else {
-            toggleBar()
-        }
+        toggleBar()
     }
 
     func showBar() {
@@ -217,28 +214,62 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func beginPasteSequence() {
         pasteSequence.begin()
+        showPasteStack()
     }
 
-    func toggleSequenceItem(_ item: ClipItem) {
-        pasteSequence.toggle(item)
+    func showPasteStack() {
+        if !pasteSequence.isCollecting { pasteSequence.begin() }
+        if pasteStackController == nil {
+            pasteStackController = PasteStackWindowController()
+        }
+        // Showing a sibling panel causes the bar to resign key. Keep the bar
+        // visible for that transition so clips remain available to hover-add.
+        suppressAutoHide = true
+        pasteStackController?.show()
+        DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
+    }
+
+    func hidePasteStack() {
+        pasteSequence.finishCollecting()
+        pasteStackController?.hide()
+    }
+
+    func newPasteStack() {
+        pasteSequence.newStack()
+        showPasteStack()
+    }
+
+    func addToPasteStack(_ item: ClipItem) {
+        _ = pasteSequence.addIfNeeded(item)
+    }
+
+    func removePasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.remove(entry)
+    }
+
+    func reAddPasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.reAdd(entry)
+    }
+
+    func resetPasteStackProgress() {
+        pasteSequence.resetProgress()
     }
 
     func startPasteSequence() {
-        guard let item = pasteSequence.start() else {
-            pasteSequence.cancel()
-            return
-        }
-        hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        pasteNextInSequence()
     }
 
     func cancelPasteSequence() {
-        pasteSequence.cancel()
+        pasteSequence.finishCollecting()
     }
 
     func pasteNextInSequence() {
-        guard let item = pasteSequence.next() else { return }
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        guard let entry = pasteSequence.next() else { return }
+        hideBar()
+        PasteService.paste(entry.item,
+                           into: previousApp,
+                           monitor: monitor,
+                           imageOverride: entry.imagePreview)
     }
 
     func showSettings() {
@@ -302,7 +333,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
             if pasteSequence.isBuilding {
-                startPasteSequence()
+                pasteNextInSequence()
                 return nil
             }
             pasteSelected(); return nil

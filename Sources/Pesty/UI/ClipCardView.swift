@@ -6,6 +6,7 @@ struct ClipCardView: View {
     let selected: Bool
 
     @State private var hovering = false
+    @State private var stackHoverWorkItem: DispatchWorkItem?
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
@@ -30,14 +31,25 @@ struct ClipCardView: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .onHover { isHovering in
+            hovering = isHovering
+            stackHoverWorkItem?.cancel()
+            guard isHovering, sequence.isBuilding else { return }
+            let item = item
+            let work = DispatchWorkItem {
+                AppController.shared.addToPasteStack(item)
+            }
+            stackHoverWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
+        }
+        .onDisappear { stackHoverWorkItem?.cancel() }
         .onTapGesture(count: 2) {
             guard !sequence.isBuilding else { return }
             AppController.shared.pasteItem(item)
         }
         .onTapGesture {
             if sequence.isBuilding {
-                AppController.shared.toggleSequenceItem(item)
+                AppController.shared.addToPasteStack(item)
             } else {
                 store.selectedID = item.id
             }

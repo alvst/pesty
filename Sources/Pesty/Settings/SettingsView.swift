@@ -34,13 +34,15 @@ private struct GeneralSettings: View {
                     }
                 }
 
-                settingsGroup("Paste Sequence") {
+                settingsGroup("Paste Stack") {
                     settingCard {
-                        settingRow("Paste next queued clip") {
+                        settingRow("Paste next stack item") {
                             HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
                                                modifiers: $settings.sequenceHotkeyModifiers)
                         }
-                        Text("After starting a sequence, use this shortcut to paste each next queued clip. Default: ⌘⌥V.")
+                        Divider()
+                        settingToggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
+                        Text("Open Paste Stack from the bar, hover over clips to add them, then use this shortcut to paste the next item. Default: ⌘⌥V.")
                             .font(.caption).foregroundStyle(.secondary)
                             .padding(.top, 8)
                     }
