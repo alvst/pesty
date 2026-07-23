@@ -79,7 +79,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isPresenting, !AppController.shared.suppressAutoHide else { return }
+        guard Settings.shared.hideOnClickOutside,
+              !isPresenting,
+              !AppController.shared.suppressAutoHide else { return }
         AppController.shared.hideBar()
     }
 }
