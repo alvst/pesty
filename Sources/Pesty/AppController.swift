@@ -163,6 +163,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
+        if store.pruneExpiredHistory() { store.saveNow() }
         store.selectFirst()
 
         if barController == nil {
@@ -205,7 +206,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
-        win.setContentSize(NSSize(width: 520, height: 560))
+        win.setContentSize(NSSize(width: 620, height: 720))
         win.center()
         win.isReleasedWhenClosed = false
         settingsWindow = win

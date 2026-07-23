@@ -19,6 +19,47 @@ enum ShortcutModifier: CaseIterable, Identifiable {
     }
 }
 
+enum HistoryRetention: Int, CaseIterable, Identifiable {
+    case day
+    case week
+    case month
+    case year
+    case forever
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .day: "Day"
+        case .week: "Week"
+        case .month: "Month"
+        case .year: "Year"
+        case .forever: "Forever"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .day: "Clips are kept for 24 hours."
+        case .week: "Clips are kept for 7 days."
+        case .month: "Clips are kept for 1 month."
+        case .year: "Clips are kept for 1 year."
+        case .forever: "Clips are kept until you erase them."
+        }
+    }
+
+    var cutoffDate: Date? {
+        let calendar = Calendar.current
+        switch self {
+        case .day: return calendar.date(byAdding: .day, value: -1, to: .now)
+        case .week: return calendar.date(byAdding: .day, value: -7, to: .now)
+        case .month: return calendar.date(byAdding: .month, value: -1, to: .now)
+        case .year: return calendar.date(byAdding: .year, value: -1, to: .now)
+        case .forever: return nil
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class Settings {
@@ -28,7 +69,7 @@ final class Settings {
     @ObservationIgnored private var isLoaded = false
 
     enum Keys {
-        static let historyLimit = "historyLimit"
+        static let historyRetention = "historyRetention"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let quickPasteModifier = "quickPasteModifier"
@@ -43,12 +84,11 @@ final class Settings {
         static let iCloudSync = "iCloudSync"
     }
 
-    var historyLimit: Int {
+    var historyRetention: HistoryRetention {
         didSet {
             guard isLoaded else { return }
-            if historyLimit < 20 { historyLimit = 20; return }
-            d.set(historyLimit, forKey: Keys.historyLimit)
-            ClipboardStore.shared.applyHistoryLimit()
+            d.set(historyRetention.rawValue, forKey: Keys.historyRetention)
+            ClipboardStore.shared.applyHistoryRetention()
         }
     }
 
@@ -110,7 +150,7 @@ final class Settings {
 
     private init() {
         d.register(defaults: [
-            Keys.historyLimit: 500,
+            Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
             Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
@@ -124,7 +164,7 @@ final class Settings {
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
-        historyLimit = d.integer(forKey: Keys.historyLimit)
+        historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)

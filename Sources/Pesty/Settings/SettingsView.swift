@@ -9,7 +9,7 @@ struct SettingsView: View {
             AboutView()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 520, height: 560)
+        .frame(width: 620, height: 720)
     }
 }
 
@@ -23,93 +23,131 @@ private struct GeneralSettings: View {
     #endif
 
     var body: some View {
-        Form {
-            Section("Activation") {
-                LabeledContent("Show Pesty") { HotkeyRecorderView() }
-                Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
-                    LabeledContent("History limit", value: "\(settings.historyLimit) items")
-                }
-            }
-
-            Section("Quick Paste") {
-                LabeledContent("Paste items 1–9") {
-                    HStack(spacing: 6) {
-                        modifierPicker(selection: $settings.quickPasteModifier)
-                        Text("+ 1…9").foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                settingsGroup("Activation") {
+                    settingCard {
+                        settingRow("Show Pesty") { HotkeyRecorderView() }
                     }
                 }
-                LabeledContent("Paste as plain text") {
-                    modifierPicker(selection: $settings.plainTextModifier)
-                }
-                Text("Hold the plain-text modifier while using Quick Paste to remove formatting. For example, ⌘⇧1 pastes the first item as plain text with the default shortcuts.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
 
-            Section("Behavior") {
-                #if !MAS
-                Toggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
-                #endif
-                Toggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
-                Toggle("Play sound on paste", isOn: $settings.playSound)
-                Toggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
-                Toggle("Launch at login", isOn: $settings.launchAtLogin)
-                VStack(alignment: .leading) {
-                    LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
-                    Slider(value: $settings.barHeight, in: 300...720, step: 10)
-                }
-                #if MAS
-                Text("Select a clip to copy it, then press ⌘V to paste it into your app.")
-                    .font(.caption).foregroundStyle(.secondary)
-                #endif
-            }
-
-            Section("Sync") {
-                Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
-                    get: { settings.iCloudSync },
-                    set: { _ in AppController.shared.toggleICloudSync() }))
-                Text(ClipboardStore.shared.iCloudAvailable
-                     ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
-                     : "Sign in to iCloud and enable iCloud Drive to use sync.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            #if !MAS
-            Section("Permissions") {
-                HStack(spacing: 10) {
-                    Image(systemName: accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(accessibilityGranted ? .green : .orange)
-                        .font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Accessibility")
-                        Text(accessibilityGranted
-                             ? "Granted — direct paste is enabled."
-                             : (requestedGrant
-                                ? "Waiting… toggle Pesty on in System Settings."
-                                : "Required to paste directly into other apps."))
-                            .font(.caption)
-                            .foregroundStyle(accessibilityGranted ? .green : .secondary)
-                    }
-                    Spacer()
-                    if !accessibilityGranted {
-                        Button("Open Settings") {
-                            requestedGrant = true
-                            PasteService.ensureAccessibility(prompt: true)
-                            openAccessibilityPane()
+                settingsGroup("Keep History") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Picker("Keep history", selection: $settings.historyRetention) {
+                                ForEach(HistoryRetention.allCases) { retention in
+                                    Text(retention.title).tag(retention)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            Text(settings.historyRetention.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Divider()
+                            HStack {
+                                Text("Erase saved clips now")
+                                    .font(.system(size: 14))
+                                Spacer()
+                                Button("Erase History…", role: .destructive) {
+                                    ClipboardStore.shared.clearHistory()
+                                }
+                            }
                         }
-                    } else if requestedGrant {
-                        Button("Restart Pesty") { AppController.restart() }
                     }
                 }
-            }
-            #endif
 
-            Section("Data") {
-                Button("Clear Clipboard History", role: .destructive) {
-                    ClipboardStore.shared.clearHistory()
+                settingsGroup("Quick Paste") {
+                    settingCard {
+                        VStack(spacing: 0) {
+                            settingRow("Paste items 1–9") {
+                                HStack(spacing: 6) {
+                                    modifierPicker(selection: $settings.quickPasteModifier)
+                                    Text("+ 1…9").foregroundStyle(.secondary)
+                                }
+                            }
+                            Divider()
+                            settingRow("Paste as plain text") {
+                                modifierPicker(selection: $settings.plainTextModifier)
+                            }
+                        }
+                        Text("Hold the plain-text modifier while using Quick Paste to remove formatting. With the defaults, ⌘⇧1 pastes the first item as plain text.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .padding(.top, 12)
+                    }
                 }
+
+                settingsGroup("Behavior") {
+                    settingCard {
+                        VStack(spacing: 0) {
+                            #if !MAS
+                            settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
+                            Divider()
+                            #endif
+                            settingToggle("Ignore passwords", isOn: $settings.ignoreConcealed)
+                            Divider()
+                            settingToggle("Play sound on paste", isOn: $settings.playSound)
+                            Divider()
+                            settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
+                            Divider()
+                            settingToggle("Launch at login", isOn: $settings.launchAtLogin)
+                            Divider()
+                            VStack(alignment: .leading, spacing: 8) {
+                                LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
+                                    .font(.system(size: 14))
+                                Slider(value: $settings.barHeight, in: 300...720, step: 10)
+                            }
+                            .padding(.vertical, 12)
+                        }
+                    }
+                }
+
+                settingsGroup("Sync") {
+                    settingCard {
+                        Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
+                            get: { settings.iCloudSync },
+                            set: { _ in AppController.shared.toggleICloudSync() }))
+                        Text(ClipboardStore.shared.iCloudAvailable
+                             ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
+                             : "Sign in to iCloud and enable iCloud Drive to use sync.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                    }
+                }
+
+                #if !MAS
+                settingsGroup("Accessibility") {
+                    settingCard {
+                        HStack(spacing: 12) {
+                            Image(systemName: accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(accessibilityGranted ? .green : .orange)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(accessibilityGranted ? "Accessibility enabled" : "Accessibility required")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text(accessibilityGranted
+                                     ? "Direct paste is ready to use."
+                                     : (requestedGrant ? "Waiting for approval in System Settings." : "Required to paste directly into other apps."))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if !accessibilityGranted {
+                                Button("Open Settings") {
+                                    requestedGrant = true
+                                    PasteService.ensureAccessibility(prompt: true)
+                                    openAccessibilityPane()
+                                }
+                            } else if requestedGrant {
+                                Button("Restart Pesty") { AppController.restart() }
+                            }
+                        }
+                    }
+                }
+                #endif
             }
+            .padding(28)
         }
-        .formStyle(.grouped)
+        .background(Color(nsColor: .windowBackgroundColor))
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
@@ -134,6 +172,34 @@ private struct GeneralSettings: View {
             }
         }
         .labelsHidden().pickerStyle(.menu).frame(minWidth: 118)
+    }
+
+    private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(title, isOn: isOn)
+            .font(.system(size: 14))
+            .padding(.vertical, 10)
+    }
+
+    private func settingRow<Content: View>(_ title: String,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        LabeledContent(title, content: content)
+            .font(.system(size: 14))
+            .padding(.vertical, 10)
+    }
+
+    private func settingsGroup<Content: View>(_ title: String,
+                                               @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title).font(.system(size: 17, weight: .semibold))
+            content()
+        }
+    }
+
+    private func settingCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
