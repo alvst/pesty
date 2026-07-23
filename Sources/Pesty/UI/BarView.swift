@@ -4,6 +4,7 @@ struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
+    private var sequence: PasteSequence { AppController.shared.pasteSequence }
 
     var body: some View {
         ZStack {
@@ -36,6 +37,8 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if sequence.isBuilding { sequenceStatus }
+            sequenceButton
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -106,6 +109,36 @@ struct BarView: View {
         .menuIndicator(.hidden)
         .frame(width: 34)
         .fixedSize()
+    }
+
+    private var sequenceButton: some View {
+        Button {
+            if sequence.isBuilding {
+                if sequence.count == 0 {
+                    AppController.shared.cancelPasteSequence()
+                } else {
+                    AppController.shared.startPasteSequence()
+                }
+            } else {
+                AppController.shared.beginPasteSequence()
+            }
+        } label: {
+            Image(systemName: sequence.isBuilding ? (sequence.count == 0 ? "xmark" : "play.fill") : "list.number")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(sequence.isBuilding ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(sequence.isBuilding
+              ? (sequence.count == 0 ? "Cancel paste sequence" : "Start paste sequence")
+              : "Build a paste sequence")
+    }
+
+    private var sequenceStatus: some View {
+        Text(sequence.count == 0 ? "Select clips in order" : "\(sequence.count) queued")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.selection)
+            .lineLimit(1)
     }
 
     private var strip: some View {

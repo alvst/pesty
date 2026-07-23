@@ -88,6 +88,8 @@ final class Settings {
         static let historyRetention = "historyRetention"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
+        static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
+        static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
         static let quickPasteModifier = "quickPasteModifier"
         static let plainTextModifier = "plainTextModifier"
         static let launchAtLogin = "launchAtLogin"
@@ -135,6 +137,16 @@ final class Settings {
     var hotkeyModifiers: Int {
         didSet { guard isLoaded else { return }
             d.set(hotkeyModifiers, forKey: Keys.hotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyKeyCode: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyKeyCode, forKey: Keys.sequenceHotkeyKeyCode); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyModifiers: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
     }
 
     var quickPasteModifier: Int {
@@ -190,6 +202,8 @@ final class Settings {
             Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
+            Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
+            Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
             Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
             Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
             Keys.launchAtLogin: false,
@@ -206,6 +220,8 @@ final class Settings {
         historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
+        sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
+        sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)
         plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
@@ -221,6 +237,10 @@ final class Settings {
 
     var hotkeyDisplay: String {
         HotKeyCenter.describe(keyCode: hotkeyKeyCode, modifiers: hotkeyModifiers)
+    }
+
+    var sequenceHotkeyDisplay: String {
+        HotKeyCenter.describe(keyCode: sequenceHotkeyKeyCode, modifiers: sequenceHotkeyModifiers)
     }
 
     var quickPasteModifierDisplay: String {

@@ -27,7 +27,22 @@ private struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 settingsGroup("Activation") {
                     settingCard {
-                        settingRow("Show Pesty") { HotkeyRecorderView() }
+                        settingRow("Show Pesty") {
+                            HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
+                                               modifiers: $settings.hotkeyModifiers)
+                        }
+                    }
+                }
+
+                settingsGroup("Paste Sequence") {
+                    settingCard {
+                        settingRow("Paste next queued clip") {
+                            HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
+                                               modifiers: $settings.sequenceHotkeyModifiers)
+                        }
+                        Text("After starting a sequence, use this shortcut to paste each next queued clip. Default: ⌘⌥V.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .padding(.top, 8)
                     }
                 }
 

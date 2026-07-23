@@ -8,6 +8,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     let store = ClipboardStore.shared
     let monitor = ClipboardMonitor()
+    let pasteSequence = PasteSequence.shared
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
@@ -29,7 +30,8 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         monitor.start()
 
-        HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
+        HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
+        HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
 
         setupStatusItem()
@@ -156,6 +158,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func handleGlobalShortcut() {
+        if pasteSequence.isRunning {
+            pasteNextInSequence()
+        } else {
+            toggleBar()
+        }
+    }
+
     func showBar() {
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -193,6 +203,32 @@ final class AppController: NSObject, NSApplicationDelegate {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+    }
+
+    func beginPasteSequence() {
+        pasteSequence.begin()
+    }
+
+    func toggleSequenceItem(_ item: ClipItem) {
+        pasteSequence.toggle(item)
+    }
+
+    func startPasteSequence() {
+        guard let item = pasteSequence.start() else {
+            pasteSequence.cancel()
+            return
+        }
+        hideBar()
+        PasteService.paste(item, into: previousApp, monitor: monitor)
+    }
+
+    func cancelPasteSequence() {
+        pasteSequence.cancel()
+    }
+
+    func pasteNextInSequence() {
+        guard let item = pasteSequence.next() else { return }
+        PasteService.paste(item, into: previousApp, monitor: monitor)
     }
 
     func showSettings() {
@@ -247,10 +283,18 @@ final class AppController: NSObject, NSApplicationDelegate {
             QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
             return nil
         case kVK_Escape:
+            if pasteSequence.isBuilding {
+                cancelPasteSequence()
+                return nil
+            }
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
+            if pasteSequence.isBuilding {
+                startPasteSequence()
+                return nil
+            }
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
             store.moveSelection(by: -1); return nil

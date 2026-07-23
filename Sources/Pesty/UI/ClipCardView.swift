@@ -8,7 +8,9 @@ struct ClipCardView: View {
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
+    private var sequence: PasteSequence { AppController.shared.pasteSequence }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var sequencePosition: Int? { sequence.position(of: item) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,8 +21,8 @@ struct ClipCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-                .strokeBorder(selected ? Theme.selection : Theme.cardBorder,
-                              lineWidth: selected ? 2.5 : 1)
+                .strokeBorder((selected || sequencePosition != nil) ? Theme.selection : Theme.cardBorder,
+                              lineWidth: (selected || sequencePosition != nil) ? 2.5 : 1)
         )
         .shadow(color: .black.opacity(selected ? 0.35 : 0.18),
                 radius: selected ? 12 : 5, y: selected ? 5 : 2)
@@ -29,8 +31,17 @@ struct ClipCardView: View {
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { AppController.shared.pasteItem(item) }
-        .onTapGesture { store.selectedID = item.id }
+        .onTapGesture(count: 2) {
+            guard !sequence.isBuilding else { return }
+            AppController.shared.pasteItem(item)
+        }
+        .onTapGesture {
+            if sequence.isBuilding {
+                AppController.shared.toggleSequenceItem(item)
+            } else {
+                store.selectedID = item.id
+            }
+        }
         .contextMenu { menu }
     }
 
@@ -166,6 +177,15 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
+                if let sequencePosition {
+                    HStack(spacing: 3) {
+                        Image(systemName: "list.number")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("\(sequencePosition)")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.selection)
+                }
                 if index < 9 {
                     HStack(spacing: 3) {
                         Text(settings.quickPasteModifierDisplay)
