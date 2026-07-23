@@ -205,6 +205,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         hideBar()
     }
 
+    func copySelected() {
+        guard let item = store.selectedItem else { return }
+        let change = PasteService.copy(item)
+        monitor.suppressUntilChangeCount = change
+    }
+
     func beginPasteSequence() {
         pasteSequence.begin()
     }
@@ -296,6 +302,11 @@ final class AppController: NSObject, NSApplicationDelegate {
                 return nil
             }
             pasteSelected(); return nil
+        case kVK_ANSI_C:
+            if cmd {
+                copySelected()
+                return nil
+            }
         case kVK_LeftArrow, kVK_UpArrow:
             store.moveSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
