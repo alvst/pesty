@@ -16,30 +16,18 @@ enum SourceColor {
 
     private static func dominantColor(in icon: NSImage) -> Color? {
         let size = 40
-        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
-                                            pixelsWide: size,
-                                            pixelsHigh: size,
-                                            bitsPerSample: 8,
-                                            samplesPerPixel: 4,
-                                            hasAlpha: true,
-                                            isPlanar: false,
-                                            colorSpaceName: .deviceRGB,
-                                            bitmapFormat: .alphaNonpremultiplied,
-                                            bytesPerRow: 0,
-                                            bitsPerPixel: 0),
-              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.clear.setFill()
-        NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size)).fill()
+        let thumbnail = NSImage(size: NSSize(width: size, height: size))
+        thumbnail.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
         icon.draw(in: NSRect(x: 0, y: 0, width: size, height: size),
                   from: .zero,
                   operation: .sourceOver,
                   fraction: 1,
                   respectFlipped: true,
                   hints: [.interpolation: NSImageInterpolation.high])
-        NSGraphicsContext.restoreGraphicsState()
+        thumbnail.unlockFocus()
+        guard let data = thumbnail.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: data) else { return nil }
 
         var red = 0.0
         var green = 0.0

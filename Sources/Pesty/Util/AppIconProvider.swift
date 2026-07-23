@@ -8,7 +8,9 @@ enum AppIconProvider {
         guard let bundleID else { return generic }
         if let cached = cache[bundleID] { return cached }
         var image = generic
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+        if bundleID == Bundle.main.bundleIdentifier {
+            image = NSApp.applicationIconImage ?? generic
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             image = NSWorkspace.shared.icon(forFile: url.path)
         }
         cache[bundleID] = image
