@@ -15,6 +15,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
     private var keyMonitor: Any?
+    private let copyToast = CopyToastController()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -203,12 +204,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+        copyToast.show()
     }
 
     func copySelected() {
         guard let item = store.selectedItem else { return }
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
+        hideBar()
+        copyToast.show()
     }
 
     func beginPasteSequence() {

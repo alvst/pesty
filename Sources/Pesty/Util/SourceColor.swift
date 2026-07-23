@@ -4,7 +4,7 @@ import SwiftUI
 @MainActor
 enum SourceColor {
     private static var cache: [String: Color] = [:]
-    private static let fallback = Color(red: 0.24, green: 0.61, blue: 0.95)
+    private static let fallback = Color(red: 0.02, green: 0.48, blue: 1.0)
 
     static func color(for bundleID: String?) -> Color {
         guard let id = bundleID, !id.isEmpty else { return fallback }
@@ -56,7 +56,9 @@ enum SourceColor {
         }
 
         if weight == 0 {
-            return darkWeight > 0 ? Color(red: 0.06, green: 0.12, blue: 0.31) : fallback
+            // Paste's very dark sources read as an intentional navy, which gives the bright
+            // card palette a useful anchor without turning every source into washed-out blue.
+            return darkWeight > 0 ? Color(red: 0.025, green: 0.075, blue: 0.24) : fallback
         }
 
         let main = NSColor(deviceRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)
@@ -64,8 +66,11 @@ enum SourceColor {
         var saturation: CGFloat = 0
         var brightness: CGFloat = 0
         main.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+        // Use the application's hue but present it as a lively card colour.  Averaging an
+        // icon naturally introduces its white highlights, so a calibrated saturation keeps
+        // orange, blue, and teal sources feeling as cheerful as their actual app icons.
         return Color(hue: Double(hue),
-                     saturation: min(0.78, max(0.42, Double(saturation) * 1.06)),
-                     brightness: min(0.84, max(0.40, Double(brightness))))
+                     saturation: min(0.99, max(0.90, Double(saturation) * 1.85)),
+                     brightness: min(0.98, max(0.84, Double(brightness) * 1.20)))
     }
 }
