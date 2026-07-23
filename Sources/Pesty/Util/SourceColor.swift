@@ -1,44 +1,83 @@
+import AppKit
 import SwiftUI
 
 @MainActor
 enum SourceColor {
-    private static let palette: [Color] = [
-        Color(red: 0.24, green: 0.61, blue: 0.95),
-        Color(red: 0.22, green: 0.29, blue: 0.93),
-        Color(red: 0.06, green: 0.12, blue: 0.31),
-        Color(red: 0.12, green: 0.53, blue: 0.51),
-        Color(red: 0.43, green: 0.33, blue: 0.80),
-        Color(red: 0.69, green: 0.37, blue: 0.59),
-        Color(red: 0.78, green: 0.40, blue: 0.34),
-        Color(red: 0.82, green: 0.62, blue: 0.20)
-    ]
-
-    private static let knownColors: [String: Color] = [
-        "com.apple.dt.Xcode": palette[0],
-        "com.apple.Safari": palette[0],
-        "com.apple.finder": palette[0],
-        "com.openai.chat": palette[2],
-        "com.openai.chatgpt": palette[2],
-        "com.apple.Terminal": palette[2],
-        "com.apple.Preview": palette[4],
-        "com.apple.Notes": palette[7]
-    ]
     private static var cache: [String: Color] = [:]
+    private static let fallback = Color(red: 0.24, green: 0.61, blue: 0.95)
 
     static func color(for bundleID: String?) -> Color {
-        guard let id = bundleID, !id.isEmpty else { return palette[0] }
+        guard let id = bundleID, !id.isEmpty else { return fallback }
         if let color = cache[id] { return color }
-        let color = knownColors[id] ?? palette[stableIndex(for: id)]
+        let color = dominantColor(in: AppIconProvider.icon(forBundleID: id)) ?? fallback
         cache[id] = color
         return color
     }
 
-    private static func stableIndex(for identifier: String) -> Int {
-        var hash: UInt64 = 1_469_598_103_934_665_603
-        for byte in identifier.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
+    private static func dominantColor(in icon: NSImage) -> Color? {
+        let size = 40
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                            pixelsWide: size,
+                                            pixelsHigh: size,
+                                            bitsPerSample: 8,
+                                            samplesPerPixel: 4,
+                                            hasAlpha: true,
+                                            isPlanar: false,
+                                            colorSpaceName: .deviceRGB,
+                                            bitmapFormat: .alphaNonpremultiplied,
+                                            bytesPerRow: 0,
+                                            bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.clear.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size)).fill()
+        icon.draw(in: NSRect(x: 0, y: 0, width: size, height: size),
+                  from: .zero,
+                  operation: .sourceOver,
+                  fraction: 1,
+                  respectFlipped: true,
+                  hints: [.interpolation: NSImageInterpolation.high])
+        NSGraphicsContext.restoreGraphicsState()
+
+        var red = 0.0
+        var green = 0.0
+        var blue = 0.0
+        var weight = 0.0
+        var darkWeight = 0.0
+
+        for x in 0..<size {
+            for y in 0..<size {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let alpha = color.alphaComponent
+                guard alpha > 0.35 else { continue }
+                let maximum = max(color.redComponent, color.greenComponent, color.blueComponent)
+                let minimum = min(color.redComponent, color.greenComponent, color.blueComponent)
+                let saturation = maximum == 0 ? 0 : (maximum - minimum) / maximum
+                let brightness = maximum
+
+                if brightness < 0.45 { darkWeight += alpha }
+                guard saturation > 0.16, brightness > 0.14 else { continue }
+                let pixelWeight = alpha * saturation * (0.45 + 0.55 * brightness)
+                red += Double(color.redComponent) * pixelWeight
+                green += Double(color.greenComponent) * pixelWeight
+                blue += Double(color.blueComponent) * pixelWeight
+                weight += pixelWeight
+            }
         }
-        return Int(hash % UInt64(palette.count))
+
+        if weight == 0 {
+            return darkWeight > 0 ? Color(red: 0.06, green: 0.12, blue: 0.31) : fallback
+        }
+
+        let main = NSColor(deviceRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        main.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+        return Color(hue: Double(hue),
+                     saturation: min(0.78, max(0.42, Double(saturation) * 1.06)),
+                     brightness: min(0.84, max(0.40, Double(brightness))))
     }
 }
