@@ -2,6 +2,9 @@ import SwiftUI
 
 struct PinboardTabs: View {
     @Bindable private var store = ClipboardStore.shared
+    @State private var editingBoardID: UUID?
+    @State private var draftName = ""
+    @FocusState private var focusedBoardID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -14,11 +17,7 @@ struct PinboardTabs: View {
                 }
 
                 ForEach(store.pinboards) { board in
-                    pill(title: board.name,
-                         dot: board.color,
-                         selected: store.source == .pinboard(board.id)) {
-                        store.source = .pinboard(board.id); store.selectFirst()
-                    }
+                    boardTab(board)
                     .contextMenu {
                         Button { rename(board) } label: {
                             Label("Rename…", systemImage: "pencil")
@@ -56,6 +55,37 @@ struct PinboardTabs: View {
                 .help("New Pinboard")
             }
         }
+        .onChange(of: focusedBoardID) { oldValue, newValue in
+            if let oldValue, oldValue == editingBoardID, newValue != oldValue {
+                finishEditing()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func boardTab(_ board: Pinboard) -> some View {
+        if editingBoardID == board.id {
+            HStack(spacing: 6) {
+                Circle().fill(board.color).frame(width: 7, height: 7)
+                TextField("Pinboard name", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(minWidth: 92, idealWidth: 120)
+                    .focused($focusedBoardID, equals: board.id)
+                    .onSubmit(finishEditing)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 29)
+            .background(Theme.pillSelected, in: Capsule())
+            .fixedSize()
+        } else {
+            pill(title: board.name,
+                 dot: board.color,
+                 selected: store.source == .pinboard(board.id)) {
+                store.source = .pinboard(board.id); store.selectFirst()
+            }
+        }
     }
 
     private func pill(title: String, dot: Color?, icon: String? = nil,
@@ -86,14 +116,28 @@ struct PinboardTabs: View {
     private func addPinboard() {
         let board = store.addPinboard(name: "New Pinboard")
         store.source = .pinboard(board.id)
+        beginEditing(board)
     }
 
     private func rename(_ board: Pinboard) {
-        if let name = TextPrompt.run(title: "Rename Pinboard",
-                                     message: "Enter a new name",
-                                     defaultValue: board.name) {
-            store.renamePinboard(board.id, to: name)
+        beginEditing(board)
+    }
+
+    private func beginEditing(_ board: Pinboard) {
+        editingBoardID = board.id
+        draftName = board.name
+        DispatchQueue.main.async {
+            focusedBoardID = board.id
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
         }
+    }
+
+    private func finishEditing() {
+        guard let id = editingBoardID else { return }
+        let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { store.renamePinboard(id, to: name) }
+        editingBoardID = nil
+        focusedBoardID = nil
     }
 }
 
