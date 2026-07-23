@@ -11,6 +11,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
+    private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
     private var keyMonitor: Any?
 
@@ -64,29 +65,55 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pesty")
-            button.image?.isTemplate = true
-        }
+        updateStatusItemIcon(item)
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Pesty   \(Settings.shared.hotkeyDisplay)",
                      action: #selector(menuOpen), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "").target = self
+        let settings = menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
+        settings.target = self
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        let pause = menu.addItem(withTitle: "Pause Pesty", action: #selector(menuTogglePause), keyEquivalent: "")
+        pause.target = self
+        pauseMenuItem = pause
+        let clear = menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "")
+        clear.target = self
+        clear.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
         menu.addItem(.separator())
         let about = menu.addItem(withTitle: "About Pesty", action: #selector(menuAbout), keyEquivalent: "")
         about.target = self
-        menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q").target = self
+        about.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        let quit = menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q")
+        quit.target = self
+        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         item.menu = menu
         statusItem = item
+        updatePauseMenuItem()
     }
 
     @objc private func menuOpen() { showBar() }
     @objc private func menuSettings() { showSettings() }
     @objc private func menuClear() { store.clearHistory() }
+    @objc private func menuTogglePause() { togglePestyPause() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
     @objc private func menuAbout() { showAbout() }
+
+    func togglePestyPause() {
+        monitor.togglePause()
+        updatePauseMenuItem()
+        if let item = statusItem { updateStatusItemIcon(item) }
+    }
+
+    private func updatePauseMenuItem() {
+        let paused = monitor.isPaused
+        pauseMenuItem?.title = paused ? "Resume Pesty" : "Pause Pesty"
+        pauseMenuItem?.image = NSImage(systemSymbolName: paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+    }
+
+    private func updateStatusItemIcon(_ item: NSStatusItem) {
+        item.button?.image = NSImage(systemSymbolName: monitor.isPaused ? "pause.circle" : "doc.on.clipboard", accessibilityDescription: "Pesty")
+        item.button?.image?.isTemplate = true
+    }
 
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
