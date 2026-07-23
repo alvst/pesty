@@ -2,6 +2,23 @@ import AppKit
 import Carbon.HIToolbox
 import Observation
 
+enum ShortcutModifier: CaseIterable, Identifiable {
+    case command, option, control, shift
+    var id: Int { carbonValue }
+    var carbonValue: Int {
+        switch self { case .command: cmdKey; case .option: optionKey; case .control: controlKey; case .shift: shiftKey }
+    }
+    var title: String {
+        switch self { case .command: "Command"; case .option: "Option"; case .control: "Control"; case .shift: "Shift" }
+    }
+    var symbol: String {
+        switch self { case .command: "⌘"; case .option: "⌥"; case .control: "⌃"; case .shift: "⇧" }
+    }
+    init?(carbonValue: Int) {
+        self = Self.allCases.first(where: { $0.carbonValue == carbonValue }) ?? .command
+    }
+}
+
 @Observable
 @MainActor
 final class Settings {
@@ -14,6 +31,8 @@ final class Settings {
         static let historyLimit = "historyLimit"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
+        static let quickPasteModifier = "quickPasteModifier"
+        static let plainTextModifier = "plainTextModifier"
         static let launchAtLogin = "launchAtLogin"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
@@ -40,6 +59,14 @@ final class Settings {
     var hotkeyModifiers: Int {
         didSet { guard isLoaded else { return }
             d.set(hotkeyModifiers, forKey: Keys.hotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
+    var quickPasteModifier: Int {
+        didSet { guard isLoaded else { return }; d.set(quickPasteModifier, forKey: Keys.quickPasteModifier) }
+    }
+
+    var plainTextModifier: Int {
+        didSet { guard isLoaded else { return }; d.set(plainTextModifier, forKey: Keys.plainTextModifier) }
     }
 
     var launchAtLogin: Bool {
@@ -81,6 +108,8 @@ final class Settings {
             Keys.historyLimit: 500,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
+            Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
+            Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
             Keys.launchAtLogin: false,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
@@ -92,6 +121,8 @@ final class Settings {
         historyLimit = d.integer(forKey: Keys.historyLimit)
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
+        quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)
+        plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
@@ -104,5 +135,9 @@ final class Settings {
 
     var hotkeyDisplay: String {
         HotKeyCenter.describe(keyCode: hotkeyKeyCode, modifiers: hotkeyModifiers)
+    }
+
+    var quickPasteModifierDisplay: String {
+        ShortcutModifier(carbonValue: quickPasteModifier)?.symbol ?? "⌘"
     }
 }

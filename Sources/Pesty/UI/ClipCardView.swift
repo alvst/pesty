@@ -7,6 +7,7 @@ struct ClipCardView: View {
 
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
+    private var settings: Settings { Settings.shared }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
 
     var body: some View {
@@ -97,14 +98,7 @@ struct ClipCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .file:
-            VStack(spacing: 9) {
-                Image(systemName: "doc.fill").font(.system(size: 32))
-                    .foregroundStyle(headerColor)
-                Text(item.displayTitle).font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary).lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            fileContent
         case .link:
             VStack(spacing: 10) {
                 Spacer(minLength: 0)
@@ -128,6 +122,32 @@ struct ClipCardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    @ViewBuilder
+    private var fileContent: some View {
+        if let image = filePreviewImage {
+            VStack(spacing: 8) {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text(item.displayTitle).font(.system(size: 11))
+                    .foregroundStyle(Theme.textSecondary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 9) {
+                Image(systemName: "doc.fill").font(.system(size: 32)).foregroundStyle(headerColor)
+                Text(item.displayTitle).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                    .lineLimit(2).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var filePreviewImage: NSImage? {
+        guard item.fileURLs.count == 1, let urlString = item.fileURLs.first,
+              let url = URL(string: urlString), url.isFileURL else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
             if item.type == .link {
@@ -143,8 +163,8 @@ struct ClipCardView: View {
                 Spacer(minLength: 4)
                 if index < 9 {
                     HStack(spacing: 3) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 9, weight: .semibold))
+                        Text(settings.quickPasteModifierDisplay)
+                            .font(.system(size: 11, weight: .semibold))
                         Text("\(index + 1)")
                             .font(.system(size: 11, weight: .semibold))
                     }
