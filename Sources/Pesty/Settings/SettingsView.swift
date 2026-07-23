@@ -163,6 +163,8 @@ private struct GeneralSettings: View {
                             Divider()
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
                             Divider()
+                            settingToggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
+                            Divider()
                             VStack(alignment: .leading, spacing: 8) {
                                 LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                                     .font(.system(size: 14))

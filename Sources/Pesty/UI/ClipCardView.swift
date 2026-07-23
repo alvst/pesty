@@ -132,14 +132,12 @@ struct ClipCardView: View {
         case .file:
             fileContent
         case .link:
-            VStack(spacing: 10) {
-                Spacer(minLength: 0)
-                Image(systemName: "safari").font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Theme.textTertiary)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity)
-        default:
+            LinkPreviewContent(text: item.text ?? item.displayTitle, compact: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        case .richText:
+            RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", lineLimit: 10)
+                .foregroundStyle(Theme.textPrimary.opacity(0.9))
+        case .text:
             Text(item.text ?? "")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.textPrimary.opacity(0.9))

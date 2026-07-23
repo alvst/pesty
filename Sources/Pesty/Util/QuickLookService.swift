@@ -6,6 +6,7 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     static let shared = QuickLookService()
 
     private var previewItems: [PreviewItem] = []
+    private var startIndexByClipID: [UUID: Int] = [:]
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("Pesty-QuickLook", isDirectory: true)
 
@@ -23,18 +24,27 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         prepareTemporaryDirectory()
         var selectedIndex = 0
         var newItems: [PreviewItem] = []
+        var newStartIndexes: [UUID: Int] = [:]
         for clip in items {
             let startIndex = newItems.count
             newItems.append(contentsOf: previewItems(for: clip))
+            if startIndex < newItems.count { newStartIndexes[clip.id] = startIndex }
             if clip.id == selectedID, startIndex < newItems.count { selectedIndex = startIndex }
         }
         guard !newItems.isEmpty else { return }
 
         previewItems = newItems
+        startIndexByClipID = newStartIndexes
         panel.dataSource = self
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    func updateSelection(selectedID: UUID?) {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible,
+              let selectedID, let index = startIndexByClipID[selectedID] else { return }
+        panel.currentPreviewItemIndex = index
     }
 
     func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { previewItems.count }

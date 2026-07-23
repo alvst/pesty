@@ -353,9 +353,9 @@ final class AppController: NSObject, NSApplicationDelegate {
                 return nil
             }
         case kVK_LeftArrow, kVK_UpArrow:
-            store.moveSelection(by: -1); return nil
+            moveBarSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
-            store.moveSelection(by: 1); return nil
+            moveBarSelection(by: 1); return nil
         case kVK_Delete:
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
@@ -378,6 +378,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return event
+    }
+
+    private func moveBarSelection(by delta: Int) {
+        store.moveSelection(by: delta)
+        QuickLookService.shared.updateSelection(selectedID: store.selectedID)
     }
 
     private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {

@@ -5,6 +5,8 @@ struct BarView: View {
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
+    @State private var previewVisible = true
+    @State private var resizeStartHeight: Double?
 
     var body: some View {
         ZStack {
@@ -12,8 +14,15 @@ struct BarView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
+                if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                strip
+                HStack(spacing: 0) {
+                    if previewVisible, let item = store.selectedItem {
+                        SelectedClipPreviewView(item: item)
+                        Divider()
+                    }
+                    strip
+                }
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
@@ -38,11 +47,44 @@ struct BarView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             if sequence.hasEntries { sequenceStatus }
+            previewButton
             sequenceButton
             moreMenu
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
+    }
+
+    private var previewButton: some View {
+        Button { previewVisible.toggle() } label: {
+            Image(systemName: previewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(previewVisible ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(previewVisible ? "Hide clip preview" : "Show clip preview")
+    }
+
+    private var resizeHandle: some View {
+        HStack {
+            Capsule(style: .continuous)
+                .fill(Theme.textTertiary.opacity(0.7))
+                .frame(width: 42, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 14)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
+                    guard let start = resizeStartHeight else { return }
+                    settings.barHeight = min(720, max(300, start - value.translation.height))
+                }
+                .onEnded { _ in resizeStartHeight = nil }
+        )
+        .help("Drag to resize the Pesty bar")
     }
 
     private var syncButton: some View {
