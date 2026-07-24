@@ -239,6 +239,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         _ = pasteSequence.addIfNeeded(item)
     }
 
+    /// Adds a Clipboard-history clip to the current Paste Stack. Once moved,
+    /// the clip is represented by the stack deck instead of a duplicate card
+    /// in the unfiltered Clipboard strip.
+    func moveHistoryItemToPasteStack(_ item: ClipItem) {
+        guard pasteSequence.addHistoryItem(item) else { return }
+
+        if store.source == .history,
+           store.searchText.isEmpty,
+           store.selectedID == item.id {
+            store.selectFirst()
+        }
+    }
+
     func removePasteStackEntry(_ entry: PasteStackEntry) {
         pasteSequence.remove(entry)
     }
