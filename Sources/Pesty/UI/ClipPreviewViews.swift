@@ -88,7 +88,22 @@ struct LinkCardPreview: View {
     private var host: String { url?.host ?? text }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // The normal card shows the rich artwork, while short Paste Bars and
+        // the anchored-preview strip fall back to a compact version instead
+        // of forcing the card content to overflow its shared height.
+        ViewThatFits(in: .vertical) {
+            previewBody(imageHeight: 104, titleLineLimit: 2, placeholderSize: 26, spacing: 8)
+            previewBody(imageHeight: 36, titleLineLimit: 1, placeholderSize: 16, spacing: 6)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { previews.load(for: url) }
+    }
+
+    private func previewBody(imageHeight: CGFloat,
+                             titleLineLimit: Int,
+                             placeholderSize: CGFloat,
+                             spacing: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: spacing) {
             Group {
                 if let image = preview?.image {
                     Image(nsImage: image)
@@ -100,13 +115,13 @@ struct LinkCardPreview: View {
                         .fill(Color.accentColor.opacity(0.16))
                         .overlay {
                             Image(systemName: "link")
-                                .font(.system(size: 26, weight: .medium))
+                                .font(.system(size: placeholderSize, weight: .medium))
                                 .foregroundStyle(Color.accentColor)
                         }
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 104)
+            .frame(height: imageHeight)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 7) {
@@ -125,10 +140,9 @@ struct LinkCardPreview: View {
                 Text(preview?.title ?? host)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
+                    .lineLimit(titleLineLimit)
             }
         }
-        .onAppear { previews.load(for: url) }
     }
 }
 
