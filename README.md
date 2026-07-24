@@ -149,7 +149,7 @@ Pesty reimplements the parts of Paste people use every day - the slide-up strip,
 
 ## Contributing
 
-PRs welcome - see [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues: large preview pane, drag-and-drop out of cards, strip resize handle, iOS/iPad companion, more content-type renderers.
+PRs welcome - see [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues: large preview pane, drag-and-drop out of cards, strip resize handle, iOS/iPad companion, more content-type renderers. Add screenshots when the UI changes in a way that screenshots help explain, rather than for every small change.
 
 ## License
 
