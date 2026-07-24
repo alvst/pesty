@@ -6,8 +6,10 @@ final class HotKeyCenter {
     static let shared = HotKeyCenter()
 
     var onTrigger: (() -> Void)?
+    var onSequenceTrigger: (() -> Void)?
 
     private var hotKeyRef: EventHotKeyRef?
+    private var sequenceHotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let signature: OSType = 0x50535459
 
@@ -22,25 +24,48 @@ final class HotKeyCenter {
         guard handlerRef == nil else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: OSType(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ -> OSStatus in
-            DispatchQueue.main.async { HotKeyCenter.shared.onTrigger?() }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
+            var id = EventHotKeyID()
+            GetEventParameter(event,
+                              EventParamName(kEventParamDirectObject),
+                              EventParamType(typeEventHotKeyID),
+                              nil,
+                              MemoryLayout<EventHotKeyID>.size,
+                              nil,
+                              &id)
+            DispatchQueue.main.async {
+                if id.id == 2 {
+                    HotKeyCenter.shared.onSequenceTrigger?()
+                } else {
+                    HotKeyCenter.shared.onTrigger?()
+                }
+            }
             return noErr
         }, 1, &spec, nil, &handlerRef)
     }
 
     func reload() {
         unregister()
-        let keyCode = UInt32(Settings.shared.hotkeyKeyCode)
-        let modifiers = UInt32(Settings.shared.hotkeyModifiers)
-        guard keyCode != 0 else { return }
-        let id = EventHotKeyID(signature: signature, id: 1)
+        hotKeyRef = register(keyCode: Settings.shared.hotkeyKeyCode,
+                             modifiers: Settings.shared.hotkeyModifiers,
+                             id: 1)
+        sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
+                                     modifiers: Settings.shared.sequenceHotkeyModifiers,
+                                     id: 2)
+    }
+
+    private func register(keyCode: Int, modifiers: Int, id: UInt32) -> EventHotKeyRef? {
+        guard keyCode != 0 else { return nil }
+        let hotKeyID = EventHotKeyID(signature: signature, id: id)
         var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &ref)
-        if status == noErr { hotKeyRef = ref }
+        let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID,
+                                         GetApplicationEventTarget(), 0, &ref)
+        return status == noErr ? ref : nil
     }
 
     private func unregister() {
         if let ref = hotKeyRef { UnregisterEventHotKey(ref); hotKeyRef = nil }
+        if let ref = sequenceHotKeyRef { UnregisterEventHotKey(ref); sequenceHotKeyRef = nil }
     }
 
     static func describe(keyCode: Int, modifiers: Int) -> String {

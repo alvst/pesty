@@ -7,14 +7,15 @@ enum PasteService {
     @discardableResult
     static func copy(_ item: ClipItem,
                      to pasteboard: NSPasteboard = .general,
-                     asPlainText: Bool = false) -> Int {
+                     asPlainText: Bool = false,
+                     imageOverride: NSImage? = nil) -> Int {
         if asPlainText, let text = item.text ?? item.colorHex {
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             return pasteboard.changeCount
         }
         if item.type == .image {
-            guard let img = ClipboardStore.shared.loadImage(for: item) else {
+            guard let img = imageOverride ?? ClipboardStore.shared.loadImage(for: item) else {
                 return pasteboard.changeCount
             }
             pasteboard.clearContents()
@@ -46,8 +47,9 @@ enum PasteService {
     static func paste(_ item: ClipItem,
                       into targetApp: NSRunningApplication?,
                       monitor: ClipboardMonitor,
-                      asPlainText: Bool = false) {
-        let change = copy(item, asPlainText: asPlainText)
+                      asPlainText: Bool = false,
+                      imageOverride: NSImage? = nil) {
+        let change = copy(item, asPlainText: asPlainText, imageOverride: imageOverride)
         monitor.suppressUntilChangeCount = change
         if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
 

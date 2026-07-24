@@ -3,15 +3,21 @@ import AppKit
 import Carbon.HIToolbox
 
 struct HotkeyRecorderView: View {
-    @Bindable private var settings = Settings.shared
+    @Binding private var keyCode: Int
+    @Binding private var modifiers: Int
     @State private var recording = false
     @State private var monitor: Any?
+
+    init(keyCode: Binding<Int>, modifiers: Binding<Int>) {
+        _keyCode = keyCode
+        _modifiers = modifiers
+    }
 
     var body: some View {
         Button {
             recording ? stop() : start()
         } label: {
-            Text(recording ? "Press keys…" : settings.hotkeyDisplay)
+            Text(recording ? "Press keys…" : HotKeyCenter.describe(keyCode: keyCode, modifiers: modifiers))
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .frame(minWidth: 90)
                 .padding(.horizontal, 12).padding(.vertical, 5)
@@ -34,8 +40,8 @@ struct HotkeyRecorderView: View {
             if mods & (cmdKey | controlKey | optionKey) == 0 {
                 NSSound.beep(); return nil
             }
-            settings.hotkeyKeyCode = Int(event.keyCode)
-            settings.hotkeyModifiers = mods
+            keyCode = Int(event.keyCode)
+            modifiers = mods
             stop()
             return nil
         }

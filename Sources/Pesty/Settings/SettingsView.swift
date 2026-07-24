@@ -198,6 +198,19 @@ private struct GeneralSettings: View {
 
                             Divider()
 
+                            VStack(alignment: .leading, spacing: 4) {
+                                settingToggle(
+                                    "Remove saved stacks with clipboard history",
+                                    isOn: $settings.pasteStacksFollowHistory
+                                )
+                                Text("When enabled, deleting or retaining clipboard history also removes matching saved stack clips.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.bottom, 8)
+                            }
+
+                            Divider()
+
                             HStack {
                                 Text("Erase saved clips now")
                                     .font(.system(size: 14))
@@ -540,10 +553,31 @@ private struct ShortcutsSettings: View {
                 SettingsFormGroup("Open Pesty") {
                     SettingsSurface {
                         LabeledContent("Show the Pesty bar") {
-                            HotkeyRecorderView()
+                            HotkeyRecorderView(
+                                keyCode: $settings.hotkeyKeyCode,
+                                modifiers: $settings.hotkeyModifiers
+                            )
                         }
                         .font(.system(size: 14))
                         .padding(.vertical, 9)
+                    }
+                }
+
+                SettingsFormGroup("Paste Stack") {
+                    SettingsSurface {
+                        LabeledContent("Paste next clip") {
+                            HotkeyRecorderView(
+                                keyCode: $settings.sequenceHotkeyKeyCode,
+                                modifiers: $settings.sequenceHotkeyModifiers
+                            )
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 9)
+
+                        Text("Start a Paste Stack from the bar, then use this shortcut to paste each clip in order.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 9)
                     }
                 }
 

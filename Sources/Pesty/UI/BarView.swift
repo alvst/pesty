@@ -4,6 +4,11 @@ struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     @State private var resizeStartHeight: Double?
+    private var sequence: PasteSequence { AppController.shared.pasteSequence }
+
+    private var showsStackDeck: Bool {
+        store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
+    }
 
     var body: some View {
         ZStack {
@@ -14,14 +19,18 @@ struct BarView: View {
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                HStack(spacing: 0) {
-                    if settings.clipPreviewStyle == .inlinePesty,
-                       store.inlinePreviewVisible,
-                       let item = store.selectedItem {
-                        SelectedClipPreviewView(item: item)
-                        Divider()
+                if store.source == .pasteStack {
+                    PasteStackContentView()
+                } else {
+                    HStack(spacing: 0) {
+                        if settings.clipPreviewStyle == .inlinePesty,
+                           store.inlinePreviewVisible,
+                           let item = store.selectedItem {
+                            SelectedClipPreviewView(item: item)
+                            Divider()
+                        }
+                        strip
                     }
-                    strip
                 }
             }
         }
@@ -55,11 +64,12 @@ struct BarView: View {
             if settings.iCloudSync {
                 syncButton
             }
-            searchIndicator
+            if store.source != .pasteStack { searchIndicator }
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
             if settings.clipPreviewStyle == .inlinePesty { previewButton }
+            pasteStackButton
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -131,10 +141,32 @@ struct BarView: View {
         .fixedSize()
     }
 
+    private var pasteStackButton: some View {
+        Button {
+            AppController.shared.newPasteStack()
+        } label: {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help("Start Paste Stack")
+    }
+
     private var strip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Theme.cardSpacing) {
+                    if showsStackDeck {
+                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                            PasteStackDeckCard(stack: stack,
+                                               isActive: stack.id == sequence.activeStackID,
+                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+                                .id(stack.id)
+                        }
+                    }
+
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
                                      index: index,
@@ -162,7 +194,9 @@ struct BarView: View {
                     proxy.scrollTo(id, anchor: selectedClipAnchor)
                 }
             }
-            .overlay { if store.visibleItems.isEmpty { emptyState } }
+            .overlay {
+                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
+            }
         }
         .frame(maxHeight: .infinity)
     }

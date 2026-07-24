@@ -70,7 +70,6 @@ enum ClipColorTheme: Int, CaseIterable, Identifiable {
         }
     }
 }
-
 enum HistoryRetention: Int, CaseIterable, Identifiable {
     case day
     case week
@@ -219,7 +218,6 @@ enum ShortcutModifier: CaseIterable, Identifiable {
         self = modifier
     }
 }
-
 @Observable
 @MainActor
 final class Settings {
@@ -232,10 +230,13 @@ final class Settings {
         static let historyLimit = "historyLimit"
         static let historyRetentionMode = "historyRetentionMode"
         static let historyRetention = "historyRetention"
+        static let pasteStacksFollowHistory = "pasteStacksFollowHistory"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let quickPasteModifier = "quickPasteModifier"
         static let plainTextModifier = "plainTextModifier"
+        static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
+        static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
         static let launchAtLogin = "launchAtLogin"
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
@@ -280,6 +281,12 @@ final class Settings {
         }
     }
 
+    /// When enabled, removing clipboard history also removes those clips from
+    /// saved Paste Stacks. The default keeps stacks until the user deletes them.
+    var pasteStacksFollowHistory: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStacksFollowHistory, forKey: Keys.pasteStacksFollowHistory) }
+    }
+
     var hotkeyKeyCode: Int {
         didSet { guard isLoaded else { return }
             d.set(hotkeyKeyCode, forKey: Keys.hotkeyKeyCode); HotKeyCenter.shared.reload() }
@@ -296,6 +303,16 @@ final class Settings {
 
     var plainTextModifier: Int {
         didSet { guard isLoaded else { return }; d.set(plainTextModifier, forKey: Keys.plainTextModifier) }
+    }
+
+    var sequenceHotkeyKeyCode: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyKeyCode, forKey: Keys.sequenceHotkeyKeyCode); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyModifiers: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
     }
 
     var launchAtLogin: Bool {
@@ -377,10 +394,13 @@ final class Settings {
             Keys.historyLimit: 500,
             Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
             Keys.historyRetention: HistoryRetention.month.rawValue,
+            Keys.pasteStacksFollowHistory: false,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
             Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
             Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
+            Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
+            Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
             Keys.launchAtLogin: false,
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
@@ -400,10 +420,13 @@ final class Settings {
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.integer(forKey: Keys.historyRetentionMode)) ?? .itemCount
         historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
+        pasteStacksFollowHistory = d.bool(forKey: Keys.pasteStacksFollowHistory)
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)
         plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
+        sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
+        sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
@@ -429,6 +452,10 @@ final class Settings {
 
     var quickPasteModifierDisplay: String {
         ShortcutModifier(carbonValue: quickPasteModifier)?.symbol ?? "⌘"
+    }
+
+    var sequenceHotkeyDisplay: String {
+        HotKeyCenter.describe(keyCode: sequenceHotkeyKeyCode, modifiers: sequenceHotkeyModifiers)
     }
 
     func isIgnoringSourceApp(_ bundleID: String?) -> Bool {
