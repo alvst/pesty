@@ -15,6 +15,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
+    private var isReopenPresentationPending = false
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -53,6 +54,33 @@ final class AppController: NSObject, NSApplicationDelegate {
             }
             Settings.shared.onboarded = true
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        // Finder, Spotlight, and the Dock send a reopen event when the user
+        // invokes an app that is already running. The clipboard bar is an
+        // NSPanel, so AppKit's `hasVisibleWindows` value does not reliably
+        // describe whether Pesty already has a surface on screen.
+        guard !hasVisiblePestySurface else { return true }
+        guard !isReopenPresentationPending else { return false }
+
+        isReopenPresentationPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isReopenPresentationPending = false
+
+            // A window can appear while AppKit finishes the reopen event
+            // (for example, during onboarding). Avoid presenting a second
+            // Pesty surface in that case.
+            guard !self.hasVisiblePestySurface else { return }
+            self.showBar()
+        }
+        return false
+    }
+
+    private var hasVisiblePestySurface: Bool {
+        NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
     }
 
     @objc private func appActivated(_ note: Notification) {
@@ -147,6 +175,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
+        } else if let lastActiveApp, !lastActiveApp.isTerminated {
+            // Reopen events arrive after Pesty becomes active, so retain the
+            // most recently active non-Pesty app as the eventual paste target.
+            previousApp = lastActiveApp
         }
         store.searchText = ""
         store.source = requestedSource ?? .history
