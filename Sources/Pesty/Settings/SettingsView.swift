@@ -159,6 +159,7 @@ private struct GeneralSettings: View {
                 #endif
                 Toggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
                 Toggle("Play sound on paste", isOn: $settings.playSound)
+                Toggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
                 VStack(alignment: .leading) {

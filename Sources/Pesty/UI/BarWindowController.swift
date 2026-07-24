@@ -81,7 +81,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isPresenting, !AppController.shared.suppressAutoHide else { return }
+        guard Settings.shared.hideOnClickOutside,
+              !isPresenting,
+              !AppController.shared.suppressAutoHide else { return }
         // Quick Look becomes key immediately after the strip hands it a preview.
         // Defer until that transition is visible before deciding whether focus
         // actually left Pesty.
