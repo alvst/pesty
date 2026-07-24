@@ -55,6 +55,7 @@ struct LinkPreviewContent: View {
             Spacer(minLength: 0)
         }
         .onAppear { previews.load(for: url) }
+        .onChange(of: url) { _, newURL in previews.load(for: newURL) }
     }
 
     @ViewBuilder
@@ -129,6 +130,7 @@ struct LinkCardPreview: View {
             }
         }
         .onAppear { previews.load(for: url) }
+        .onChange(of: url) { _, newURL in previews.load(for: newURL) }
     }
 }
 

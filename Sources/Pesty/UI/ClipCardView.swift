@@ -243,12 +243,16 @@ struct ClipCardView: View {
             }
             Button("Copy") { AppController.shared.copyItem(item) }
             Divider()
+            Button("Edit") { AppController.shared.editItem(item) }
+            Divider()
             Button("Remove from Paste Stack", role: .destructive) {
                 AppController.shared.removePasteStackEntry(entry)
             }
         } else {
             Button("Paste") { AppController.shared.pasteItem(item) }
             Button("Copy") { AppController.shared.copyItem(item) }
+            Divider()
+            Button("Edit") { AppController.shared.editItem(item) }
             Divider()
             if !store.pinboards.isEmpty {
                 Menu("Save to Pinboard") {

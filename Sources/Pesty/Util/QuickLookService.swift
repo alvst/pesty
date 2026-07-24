@@ -21,24 +21,19 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
             return
         }
 
-        prepareTemporaryDirectory()
-        var selectedIndex = 0
-        var newItems: [PreviewItem] = []
-        var newStartIndexes: [UUID: Int] = [:]
-        for clip in items {
-            let startIndex = newItems.count
-            newItems.append(contentsOf: previewItems(for: clip))
-            if startIndex < newItems.count { newStartIndexes[clip.id] = startIndex }
-            if clip.id == selectedID, startIndex < newItems.count { selectedIndex = startIndex }
-        }
-        guard !newItems.isEmpty else { return }
-
-        previewItems = newItems
-        startIndexByClipID = newStartIndexes
+        guard let selectedIndex = replacePreviewItems(with: items, selectedID: selectedID) else { return }
         panel.dataSource = self
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    /// Rebuilds temporary Quick Look assets when a visible clip changes.
+    func refresh(items: [ClipItem], selectedID: UUID?) {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible,
+              let selectedIndex = replacePreviewItems(with: items, selectedID: selectedID) else { return }
+        panel.reloadData()
+        panel.currentPreviewItemIndex = selectedIndex
     }
 
     func updateSelection(selectedID: UUID?) {
@@ -51,6 +46,24 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> QLPreviewItem {
         previewItems[index]
+    }
+
+    private func replacePreviewItems(with clips: [ClipItem], selectedID: UUID?) -> Int? {
+        prepareTemporaryDirectory()
+        var selectedIndex = 0
+        var newItems: [PreviewItem] = []
+        var newStartIndexes: [UUID: Int] = [:]
+        for clip in clips {
+            let startIndex = newItems.count
+            newItems.append(contentsOf: previewItems(for: clip))
+            if startIndex < newItems.count { newStartIndexes[clip.id] = startIndex }
+            if clip.id == selectedID, startIndex < newItems.count { selectedIndex = startIndex }
+        }
+        guard !newItems.isEmpty else { return nil }
+
+        previewItems = newItems
+        startIndexByClipID = newStartIndexes
+        return selectedIndex
     }
 
     private func previewItems(for clip: ClipItem) -> [PreviewItem] {
