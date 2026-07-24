@@ -138,6 +138,21 @@ private struct GeneralSettings: View {
                 }
             }
 
+            Section("Quick Paste") {
+                LabeledContent("Paste items 1–9") {
+                    HStack(spacing: 6) {
+                        modifierPicker(selection: $settings.quickPasteModifier)
+                        Text("+ 1…9").foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Paste as plain text") {
+                    modifierPicker(selection: $settings.plainTextModifier)
+                }
+                Text("Hold the plain-text modifier while using Quick Paste to remove formatting. For example, ⌘⇧1 pastes the first item as plain text with the default shortcuts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Behavior") {
                 #if !MAS
                 Toggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
@@ -237,6 +252,17 @@ private struct GeneralSettings: View {
             get: { settings.historyRetention.sliderIndex },
             set: { settings.historyRetention = HistoryRetention(sliderIndex: $0) }
         )
+    }
+
+    private func modifierPicker(selection: Binding<Int>) -> some View {
+        Picker("", selection: selection) {
+            ForEach(ShortcutModifier.allCases) { modifier in
+                Text("\(modifier.symbol) \(modifier.title)").tag(modifier.carbonValue)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 118)
     }
 }
 
