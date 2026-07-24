@@ -17,6 +17,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
     private let copyToast = CopyToastController()
+    private var isReopenPresentationPending = false
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -54,6 +55,33 @@ final class AppController: NSObject, NSApplicationDelegate {
             }
             Settings.shared.onboarded = true
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        // Finder, Spotlight, and the Dock deliver user-initiated reopens here.
+        // Deliberately do not use applicationDidBecomeActive for this: showing
+        // the bar activates Pesty itself, which would otherwise feed back into
+        // another bar presentation.
+        guard !flag,
+              !isReopenPresentationPending,
+              !hasVisiblePestySurface else { return true }
+
+        isReopenPresentationPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isReopenPresentationPending = false
+
+            // A Pesty surface may have appeared between the reopen event and
+            // this run-loop turn (for example, Settings during onboarding).
+            guard !self.hasVisiblePestySurface else { return }
+            self.showBar()
+        }
+        return true
+    }
+
+    private var hasVisiblePestySurface: Bool {
+        NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
     }
 
     @objc private func appActivated(_ note: Notification) {
