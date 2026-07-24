@@ -140,6 +140,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = requestedSource ?? .history
+        store.applyHistoryPolicy()
         if store.source != .pasteStack { store.selectFirst() }
 
         if barController == nil {

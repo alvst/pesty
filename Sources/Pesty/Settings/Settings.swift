@@ -2,6 +2,112 @@ import AppKit
 import Carbon.HIToolbox
 import Observation
 
+enum HistoryRetention: Int, CaseIterable, Identifiable {
+    case day
+    case week
+    case month
+    case year
+    case forever
+    case twoWeeks
+    case threeWeeks
+    case twoMonths
+    case threeMonths
+    case sixMonths
+
+    // Preserve the original raw values so a saved selection remains valid as
+    // additional intervals are introduced.
+    static let allCases: [HistoryRetention] = [
+        .day, .week, .twoWeeks, .threeWeeks, .month,
+        .twoMonths, .threeMonths, .sixMonths, .year, .forever
+    ]
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .day: "1 Day"
+        case .week: "1 Week"
+        case .twoWeeks: "2 Weeks"
+        case .threeWeeks: "3 Weeks"
+        case .month: "1 Month"
+        case .twoMonths: "2 Months"
+        case .threeMonths: "3 Months"
+        case .sixMonths: "6 Months"
+        case .year: "1 Year"
+        case .forever: "Forever"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .day: "Clips are kept for 24 hours."
+        case .week: "Clips are kept for 7 days."
+        case .twoWeeks: "Clips are kept for 2 weeks."
+        case .threeWeeks: "Clips are kept for 3 weeks."
+        case .month: "Clips are kept for 1 month."
+        case .twoMonths: "Clips are kept for 2 months."
+        case .threeMonths: "Clips are kept for 3 months."
+        case .sixMonths: "Clips are kept for 6 months."
+        case .year: "Clips are kept for 1 year."
+        case .forever: "Clips are kept until you erase them."
+        }
+    }
+
+    var cutoffDate: Date? {
+        let calendar = Calendar.current
+        switch self {
+        case .day: return calendar.date(byAdding: .day, value: -1, to: .now)
+        case .week: return calendar.date(byAdding: .day, value: -7, to: .now)
+        case .twoWeeks: return calendar.date(byAdding: .day, value: -14, to: .now)
+        case .threeWeeks: return calendar.date(byAdding: .day, value: -21, to: .now)
+        case .month: return calendar.date(byAdding: .month, value: -1, to: .now)
+        case .twoMonths: return calendar.date(byAdding: .month, value: -2, to: .now)
+        case .threeMonths: return calendar.date(byAdding: .month, value: -3, to: .now)
+        case .sixMonths: return calendar.date(byAdding: .month, value: -6, to: .now)
+        case .year: return calendar.date(byAdding: .year, value: -1, to: .now)
+        case .forever: return nil
+        }
+    }
+
+    var sliderIndex: Double {
+        Double(Self.allCases.firstIndex(of: self) ?? 0)
+    }
+
+    var shortSliderTitle: String {
+        switch self {
+        case .day: "1d"
+        case .week: "1w"
+        case .twoWeeks: "2w"
+        case .threeWeeks: "3w"
+        case .month: "1m"
+        case .twoMonths: "2m"
+        case .threeMonths: "3m"
+        case .sixMonths: "6m"
+        case .year: "1y"
+        case .forever: "∞"
+        }
+    }
+
+    init(sliderIndex: Double) {
+        let index = min(Self.allCases.count - 1, max(0, Int(sliderIndex.rounded())))
+        self = Self.allCases[index]
+    }
+}
+
+enum HistoryRetentionMode: Int, CaseIterable, Identifiable {
+    case itemCount
+    case timePeriod
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .itemCount: "Number"
+        case .timePeriod: "Time"
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class Settings {
@@ -12,6 +118,8 @@ final class Settings {
 
     enum Keys {
         static let historyLimit = "historyLimit"
+        static let historyRetentionMode = "historyRetentionMode"
+        static let historyRetention = "historyRetention"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
@@ -30,7 +138,25 @@ final class Settings {
             guard isLoaded else { return }
             if historyLimit < 20 { historyLimit = 20; return }
             d.set(historyLimit, forKey: Keys.historyLimit)
-            ClipboardStore.shared.applyHistoryLimit()
+            ClipboardStore.shared.applyHistoryPolicy()
+        }
+    }
+
+    var historyRetentionMode: HistoryRetentionMode {
+        didSet {
+            guard isLoaded else { return }
+            d.set(historyRetentionMode.rawValue, forKey: Keys.historyRetentionMode)
+            ClipboardStore.shared.applyHistoryPolicy()
+        }
+    }
+
+    var historyRetention: HistoryRetention {
+        didSet {
+            guard isLoaded else { return }
+            d.set(historyRetention.rawValue, forKey: Keys.historyRetention)
+            if historyRetentionMode == .timePeriod {
+                ClipboardStore.shared.applyHistoryPolicy()
+            }
         }
     }
 
@@ -91,6 +217,8 @@ final class Settings {
     private init() {
         d.register(defaults: [
             Keys.historyLimit: 500,
+            Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
+            Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
@@ -104,6 +232,8 @@ final class Settings {
             Keys.iCloudSync: false
         ])
         historyLimit = d.integer(forKey: Keys.historyLimit)
+        historyRetentionMode = HistoryRetentionMode(rawValue: d.integer(forKey: Keys.historyRetentionMode)) ?? .itemCount
+        historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
