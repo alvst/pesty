@@ -111,6 +111,10 @@ struct PasteStackView: View {
                 .foregroundStyle(.secondary)
             Spacer()
             if stack.hasEntries {
+                Button("Save") { AppController.shared.savePasteStack() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Save Paste Stack as a Pinboard")
                 Button { AppController.shared.clearPasteStack() } label: {
                     Image(systemName: "trash")
                 }
@@ -287,6 +291,13 @@ struct PasteStackContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Make every Paste Stack clip ready again")
+            }
+
+            if stack.hasEntries {
+                Button("Save Stack…") { AppController.shared.savePasteStack() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Save Paste Stack as a Pinboard")
             }
 
             Button("New Stack") { AppController.shared.newPasteStack() }

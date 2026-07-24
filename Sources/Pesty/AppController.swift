@@ -246,6 +246,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteSequence.resetProgress()
     }
 
+    /// Saves the deck in its displayed paste order so a temporary Paste Stack
+    /// can become a durable Pinboard.
+    func savePasteStack() {
+        guard pasteSequence.hasEntries,
+              let name = TextPrompt.run(title: "Save Paste Stack",
+                                        message: "Save the current stack as a pinboard named:",
+                                        defaultValue: "Paste Stack") else { return }
+
+        let board = store.addPinboard(name: name)
+        for entry in pasteSequence.displayEntries.reversed() {
+            store.saveToPinboard(entry.item, boardID: board.id)
+        }
+    }
+
     func pasteNextInSequence() {
         #if !MAS
         guard !Settings.shared.pasteDirectly || PasteService.ensureAccessibility(prompt: true) else { return }
@@ -266,11 +280,28 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func performPasteStackEntry(_ entry: PasteStackEntry) {
+        let target = pasteTargetApp()
         hideBar()
         PasteService.paste(entry.item,
-                           into: pasteStackTargetApp ?? previousApp,
+                           into: target,
                            monitor: monitor,
                            imageOverride: entry.imagePreview)
+    }
+
+    /// Resolve the destination when the user chooses to paste, rather than
+    /// holding the app that was active when the Stack was first opened.
+    private func pasteTargetApp() -> NSRunningApplication? {
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousApp = frontmost
+            return frontmost
+        }
+        if let lastActiveApp,
+           lastActiveApp.bundleIdentifier != Bundle.main.bundleIdentifier,
+           !lastActiveApp.isTerminated {
+            return lastActiveApp
+        }
+        return pasteStackTargetApp ?? previousApp
     }
 
     func showSettings() {
