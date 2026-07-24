@@ -59,6 +59,7 @@ struct BarView: View {
             Spacer(minLength: 8)
             if store.source != .pasteStack {
                 previewButton
+                startPasteStackButton
             }
             moreMenu
         }
@@ -75,6 +76,17 @@ struct BarView: View {
         }
         .buttonStyle(.plain)
         .help(previewVisible ? "Hide clip preview" : "Show clip preview")
+    }
+
+    private var startPasteStackButton: some View {
+        Button { AppController.shared.beginPasteSequence() } label: {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.selection)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help("Start Paste Stack")
     }
 
     private var resizeHandle: some View {
