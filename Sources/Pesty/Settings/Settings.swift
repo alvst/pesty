@@ -65,6 +65,7 @@ final class Settings {
             let clamped = min(720, max(240, barHeight))
             if clamped != barHeight { barHeight = clamped; return }
             d.set(barHeight, forKey: Keys.barHeight)
+            AppController.shared.resizeVisibleBar(to: barHeight)
         }
     }
 
