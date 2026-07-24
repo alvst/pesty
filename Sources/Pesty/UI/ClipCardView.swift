@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ClipCardView: View {
@@ -270,7 +271,7 @@ struct ClipCardView: View {
                 }
             }
             Divider()
-            Button("Delete", role: .destructive) { store.delete(item) }
+            Button("Delete", role: .destructive) { store.deleteSelection(containing: item) }
         }
     }
 
@@ -278,7 +279,7 @@ struct ClipCardView: View {
         if let entry = pasteStackEntry {
             AppController.shared.pasteSequence.select(entry)
         } else {
-            store.selectedID = item.id
+            store.select(item.id, with: NSEvent.modifierFlags)
         }
     }
 

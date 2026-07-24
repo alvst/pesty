@@ -208,7 +208,7 @@ struct BarView: View {
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
                                      index: index,
-                                     selected: item.id == store.selectedID)
+                                     selected: store.selectedIDs.contains(item.id))
                             .id(item.id)
                             .background {
                                 GeometryReader { proxy in
