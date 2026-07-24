@@ -250,12 +250,45 @@ final class AppController: NSObject, NSApplicationDelegate {
         copyToast.show()
     }
 
+    func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
+        suppressAutoHide = true
+        defer { suppressAutoHide = false }
+
+        guard let edit = ClipEditor.run(for: item, launchWritingTools: launchWritingTools) else { return }
+        let changed: Bool
+        switch edit {
+        case let .text(text, richTextData):
+            changed = store.updateTextContent(text, richTextData: richTextData, for: item)
+        case let .color(hex):
+            changed = store.updateColorContent(hex, for: item)
+        }
+        guard changed else { return }
+
+        // An explicit Edit makes the revised item the current clipboard too.
+        // Suppress the monitor so this write updates the existing record rather
+        // than capturing a duplicate history item.
+        if let updatedItem = store.item(withID: item.id) {
+            let change = PasteService.copy(updatedItem)
+            monitor.suppressUntilChangeCount = change
+        }
+        refreshQuickLookPreview()
+    }
+
     func commandCopy() {
         if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
             copyItem(entry.item)
             return
         }
         copySelected()
+    }
+
+    private func refreshQuickLookPreview() {
+        if store.source == .pasteStack {
+            QuickLookService.shared.refresh(items: pasteSequence.displayEntries.map(\.item),
+                                             selectedID: pasteSequence.selectedEntry?.item.id)
+        } else {
+            QuickLookService.shared.refresh(items: store.visibleItems, selectedID: store.selectedID)
+        }
     }
 
     func beginDragOut() {

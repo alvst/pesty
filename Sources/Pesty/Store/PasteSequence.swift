@@ -17,6 +17,13 @@ struct PasteStackEntry: Identifiable, Codable {
         self.isPasted = false
     }
 
+    init(id: UUID, item: ClipItem, imagePreview: NSImage?, isPasted: Bool) {
+        self.id = id
+        self.item = item
+        self.imagePreview = imagePreview
+        self.isPasted = isPasted
+    }
+
     private enum CodingKeys: String, CodingKey { case id, item, isPasted }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +102,14 @@ final class PasteSequence {
     var selectedEntry: PasteStackEntry? {
         guard let selectedEntryID else { return nil }
         return entries.first(where: { $0.id == selectedEntryID })
+    }
+
+    func item(withID id: UUID) -> ClipItem? {
+        if let entry = entries.first(where: { $0.item.id == id }) { return entry.item }
+        return savedStacks.lazy
+            .flatMap(\.entries)
+            .first(where: { $0.item.id == id })?
+            .item
     }
 
     // Kept as an alias while the main bar transitions from the old queue mode.
@@ -287,6 +302,39 @@ final class PasteSequence {
             isCollecting = false
         }
         ClipboardStore.shared.pasteStacksDidChange()
+    }
+
+    /// Keeps saved Paste Stack copies in sync when the canonical clipboard
+    /// item is edited. Entry IDs and paste progress are intentionally retained.
+    @discardableResult
+    func updateItem(_ id: UUID, transform: (ClipItem) -> ClipItem) -> Bool {
+        var changed = false
+
+        for stackIndex in savedStacks.indices {
+            for entryIndex in savedStacks[stackIndex].entries.indices {
+                let entry = savedStacks[stackIndex].entries[entryIndex]
+                guard entry.item.id == id else { continue }
+
+                let updatedItem = transform(entry.item)
+                guard updatedItem != entry.item else { continue }
+                savedStacks[stackIndex].entries[entryIndex] = PasteStackEntry(
+                    id: entry.id,
+                    item: updatedItem,
+                    imagePreview: entry.imagePreview,
+                    isPasted: entry.isPasted
+                )
+                savedStacks[stackIndex].updatedAt = .now
+                changed = true
+            }
+        }
+
+        guard changed else { return false }
+        if let activeStackID,
+           let active = savedStacks.first(where: { $0.id == activeStackID }) {
+            entries = active.entries
+        }
+        ClipboardStore.shared.pasteStacksDidChange()
+        return true
     }
 
     private func ensureActiveStack() {

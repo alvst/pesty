@@ -215,6 +215,99 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    /// Returns the latest canonical copy after an edit, including clips that
+    /// currently live only in a saved Paste Stack.
+    func item(withID id: UUID) -> ClipItem? {
+        if let item = history.first(where: { $0.id == id }) { return item }
+        if let item = pinboards.lazy.flatMap(\.items).first(where: { $0.id == id }) { return item }
+        return PasteSequence.shared.item(withID: id)
+    }
+
+    /// Updates the actual text payload while preserving a clip's identity,
+    /// source metadata, creation date, and any separately assigned title.
+    @discardableResult
+    func updateTextContent(_ text: String, richTextData: Data? = nil, for item: ClipItem) -> Bool {
+        guard [.text, .richText, .link].contains(item.type),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+
+        let type: ClipType
+        if richTextData != nil {
+            type = .richText
+        } else {
+            type = isWebLink(text) ? .link : .text
+        }
+
+        return updateContent(for: item) { existing in
+            var updated = existing
+            updated.type = type
+            updated.text = text
+            updated.rtfData = richTextData
+            updated.colorHex = nil
+            return updated
+        }
+    }
+
+    @discardableResult
+    func updateColorContent(_ hex: String, for item: ClipItem) -> Bool {
+        guard item.type == .color, let color = NSColor(hex: hex) else { return false }
+        let normalizedHex = color.hexString
+
+        return updateContent(for: item) { existing in
+            var updated = existing
+            updated.type = .color
+            updated.text = nil
+            updated.rtfData = nil
+            updated.colorHex = normalizedHex
+            return updated
+        }
+    }
+
+    @discardableResult
+    private func updateContent(for item: ClipItem,
+                               transform: (ClipItem) -> ClipItem) -> Bool {
+        var changed = false
+
+        if let i = history.firstIndex(where: { $0.id == item.id }) {
+            let updated = transform(history[i])
+            if updated != history[i] {
+                history[i] = updated
+                changed = true
+            }
+        }
+        for boardIndex in pinboards.indices {
+            for itemIndex in pinboards[boardIndex].items.indices where pinboards[boardIndex].items[itemIndex].id == item.id {
+                let updated = transform(pinboards[boardIndex].items[itemIndex])
+                if updated != pinboards[boardIndex].items[itemIndex] {
+                    pinboards[boardIndex].items[itemIndex] = updated
+                    changed = true
+                }
+            }
+        }
+
+        if PasteSequence.shared.updateItem(item.id, transform: transform) {
+            changed = true
+        }
+        guard changed else { return false }
+
+        // An edited clip can stop matching the active search. Keep navigation
+        // and the inline preview attached to a card that is still visible.
+        if source != .pasteStack, selectedItem == nil {
+            selectFirst()
+        }
+        scheduleSave()
+        return true
+    }
+
+    private func isWebLink(_ text: String) -> Bool {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.contains(" "), !value.contains("\n"),
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else { return false }
+        return true
+    }
+
     func selectFirst() { selectedID = visibleItems.first?.id }
 
     func prepareForBarPresentation() {
