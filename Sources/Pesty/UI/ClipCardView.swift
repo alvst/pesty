@@ -42,7 +42,6 @@ struct ClipCardView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) {
-            guard !sequence.isBuilding else { return }
             AppController.shared.pasteItem(item)
         }
         .onTapGesture {

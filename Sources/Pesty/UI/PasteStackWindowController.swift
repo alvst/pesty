@@ -48,8 +48,9 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        // Moving back to the Pesty bar is part of collecting clips. A click in
-        // another app, however, should keep the existing click-outside behavior.
+        // A collecting stack deliberately lives above another app while the
+        // user copies clips there, so never dismiss it merely for losing focus.
+        guard !AppController.shared.pasteSequence.isCollecting else { return }
         DispatchQueue.main.async {
             guard Settings.shared.hideOnClickOutside,
                   !(NSApp.keyWindow is BarPanel) else { return }

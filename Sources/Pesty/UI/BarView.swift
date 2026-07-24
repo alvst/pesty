@@ -169,7 +169,7 @@ struct BarView: View {
     }
 
     private var sequenceStatus: some View {
-        Text(sequence.isBuilding ? "⌘C to add" : "\(sequence.pendingCount) ready")
+        Text(sequence.isBuilding ? "Collecting external copies" : "\(sequence.pendingCount) ready")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.selection)
             .lineLimit(1)
