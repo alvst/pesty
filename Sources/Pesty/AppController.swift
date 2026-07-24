@@ -88,6 +88,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         if app.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastActiveApp = app
+            // Command-Tab and app switching do not reliably make our borderless
+            // panel resign key. Treat activation of another app as an explicit
+            // dismissal so the bar never stays above the newly active app.
+            if barController?.window?.isVisible == true {
+                hideBar()
+            }
         }
     }
 
