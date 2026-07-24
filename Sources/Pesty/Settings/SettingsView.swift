@@ -128,13 +128,27 @@ private struct GeneralSettings: View {
                                 Text("Pesty keeps the most recent \(settings.historyLimit) clips.")
                                     .font(.caption).foregroundStyle(.secondary)
                             } else {
-                                Picker("Keep history for", selection: $settings.historyRetention) {
-                                    ForEach(HistoryRetention.allCases) { retention in
-                                        Text(retention.title).tag(retention)
+                                VStack(alignment: .leading, spacing: 9) {
+                                    HStack {
+                                        Text("Keep clips for")
+                                            .font(.system(size: 14))
+                                        Spacer()
+                                        Text(settings.historyRetention.title)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                    Slider(value: retentionSliderValue,
+                                           in: 0...Double(HistoryRetention.allCases.count - 1),
+                                           step: 1)
+                                    HStack(spacing: 0) {
+                                        ForEach(HistoryRetention.allCases) { retention in
+                                            Text(retention.shortSliderTitle)
+                                                .font(.system(size: 10, weight: retention == settings.historyRetention ? .bold : .medium))
+                                                .foregroundStyle(retention == settings.historyRetention ? Color.accentColor : .secondary)
+                                                .frame(maxWidth: .infinity)
+                                        }
                                     }
                                 }
-                                .labelsHidden()
-                                .pickerStyle(.segmented)
                                 Text(settings.historyRetention.description)
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -233,6 +247,13 @@ private struct GeneralSettings: View {
             .font(.system(size: 14))
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var retentionSliderValue: Binding<Double> {
+        Binding(
+            get: { settings.historyRetention.sliderIndex },
+            set: { settings.historyRetention = HistoryRetention(sliderIndex: $0) }
+        )
     }
 
     private func settingRow<Content: View>(_ title: String,

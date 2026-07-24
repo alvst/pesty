@@ -25,15 +25,32 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
     case month
     case year
     case forever
+    case twoWeeks
+    case threeWeeks
+    case twoMonths
+    case threeMonths
+    case sixMonths
+
+    // Keep the original raw values intact for existing installations, but expose
+    // the periods in a natural order for the discrete retention slider.
+    static let allCases: [HistoryRetention] = [
+        .day, .week, .twoWeeks, .threeWeeks, .month,
+        .twoMonths, .threeMonths, .sixMonths, .year, .forever
+    ]
 
     var id: Int { rawValue }
 
     var title: String {
         switch self {
-        case .day: "Day"
-        case .week: "Week"
-        case .month: "Month"
-        case .year: "Year"
+        case .day: "1 Day"
+        case .week: "1 Week"
+        case .twoWeeks: "2 Weeks"
+        case .threeWeeks: "3 Weeks"
+        case .month: "1 Month"
+        case .twoMonths: "2 Months"
+        case .threeMonths: "3 Months"
+        case .sixMonths: "6 Months"
+        case .year: "1 Year"
         case .forever: "Forever"
         }
     }
@@ -42,7 +59,12 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
         switch self {
         case .day: "Clips are kept for 24 hours."
         case .week: "Clips are kept for 7 days."
+        case .twoWeeks: "Clips are kept for 2 weeks."
+        case .threeWeeks: "Clips are kept for 3 weeks."
         case .month: "Clips are kept for 1 month."
+        case .twoMonths: "Clips are kept for 2 months."
+        case .threeMonths: "Clips are kept for 3 months."
+        case .sixMonths: "Clips are kept for 6 months."
         case .year: "Clips are kept for 1 year."
         case .forever: "Clips are kept until you erase them."
         }
@@ -53,10 +75,39 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
         switch self {
         case .day: return calendar.date(byAdding: .day, value: -1, to: .now)
         case .week: return calendar.date(byAdding: .day, value: -7, to: .now)
+        case .twoWeeks: return calendar.date(byAdding: .day, value: -14, to: .now)
+        case .threeWeeks: return calendar.date(byAdding: .day, value: -21, to: .now)
         case .month: return calendar.date(byAdding: .month, value: -1, to: .now)
+        case .twoMonths: return calendar.date(byAdding: .month, value: -2, to: .now)
+        case .threeMonths: return calendar.date(byAdding: .month, value: -3, to: .now)
+        case .sixMonths: return calendar.date(byAdding: .month, value: -6, to: .now)
         case .year: return calendar.date(byAdding: .year, value: -1, to: .now)
         case .forever: return nil
         }
+    }
+
+    var sliderIndex: Double {
+        Double(Self.allCases.firstIndex(of: self) ?? 0)
+    }
+
+    var shortSliderTitle: String {
+        switch self {
+        case .day: "1d"
+        case .week: "1w"
+        case .twoWeeks: "2w"
+        case .threeWeeks: "3w"
+        case .month: "1m"
+        case .twoMonths: "2m"
+        case .threeMonths: "3m"
+        case .sixMonths: "6m"
+        case .year: "1y"
+        case .forever: "∞"
+        }
+    }
+
+    init(sliderIndex: Double) {
+        let index = min(Self.allCases.count - 1, max(0, Int(sliderIndex.rounded())))
+        self = Self.allCases[index]
     }
 }
 
