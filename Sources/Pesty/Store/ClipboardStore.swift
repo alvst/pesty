@@ -14,7 +14,14 @@ final class ClipboardStore {
     private(set) var history: [ClipItem] = []
     private(set) var pinboards: [Pinboard] = []
 
-    var source: BarSource = .history
+    var source: BarSource = .history {
+        didSet {
+            // A selection belongs to the visible strip, not to a clip UUID
+            // globally. Pinboard copies intentionally share their source
+            // item IDs, so carrying selection across sources is misleading.
+            if source != oldValue { selectFirst() }
+        }
+    }
     var searchText: String = ""
     var selectedID: UUID?
     /// Every selected clip in the current strip. `selectedID` remains the
@@ -114,6 +121,7 @@ final class ClipboardStore {
         let removed = Array(history[historyLimit...])
         history.removeLast(history.count - historyLimit)
         for item in removed { deleteImageFile(item) }
+        reconcileSelection()
     }
 
     func delete(_ item: ClipItem) {
@@ -144,29 +152,32 @@ final class ClipboardStore {
         let ids = Set(items.map(\.id))
         guard !ids.isEmpty else { return }
 
-        let removed = history.filter { ids.contains($0.id) }
-            + pinboards.flatMap { $0.items.filter { ids.contains($0.id) } }
-        history.removeAll { ids.contains($0.id) }
-        for i in pinboards.indices { pinboards[i].items.removeAll { ids.contains($0.id) } }
-        for item in removed { deleteImageFile(item) }
-
-        if let selectedID, ids.contains(selectedID) {
-            selectFirst()
-        } else {
-            selectedIDs.subtract(ids)
-            if let selectionAnchorID, ids.contains(selectionAnchorID) {
-                self.selectionAnchorID = selectedID
-            }
+        // A Pinboard is an independently saved collection. Deleting from the
+        // current strip must not erase same-ID copies in other pinboards (or
+        // from history), even though copies retain their source clip ID.
+        let removed: [ClipItem]
+        switch source {
+        case .history:
+            removed = history.filter { ids.contains($0.id) }
+            history.removeAll { ids.contains($0.id) }
+        case .pinboard(let boardID):
+            guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
+            removed = pinboards[boardIndex].items.filter { ids.contains($0.id) }
+            pinboards[boardIndex].items.removeAll { ids.contains($0.id) }
         }
+        for item in removed { deleteImageFile(item) }
+        reconcileSelection()
         scheduleSave()
     }
 
     func clearHistory() {
         let old = history
         history.removeAll()
-        selectedID = nil
-        selectedIDs = []
-        selectionAnchorID = nil
+        if source == .history {
+            selectOnly(nil)
+        } else {
+            reconcileSelection()
+        }
         for item in old { deleteImageFile(item) }
         scheduleSave()
     }
@@ -214,6 +225,28 @@ final class ClipboardStore {
     }
 
     func selectFirst() { selectOnly(visibleItems.first?.id) }
+
+    /// Removes selections that are no longer in the current source or filter.
+    /// This is called after structural changes so selection count, highlights,
+    /// and bulk-delete always refer to the same visible cards.
+    private func reconcileSelection() {
+        let visibleIDs = Set(visibleItems.map(\.id))
+        selectedIDs.formIntersection(visibleIDs)
+
+        guard let selectedID, visibleIDs.contains(selectedID) else {
+            if let first = visibleItems.first?.id {
+                selectOnly(first)
+            } else {
+                selectOnly(nil)
+            }
+            return
+        }
+
+        selectedIDs.insert(selectedID)
+        if let selectionAnchorID, !visibleIDs.contains(selectionAnchorID) {
+            self.selectionAnchorID = selectedID
+        }
+    }
 
     func moveSelection(by delta: Int) {
         let items = visibleItems
