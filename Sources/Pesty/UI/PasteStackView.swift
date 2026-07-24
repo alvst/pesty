@@ -149,6 +149,10 @@ struct PasteStackView: View {
             }
             Spacer()
             if stack.hasEntries {
+                Button("Save") { AppController.shared.savePasteStack() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Save Paste Stack as a Pinboard")
                 Button { AppController.shared.clearPasteStack() } label: {
                     Image(systemName: "trash")
                 }
@@ -217,6 +221,11 @@ struct PasteStackContentView: View {
                 if stack.pendingCount > 0 {
                     Button("Paste Next") { AppController.shared.pasteNextInSequence() }
                         .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+                if stack.hasEntries {
+                    Button("Save Stack…") { AppController.shared.savePasteStack() }
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
                 Button("New Stack") { AppController.shared.newPasteStack() }

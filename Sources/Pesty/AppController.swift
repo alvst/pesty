@@ -313,6 +313,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteSequence.resetProgress()
     }
 
+    /// Saves the current queue as a Pinboard in its displayed paste order.
+    /// Pinboards are persistent and already support the same rich clip types,
+    /// so this gives a saved stack a durable, discoverable home.
+    func savePasteStack() {
+        guard pasteSequence.hasEntries,
+              let name = TextPrompt.run(title: "Save Paste Stack",
+                                        message: "Save the current stack as a pinboard named:",
+                                        defaultValue: "Paste Stack") else { return }
+        let board = store.addPinboard(name: name)
+        for entry in pasteSequence.displayEntries.reversed() {
+            store.saveToPinboard(entry.item, boardID: board.id)
+        }
+    }
+
     func startPasteSequence() {
         pasteNextInSequence()
     }
