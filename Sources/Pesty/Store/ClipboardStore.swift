@@ -170,6 +170,87 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    /// Finds the current version of a clip after an edit. Pinboard items retain
+    /// the history item's identity, so changing a clip can update every saved
+    /// copy without matching unrelated clips that happen to have the same text.
+    func item(withID id: UUID) -> ClipItem? {
+        if let item = history.first(where: { $0.id == id }) { return item }
+        return pinboards.lazy.flatMap(\.items).first(where: { $0.id == id })
+    }
+
+    /// Updates the saved payload of a text-like clip while retaining its
+    /// identity, source attribution, creation date, and optional card title.
+    @discardableResult
+    func updateTextContent(_ text: String, richTextData: Data? = nil, for item: ClipItem) -> Bool {
+        guard [.text, .richText, .link].contains(item.type),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+
+        let type: ClipType = richTextData != nil ? .richText : (isWebLink(text) ? .link : .text)
+        return updateContent(for: item) { existing in
+            var updated = existing
+            updated.type = type
+            updated.text = text
+            updated.rtfData = richTextData
+            updated.colorHex = nil
+            return updated
+        }
+    }
+
+    /// Updates a color clip with a normalized sRGB hex value.
+    @discardableResult
+    func updateColorContent(_ hex: String, for item: ClipItem) -> Bool {
+        guard item.type == .color, let color = NSColor(hex: hex) else { return false }
+        let normalizedHex = color.hexString
+        return updateContent(for: item) { existing in
+            var updated = existing
+            updated.type = .color
+            updated.text = nil
+            updated.rtfData = nil
+            updated.colorHex = normalizedHex
+            return updated
+        }
+    }
+
+    @discardableResult
+    private func updateContent(for item: ClipItem,
+                               transform: (ClipItem) -> ClipItem) -> Bool {
+        var changed = false
+
+        if let i = history.firstIndex(where: { $0.id == item.id }) {
+            let updated = transform(history[i])
+            if updated != history[i] {
+                history[i] = updated
+                changed = true
+            }
+        }
+
+        for boardIndex in pinboards.indices {
+            for itemIndex in pinboards[boardIndex].items.indices
+            where pinboards[boardIndex].items[itemIndex].id == item.id {
+                let updated = transform(pinboards[boardIndex].items[itemIndex])
+                if updated != pinboards[boardIndex].items[itemIndex] {
+                    pinboards[boardIndex].items[itemIndex] = updated
+                    changed = true
+                }
+            }
+        }
+
+        guard changed else { return false }
+        if selectedItem == nil { selectFirst() }
+        scheduleSave()
+        return true
+    }
+
+    private func isWebLink(_ text: String) -> Bool {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.contains(" "), !value.contains("\n"),
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else { return false }
+        return true
+    }
+
     func selectFirst() { selectedID = visibleItems.first?.id }
 
     func moveSelection(by delta: Int) {

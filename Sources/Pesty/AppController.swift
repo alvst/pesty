@@ -13,6 +13,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var previewWindow: NSWindow?
+    private var previewedItemID: UUID?
     private var keyMonitor: Any?
 
     private(set) var previousApp: NSRunningApplication?
@@ -185,9 +186,33 @@ final class AppController: NSObject, NSApplicationDelegate {
         hideBar()
     }
 
+    func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
+        suppressAutoHide = true
+        defer { suppressAutoHide = false }
+
+        guard let edit = ClipEditor.run(for: item, launchWritingTools: launchWritingTools) else { return }
+
+        let changed: Bool
+        switch edit {
+        case let .text(text, richTextData):
+            changed = store.updateTextContent(text, richTextData: richTextData, for: item)
+        case let .color(hex):
+            changed = store.updateColorContent(hex, for: item)
+        }
+        guard changed, let updatedItem = store.item(withID: item.id) else { return }
+
+        // The edited content becomes the live clipboard as well. Suppress the
+        // monitor so this is an in-place change rather than a duplicate entry.
+        let change = PasteService.copy(updatedItem)
+        monitor.suppressUntilChangeCount = change
+
+        if previewedItemID == item.id { showPreview(for: updatedItem) }
+    }
+
     func showPreview(for item: ClipItem) {
         let host = NSHostingController(rootView: ClipPreviewView(item: item))
         let title = "Preview — \(item.displayTitle)"
+        previewedItemID = item.id
 
         if let window = previewWindow {
             window.title = title
