@@ -37,13 +37,13 @@ open packaging/Pesty.app
 - Keep it dependency-free. Prefer system frameworks (AppKit, SwiftUI, Carbon, ServiceManagement).
 - Match the existing style. Small, focused changes; no unrelated refactors in the same PR.
 - Test on both Apple Silicon and Intel where it matters (the release is universal).
-- UI changes: include a before/after screenshot of the strip.
+- Screenshots: add them when a user-facing UI change needs visual context or when they make review easier; they are not required for every change.
 
 ## Pull requests
 
 1. Fork and branch from `main`.
 2. Make your change; ensure `swift build` is clean (no warnings).
-3. Open a PR with a clear description and screenshots for UI changes.
+3. Open a PR with a clear description and any screenshots that are useful for review.
 
 ## Good first issues
 
