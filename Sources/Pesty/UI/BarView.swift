@@ -6,6 +6,8 @@ struct BarView: View {
     private static let preferredSearchWidth: CGFloat = 700
     private static let collapsedSearchWidth: CGFloat = 22
     private static let minimumNonSearchChromeWidth: CGFloat = 230
+    private static let stripTopInset: CGFloat = 4
+    private static let stripBottomInset: CGFloat = 18
 
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
@@ -182,47 +184,55 @@ struct BarView: View {
     }
 
     private var strip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
-                    if showsStackDeck {
-                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
-                            PasteStackDeckCard(stack: stack,
-                                               isActive: stack.id == sequence.activeStackID,
-                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+        GeometryReader { geometry in
+            let cardHeight = max(1, geometry.size.height - Self.stripTopInset - Self.stripBottomInset)
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+                        if showsStackDeck {
+                            ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                                PasteStackDeckCard(
+                                    stack: stack,
+                                    isActive: stack.id == sequence.activeStackID,
+                                    isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting
+                                )
+                                .frame(height: cardHeight)
                                 .id(stack.id)
+                            }
+                        }
+
+                        ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
+                            ClipCardView(item: item,
+                                         index: index,
+                                         selected: item.id == store.selectedID)
+                                .frame(height: cardHeight)
+                                .id(item.id)
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                    removal: .opacity))
                         }
                     }
-
-                    ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
-                        ClipCardView(item: item,
-                                     index: index,
-                                     selected: item.id == store.selectedID)
-                            .id(item.id)
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                removal: .opacity))
+                    .padding(.horizontal, 18)
+                    .padding(.top, Self.stripTopInset)
+                    .padding(.bottom, Self.stripBottomInset)
+                    .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
+                }
+                .onChange(of: store.selectedID) { _, id in
+                    guard let id else { return }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        proxy.scrollTo(id, anchor: selectedClipAnchor)
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 18)
-                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
-            }
-            .onChange(of: store.selectedID) { _, id in
-                guard let id else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: selectedClipAnchor)
+                .onChange(of: settings.selectedClipPosition) { _, _ in
+                    guard let id = store.selectedID else { return }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        proxy.scrollTo(id, anchor: selectedClipAnchor)
+                    }
                 }
-            }
-            .onChange(of: settings.selectedClipPosition) { _, _ in
-                guard let id = store.selectedID else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: selectedClipAnchor)
+                .overlay {
+                    if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
                 }
-            }
-            .overlay {
-                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
             }
         }
         .frame(maxHeight: .infinity)
