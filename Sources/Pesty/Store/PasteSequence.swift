@@ -83,6 +83,14 @@ final class PasteSequence {
         selectedEntryID = displayEntries.first?.id
     }
 
+    /// After one clip is pasted, selection always advances to the first
+    /// remaining pending clip in the visible stack order. This intentionally
+    /// skips the pasted clip that just moved to the bottom.
+    private func selectNextPendingEntry() {
+        let displayed = displayEntries
+        selectedEntryID = displayed.first(where: { !$0.isPasted })?.id ?? displayed.first?.id
+    }
+
     func select(_ entry: PasteStackEntry) {
         selectedEntryID = entry.id
     }
@@ -139,7 +147,7 @@ final class PasteSequence {
             entries.removeAll()
             selectedEntryID = nil
         } else {
-            selectFirst()
+            selectNextPendingEntry()
         }
         return result
     }
