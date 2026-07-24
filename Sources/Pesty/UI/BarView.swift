@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct BarView: View {
+    private static let stripStartID = "pesty.clip-strip.start"
+
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
@@ -190,6 +192,7 @@ struct BarView: View {
                 .padding(.horizontal, 28)
                 .padding(.top, 16)
                 .padding(.bottom, 26)
+                .id(Self.stripStartID)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
             }
             .scrollClipDisabled()
@@ -200,7 +203,9 @@ struct BarView: View {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        proxy.scrollTo(id, anchor: .leading)
+                        // Scroll to the padded strip itself, rather than the
+                        // first card. That preserves room for its focus ring.
+                        proxy.scrollTo(Self.stripStartID, anchor: .leading)
                     }
                     return
                 }
