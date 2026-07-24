@@ -6,10 +6,92 @@ struct SettingsView: View {
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            PrivacySettings()
+                .tabItem { Label("Privacy", systemImage: "hand.raised") }
             AboutView()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 520, height: 560)
+    }
+}
+
+private struct PrivacySettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        Form {
+            Section("Excluded Apps") {
+                Text("Pesty will not save anything copied while one of these apps is active. This is useful for password managers such as 1Password.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if settings.ignoredSourceAppBundleIDs.isEmpty {
+                    ContentUnavailableView("No apps excluded",
+                                           systemImage: "hand.raised",
+                                           description: Text("Add an app to keep its copied content out of Pesty."))
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(settings.ignoredSourceAppBundleIDs, id: \.self) { bundleID in
+                        ignoredAppRow(bundleID)
+                    }
+                }
+
+                Button { chooseApps() } label: {
+                    Label("Add App…", systemImage: "plus")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func ignoredAppRow(_ bundleID: String) -> some View {
+        HStack(spacing: 10) {
+            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(applicationName(for: bundleID))
+                    .font(.system(size: 13, weight: .medium))
+                Text(bundleID)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { settings.removeIgnoredSourceApp(bundleID) } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Allow clips from \(applicationName(for: bundleID))")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func chooseApps() {
+        let panel = NSOpenPanel()
+        panel.title = "Exclude Apps from Pesty"
+        panel.message = "Pesty will ignore copied content from the apps you choose."
+        panel.prompt = "Add Apps"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.applicationBundle]
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                  bundleID != Bundle.main.bundleIdentifier else { continue }
+            settings.addIgnoredSourceApp(bundleID)
+        }
+    }
+
+    private func applicationName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let bundle = Bundle(url: url) else { return bundleID }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? bundleID
     }
 }
 
