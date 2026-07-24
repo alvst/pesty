@@ -15,6 +15,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
+    private var previewWindow: NSWindow?
+    private var previewedItemID: UUID?
     private var keyMonitor: Any?
     private var isReopenPresentationPending = false
 
@@ -194,8 +196,9 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func showBar(source requestedSource: BarSource? = nil) {
         let front = NSWorkspace.shared.frontmostApplication
-        if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
+        if let front, !isPesty(front) {
             previousApp = front
+            lastActiveApp = front
         } else if let lastActiveApp, !lastActiveApp.isTerminated {
             // Reopen events arrive after Pesty becomes active, so retain the
             // most recently active non-Pesty app as the eventual paste target.
@@ -226,13 +229,30 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func pasteSelected(asPlainText: Bool = false) {
         guard let item = store.selectedItem else { return }
-        hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
+        pasteItem(item, asPlainText: asPlainText)
+    }
+
+    /// The app that will receive a paste after the floating Pesty panel closes.
+    /// `previousApp` is captured before the panel activates, while
+    /// `lastActiveApp` covers menu-bar and reopen paths where it is unavailable.
+    private var pasteTarget: NSRunningApplication? {
+        [lastActiveApp, previousApp, NSWorkspace.shared.frontmostApplication]
+            .compactMap { $0 }
+            .first { !$0.isTerminated && !isPesty($0) }
+    }
+
+    var pasteMenuTitle: String {
+        guard let name = pasteTarget?.localizedName,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "Paste"
+        }
+        return "Paste to \(name)"
     }
 
     func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
+        let target = pasteTarget
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
+        PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
     }
 
     func copyItem(_ item: ClipItem) {
@@ -379,16 +399,99 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// holding the app that was active when the Stack was first opened.
     private func pasteTargetApp() -> NSRunningApplication? {
         if let frontmost = NSWorkspace.shared.frontmostApplication,
-           frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {
+           !isPesty(frontmost) {
             previousApp = frontmost
             return frontmost
         }
         if let lastActiveApp,
-           lastActiveApp.bundleIdentifier != Bundle.main.bundleIdentifier,
+           !isPesty(lastActiveApp),
            !lastActiveApp.isTerminated {
             return lastActiveApp
         }
         return pasteStackTargetApp ?? previousApp
+    }
+
+    func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
+        suppressAutoHide = true
+        // The bar's local monitor normally consumes typeable keys for search
+        // and navigation. Suspend it while the native editor owns first
+        // responder so typing, Delete, Return, and Writing Tools all reach
+        // the NSTextView instead.
+        let resumeBarKeys = barController?.window?.isVisible == true
+        if resumeBarKeys { stopKeyMonitor() }
+        defer {
+            suppressAutoHide = false
+            if resumeBarKeys { startKeyMonitor() }
+        }
+
+        guard let edit = ClipEditor.run(for: item, launchWritingTools: launchWritingTools) else { return }
+
+        let changed: Bool
+        switch edit {
+        case let .text(text, richTextData):
+            changed = store.updateTextContent(text, richTextData: richTextData, for: item)
+        case let .color(hex):
+            changed = store.updateColorContent(hex, for: item)
+        }
+        guard changed, let updatedItem = store.item(withID: item.id) else { return }
+
+        // The edited content becomes the live clipboard as well. Suppress the
+        // monitor so this is an in-place change rather than a duplicate entry.
+        let change = PasteService.copy(updatedItem)
+        monitor.suppressUntilChangeCount = change
+
+        if previewedItemID == item.id { showPreview(for: updatedItem) }
+    }
+
+    func showPreview(for item: ClipItem) {
+        let host = NSHostingController(rootView: ClipPreviewView(item: item))
+        let title = "Preview — \(item.displayTitle)"
+        previewedItemID = item.id
+
+        if let window = previewWindow {
+            window.title = title
+            window.contentViewController = host
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let previewWindow = NSWindow(contentViewController: host)
+        previewWindow.title = title
+        previewWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        previewWindow.setContentSize(NSSize(width: 540, height: 400))
+        previewWindow.minSize = NSSize(width: 400, height: 260)
+        previewWindow.isReleasedWhenClosed = false
+        previewWindow.center()
+        self.previewWindow = previewWindow
+        previewWindow.makeKeyAndOrderFront(nil)
+    }
+
+    func showSharePicker(for item: ClipItem) {
+        let items = shareItems(for: item)
+        guard !items.isEmpty,
+              let view = barController?.window?.contentView ?? NSApp.keyWindow?.contentView else { return }
+
+        let picker = NSSharingServicePicker(items: items)
+        let anchor = NSRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        picker.show(relativeTo: anchor, of: view, preferredEdge: .maxY)
+    }
+
+    private func shareItems(for item: ClipItem) -> [Any] {
+        switch item.type {
+        case .image:
+            return store.loadImage(for: item).map { [$0] } ?? []
+        case .file:
+            let urls = item.fileURLs.compactMap(URL.init(string:))
+            return urls.isEmpty ? item.plainText.map { [$0 as NSString] } ?? [] : urls
+        case .color, .text, .richText, .link:
+            return item.plainText.map { [$0 as NSString] } ?? []
+        }
+    }
+
+    private func isPesty(_ app: NSRunningApplication) -> Bool {
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return true }
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        return app.bundleIdentifier == bundleID
     }
 
     func showSettings() {
@@ -443,6 +546,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        // Events belonging to a native context menu, editor, or Settings
+        // window must stay with their own responder chain. The bar monitor is
+        // only responsible for keys delivered to the Paste Bar panel itself.
+        guard event.window === barController?.window else { return event }
         if handleBarCommandShortcut(event) { return nil }
 
         let code = Int(event.keyCode)

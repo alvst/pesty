@@ -9,7 +9,8 @@ enum PasteService {
                      to pasteboard: NSPasteboard = .general,
                      asPlainText: Bool = false,
                      imageOverride: NSImage? = nil) -> Int {
-        if asPlainText, let text = item.text ?? item.colorHex {
+        if asPlainText {
+            guard let text = item.plainText else { return pasteboard.changeCount }
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             return pasteboard.changeCount

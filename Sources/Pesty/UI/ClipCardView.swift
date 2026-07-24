@@ -175,44 +175,131 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private var menu: some View {
-        Button("Paste") { AppController.shared.pasteItem(item) }
-        Button("Copy") { AppController.shared.copyItem(item) }
+        Button { AppController.shared.pasteItem(item) } label: {
+            Label(AppController.shared.pasteMenuTitle, systemImage: "doc.on.clipboard")
+        }
+        .keyboardShortcut(.return, modifiers: [])
+
+        Button { AppController.shared.pasteItem(item, asPlainText: true) } label: {
+            Label("Paste as Plain Text", systemImage: "text.alignleft")
+        }
+        .keyboardShortcut(.return, modifiers: .shift)
+        .disabled(item.plainText == nil)
+
+        Button { AppController.shared.copyItem(item) } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        .keyboardShortcut("c", modifiers: .command)
+
         if store.source == .history {
             Button {
                 AppController.shared.moveHistoryItemToPasteStack(item)
             } label: {
-                Label(isInPasteStack ? "Already in Paste Stack" : "Move to Paste Stack",
-                      systemImage: isInPasteStack
-                      ? "checkmark.circle.fill"
-                      : "rectangle.stack.badge.plus")
+                Label(
+                    isInPasteStack ? "Already in Paste Stack" : "Move to Paste Stack",
+                    systemImage: isInPasteStack ? "checkmark.circle.fill" : "rectangle.stack.badge.plus"
+                )
             }
             .disabled(isInPasteStack)
         }
+
         Divider()
-        if !store.pinboards.isEmpty {
-            Menu("Save to Pinboard") {
+
+        Button { AppController.shared.editItem(item) } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        .keyboardShortcut("e", modifiers: .command)
+
+        if writingToolsAvailable {
+            Button { AppController.shared.editItem(item, launchWritingTools: true) } label: {
+                Label("Writing Tools", systemImage: "pencil.and.scribble")
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+        }
+
+        Button { renameItem() } label: {
+            Label("Rename…", systemImage: "pencil.line")
+        }
+        .keyboardShortcut("r", modifiers: .command)
+
+        Button(role: .destructive) { store.deleteSelection(containing: item) } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .keyboardShortcut(.delete, modifiers: [])
+
+        Divider()
+
+        Menu {
+            if store.pinboards.isEmpty {
+                Button("No Pinboards Yet") {}
+                    .disabled(true)
+            } else {
                 ForEach(store.pinboards) { b in
-                    Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+                    Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                        Label {
+                            Text(b.name)
+                        } icon: {
+                            Image(nsImage: Self.pinboardMenuIcon(color: NSColor(b.color)))
+                                .renderingMode(.original)
+                        }
+                    }
                 }
             }
-        }
-        Button("Save to New Pinboard…") {
-            if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
-                let b = store.addPinboard(name: name)
-                store.saveToPinboard(item, boardID: b.id)
+            Divider()
+            Button { pinToNewBoard() } label: {
+                Label("Create Pinboard…", systemImage: "plus")
             }
+        } label: {
+            Label("Pin", systemImage: "pin")
         }
-        Button("Edit Title…") {
-            if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
-                                      defaultValue: item.customTitle ?? "") {
-                store.setTitle(t, for: item)
-            }
-        }
+
         Divider()
-        Button("Delete", role: .destructive) { store.deleteSelection(containing: item) }
+
+        Button { AppController.shared.showPreview(for: item) } label: {
+            Label("Preview", systemImage: "eye")
+        }
+        .keyboardShortcut(.space, modifiers: [])
+
+        Button { AppController.shared.showSharePicker(for: item) } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
     }
 
     private var isInPasteStack: Bool {
         PasteSequence.shared.containsHistoryItemID(item.id)
+    }
+
+    private func renameItem() {
+        if let title = TextPrompt.run(title: "Rename", message: "Enter a name",
+                                      defaultValue: item.displayTitle) {
+            store.setTitle(title, for: item)
+        }
+    }
+
+    private func pinToNewBoard() {
+        if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
+            let board = store.addPinboard(name: name)
+            store.saveToPinboard(item, boardID: board.id)
+        }
+    }
+
+    private var writingToolsAvailable: Bool {
+        guard [.text, .richText, .link].contains(item.type) else { return false }
+        guard #available(macOS 15.2, *) else { return false }
+        return NSWritingToolsCoordinator.isWritingToolsAvailable
+    }
+
+    /// SwiftUI's symbol tint is converted to a template image when rendered in
+    /// an NSMenu. Draw the pinboard color into a non-template image instead so
+    /// the native submenu keeps the colored dots shown throughout Pesty.
+    private static func pinboardMenuIcon(color: NSColor) -> NSImage {
+        let size = NSSize(width: 12, height: 12)
+        let image = NSImage(size: size, flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
