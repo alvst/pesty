@@ -26,6 +26,13 @@ sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" \
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# Explicitly sign the assembled bundle with a stable designated requirement.
+# Without this, each release build only carries Swift's per-binary linker
+# signature (a changing CDHash), which makes macOS ask for Accessibility again.
+echo "==> Signing $APP"
+/usr/bin/codesign --force --sign - --identifier com.greycorelabs.pesty \
+  -r='designated => identifier "com.greycorelabs.pesty"' "$APP"
+
 echo "==> Built $APP"
 /usr/bin/file "$APP/Contents/MacOS/Pesty"
 echo "    version $VERSION ($BUILD)"
