@@ -237,9 +237,10 @@ struct ClipCardView: View {
     private var menu: some View {
         if let entry = pasteStackEntry {
             if entry.isPasted {
+                pasteToPreviousAppButton { AppController.shared.pasteItem(item) }
                 Button("Re-add to Stack") { AppController.shared.reAddPasteStackEntry(entry) }
             } else {
-                Button("Paste") { AppController.shared.pasteStackEntry(entry) }
+                pasteToPreviousAppButton { AppController.shared.pasteStackEntry(entry) }
             }
             Button("Copy") { AppController.shared.copyItem(item) }
             Divider()
@@ -247,7 +248,7 @@ struct ClipCardView: View {
                 AppController.shared.removePasteStackEntry(entry)
             }
         } else {
-            Button("Paste") { AppController.shared.pasteItem(item) }
+            pasteToPreviousAppButton { AppController.shared.pasteItem(item) }
             Button("Copy") { AppController.shared.copyItem(item) }
             Divider()
             if !store.pinboards.isEmpty {
@@ -271,6 +272,13 @@ struct ClipCardView: View {
             }
             Divider()
             Button("Delete", role: .destructive) { store.delete(item) }
+        }
+    }
+
+    private func pasteToPreviousAppButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(AppController.shared.pasteDestinationMenuTitle,
+                  systemImage: "doc.on.clipboard")
         }
     }
 
