@@ -234,6 +234,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func commandCopy() {
+        if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+            copyItem(entry.item)
+            return
+        }
         copySelected()
     }
 
@@ -293,7 +297,12 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func capturePasteStackItem(_ item: ClipItem) {
-        _ = pasteSequence.addIfNeeded(item)
+        guard pasteSequence.addIfNeeded(item) else { return }
+        // A collecting clip is represented by the stack deck on Clipboard, so
+        // do not leave selection on its now-hidden history card.
+        if store.source == .history, store.searchText.isEmpty, store.selectedID == item.id {
+            store.selectFirst()
+        }
     }
 
     func removePasteStackEntry(_ entry: PasteStackEntry) {
@@ -397,8 +406,12 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         switch code {
         case kVK_Space:
-            guard store.source != .pasteStack else { return nil }
-            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            if store.source == .pasteStack {
+                QuickLookService.shared.toggle(items: pasteSequence.displayEntries.map(\.item),
+                                               selectedID: pasteSequence.selectedEntry?.item.id)
+            } else {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            }
             return nil
         case kVK_Escape:
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
@@ -445,6 +458,7 @@ final class AppController: NSObject, NSApplicationDelegate {
            let chars = event.characters, chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 32, scalar.value != 127 {
+            guard store.source != .pasteStack else { return nil }
             store.searchText.append(chars)
             store.selectFirst()
             return nil
@@ -455,6 +469,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func moveBarSelection(by delta: Int) {
         if store.source == .pasteStack {
             pasteSequence.moveSelection(by: delta)
+            QuickLookService.shared.updateSelection(selectedID: pasteSequence.selectedEntry?.item.id)
             return
         }
         store.moveSelection(by: delta)

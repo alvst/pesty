@@ -31,6 +31,10 @@ final class PasteSequence {
     var pastedCount: Int { entries.count - pendingCount }
     var hasEntries: Bool { !entries.isEmpty }
     var isRunning: Bool { !isCollecting && pendingCount > 0 }
+
+    func containsHistoryItemID(_ id: UUID) -> Bool {
+        entries.contains { $0.item.id == id }
+    }
     /// Pending clips come first; clips already pasted stay at the bottom of
     /// the stack so the next clip is always visually on top.
     var displayEntries: [PasteStackEntry] {

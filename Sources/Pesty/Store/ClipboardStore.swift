@@ -81,7 +81,13 @@ final class ClipboardStore {
             base = pinboards.first(where: { $0.id == id })?.items ?? []
         }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return base }
+        guard !q.isEmpty else {
+            // The active Paste Stack is represented by one deck card on
+            // Clipboard. Its member clips remain in history for persistence,
+            // but should not also appear as individual Clipboard cards.
+            guard case .history = source, PasteSequence.shared.hasEntries else { return base }
+            return base.filter { !PasteSequence.shared.containsHistoryItemID($0.id) }
+        }
         return base.filter { $0.searchableText.contains(q) }
     }
 
@@ -90,7 +96,8 @@ final class ClipboardStore {
         return visibleItems.first(where: { $0.id == id })
     }
 
-    func addCaptured(_ item: ClipItem) {
+    @discardableResult
+    func addCaptured(_ item: ClipItem) -> ClipItem {
         if let idx = history.firstIndex(where: { $0.sameContent(as: item) }) {
             if item.imageFileName != history[idx].imageFileName { deleteImageFile(item) }
             var existing = history.remove(at: idx)
@@ -99,7 +106,7 @@ final class ClipboardStore {
             applyHistoryPolicyNow()
             if source == .history && searchText.isEmpty { selectedID = existing.id }
             scheduleSave()
-            return
+            return existing
         }
         history.insert(item, at: 0)
         applyHistoryPolicyNow()
@@ -107,6 +114,7 @@ final class ClipboardStore {
             selectedID = item.id
         }
         scheduleSave()
+        return item
     }
 
     func applyHistoryPolicy() { _ = applyHistoryPolicyNow(); scheduleSave() }

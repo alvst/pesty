@@ -7,6 +7,9 @@ struct BarView: View {
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
+    private var showsStackDeck: Bool {
+        store.source == .history && store.searchText.isEmpty && sequence.hasEntries
+    }
     @State private var previewVisible = false
     @State private var resizeStartHeight: Double?
 
@@ -54,9 +57,7 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            if store.source == .pasteStack {
-                pasteStackControls
-            } else {
+            if store.source != .pasteStack {
                 previewButton
             }
             moreMenu
@@ -163,38 +164,6 @@ struct BarView: View {
         .fixedSize()
     }
 
-    private var pasteStackControls: some View {
-        HStack(spacing: 6) {
-            Button {
-                if sequence.isCollecting {
-                    AppController.shared.pausePasteSequence()
-                } else {
-                    AppController.shared.beginPasteSequence()
-                }
-            } label: {
-                Image(systemName: sequence.isCollecting ? "pause.fill" : "play.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(sequence.isCollecting ? .orange : Theme.selection)
-            .help(sequence.isCollecting ? "Pause collecting clips" : "Resume collecting clips")
-
-            if sequence.pendingCount > 0 {
-                Button {
-                    AppController.shared.pasteNextInSequence()
-                } label: {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.selection)
-                .help("Paste next stack clip")
-            }
-        }
-    }
-
     private var strip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
@@ -206,9 +175,7 @@ struct BarView: View {
                         .frame(width: 1, height: 1)
                         .id(Self.stripStartID)
 
-                    if store.source == .history,
-                       store.searchText.isEmpty,
-                       sequence.hasEntries {
+                    if showsStackDeck {
                         PasteStackDeckCard()
                             .id("pesty.paste-stack.deck")
                     }
@@ -246,7 +213,9 @@ struct BarView: View {
                     proxy.scrollTo(id, anchor: .center)
                 }
             }
-            .overlay { if store.visibleItems.isEmpty { emptyState } }
+            .overlay {
+                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
+            }
         }
         .frame(maxHeight: .infinity)
     }
