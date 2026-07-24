@@ -8,8 +8,12 @@ final class BarPanel: NSPanel {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // AppKit routes Command-key combinations through key equivalents before
-        // SwiftUI receives a keyDown event. Handle Copy at the panel level as a
-        // reliable counterpart to the navigation monitor in AppController.
+        // SwiftUI receives a keyDown event. Handle the bar-local commands at
+        // the panel level as a reliable counterpart to the navigation monitor
+        // in AppController.
+        if AppController.shared.handleBarCommandShortcut(event) {
+            return true
+        }
         if event.keyCode == kVK_ANSI_C, event.modifierFlags.contains(.command) {
             AppController.shared.commandCopy()
             return true
