@@ -26,6 +26,7 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            pasteStackButton
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -84,6 +85,19 @@ struct BarView: View {
         .menuIndicator(.hidden)
         .frame(width: 34)
         .fixedSize()
+    }
+
+    private var pasteStackButton: some View {
+        Button {
+            AppController.shared.beginPasteSequence()
+        } label: {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help("Start Paste Stack")
     }
 
     private var strip: some View {

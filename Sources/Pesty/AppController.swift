@@ -8,14 +8,17 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     let store = ClipboardStore.shared
     let monitor = ClipboardMonitor()
+    let pasteSequence = PasteSequence.shared
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
+    private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
+    private var pasteStackTargetApp: NSRunningApplication?
 
     var suppressAutoHide = false
 
@@ -29,6 +32,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         monitor.start()
 
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
+        HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
 
         setupStatusItem()
@@ -165,6 +169,53 @@ final class AppController: NSObject, NSApplicationDelegate {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+    }
+
+    func beginPasteSequence() {
+        pasteStackTargetApp = previousApp ?? lastActiveApp
+        pasteSequence.begin()
+        showPasteStack()
+        hideBar()
+
+        let target = pasteStackTargetApp
+        DispatchQueue.main.async {
+            target?.activate(options: [])
+        }
+    }
+
+    func showPasteStack() {
+        if pasteStackController == nil {
+            pasteStackController = PasteStackWindowController()
+        }
+        pasteStackController?.show()
+    }
+
+    func cancelPasteSequence() {
+        pasteSequence.cancel()
+        pasteStackController?.hide()
+        pasteStackTargetApp = nil
+    }
+
+    func capturePasteStackItem(_ item: ClipItem) {
+        _ = pasteSequence.addIfNeeded(item)
+    }
+
+    func pasteNextInSequence() {
+        guard pasteSequence.hasEntries else { return }
+
+        #if !MAS
+        guard !Settings.shared.pasteDirectly || PasteService.ensureAccessibility(prompt: true) else { return }
+        #endif
+
+        guard let entry = pasteSequence.next() else { return }
+        PasteService.paste(entry.item,
+                           into: pasteStackTargetApp ?? previousApp,
+                           monitor: monitor,
+                           imageOverride: entry.imagePreview)
+        if !pasteSequence.hasEntries {
+            pasteStackController?.hide()
+            pasteStackTargetApp = nil
+        }
     }
 
     func showSettings() {

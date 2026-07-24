@@ -5,9 +5,11 @@ import Carbon.HIToolbox
 enum PasteService {
 
     @discardableResult
-    static func copy(_ item: ClipItem, to pasteboard: NSPasteboard = .general) -> Int {
+    static func copy(_ item: ClipItem,
+                     to pasteboard: NSPasteboard = .general,
+                     imageOverride: NSImage? = nil) -> Int {
         if item.type == .image {
-            guard let img = ClipboardStore.shared.loadImage(for: item) else {
+            guard let img = imageOverride ?? ClipboardStore.shared.loadImage(for: item) else {
                 return pasteboard.changeCount
             }
             pasteboard.clearContents()
@@ -38,8 +40,9 @@ enum PasteService {
 
     static func paste(_ item: ClipItem,
                       into targetApp: NSRunningApplication?,
-                      monitor: ClipboardMonitor) {
-        let change = copy(item)
+                      monitor: ClipboardMonitor,
+                      imageOverride: NSImage? = nil) {
+        let change = copy(item, imageOverride: imageOverride)
         monitor.suppressUntilChangeCount = change
         if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
 

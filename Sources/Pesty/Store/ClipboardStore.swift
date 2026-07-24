@@ -85,7 +85,8 @@ final class ClipboardStore {
         return visibleItems.first(where: { $0.id == id })
     }
 
-    func addCaptured(_ item: ClipItem) {
+    @discardableResult
+    func addCaptured(_ item: ClipItem) -> ClipItem {
         if let idx = history.firstIndex(where: { $0.sameContent(as: item) }) {
             if item.imageFileName != history[idx].imageFileName { deleteImageFile(item) }
             var existing = history.remove(at: idx)
@@ -93,7 +94,7 @@ final class ClipboardStore {
             history.insert(existing, at: 0)
             if source == .history && searchText.isEmpty { selectedID = existing.id }
             scheduleSave()
-            return
+            return existing
         }
         history.insert(item, at: 0)
         trimHistory()
@@ -101,6 +102,7 @@ final class ClipboardStore {
             selectedID = item.id
         }
         scheduleSave()
+        return item
     }
 
     func applyHistoryLimit() { trimHistory(); scheduleSave() }

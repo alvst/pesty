@@ -25,10 +25,23 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section("Activation") {
-                LabeledContent("Show Pesty") { HotkeyRecorderView() }
+                LabeledContent("Show Pesty") {
+                    HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
+                                       modifiers: $settings.hotkeyModifiers)
+                }
                 Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
                     LabeledContent("History limit", value: "\(settings.historyLimit) items")
                 }
+            }
+
+            Section("Paste Stack") {
+                LabeledContent("Paste next clip") {
+                    HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
+                                       modifiers: $settings.sequenceHotkeyModifiers)
+                }
+                Text("Start a Paste Stack from the strip, then copy clips in another app. Use this shortcut to paste each clip in order.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Behavior") {

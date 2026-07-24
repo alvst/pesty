@@ -14,6 +14,8 @@ final class Settings {
         static let historyLimit = "historyLimit"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
+        static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
+        static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
         static let launchAtLogin = "launchAtLogin"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
@@ -40,6 +42,16 @@ final class Settings {
     var hotkeyModifiers: Int {
         didSet { guard isLoaded else { return }
             d.set(hotkeyModifiers, forKey: Keys.hotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyKeyCode: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyKeyCode, forKey: Keys.sequenceHotkeyKeyCode); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyModifiers: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
     }
 
     var launchAtLogin: Bool {
@@ -81,6 +93,8 @@ final class Settings {
             Keys.historyLimit: 500,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
+            Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
+            Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
             Keys.launchAtLogin: false,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
@@ -92,6 +106,8 @@ final class Settings {
         historyLimit = d.integer(forKey: Keys.historyLimit)
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
+        sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
+        sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
@@ -104,5 +120,9 @@ final class Settings {
 
     var hotkeyDisplay: String {
         HotKeyCenter.describe(keyCode: hotkeyKeyCode, modifiers: hotkeyModifiers)
+    }
+
+    var sequenceHotkeyDisplay: String {
+        HotKeyCenter.describe(keyCode: sequenceHotkeyKeyCode, modifiers: sequenceHotkeyModifiers)
     }
 }
