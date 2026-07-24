@@ -3,15 +3,30 @@ import Carbon.HIToolbox
 
 @MainActor
 enum PasteService {
+    /// Shared pasteboard marker understood by clipboard managers. It identifies the
+    /// application which placed the current content on the pasteboard, even though
+    /// Pesty is not the foreground app by the time another manager observes it.
+    private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
+    private static let sourceBundleID = "com.greycorelabs.pesty"
 
     @discardableResult
-    static func copy(_ item: ClipItem, to pasteboard: NSPasteboard = .general) -> Int {
+    static func copy(_ item: ClipItem,
+                     to pasteboard: NSPasteboard = .general,
+                     asPlainText: Bool = false,
+                     imageOverride: NSImage? = nil) -> Int {
+        if asPlainText, let text = item.text ?? item.colorHex {
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            markPestyAsSource(on: pasteboard)
+            return pasteboard.changeCount
+        }
         if item.type == .image {
-            guard let img = ClipboardStore.shared.loadImage(for: item) else {
+            guard let img = imageOverride ?? ClipboardStore.shared.loadImage(for: item) else {
                 return pasteboard.changeCount
             }
             pasteboard.clearContents()
             pasteboard.writeObjects([img])
+            markPestyAsSource(on: pasteboard)
             return pasteboard.changeCount
         }
         pasteboard.clearContents()
@@ -33,13 +48,22 @@ enum PasteService {
         case .text, .link:
             if let t = item.text { pasteboard.setString(t, forType: .string) }
         }
+        markPestyAsSource(on: pasteboard)
         return pasteboard.changeCount
+    }
+
+    private static func markPestyAsSource(on pasteboard: NSPasteboard) {
+        // Use Pesty's packaged identifier rather than the host process identifier,
+        // which is absent when running from SwiftPM and would not resolve an icon.
+        pasteboard.setString(sourceBundleID, forType: sourceType)
     }
 
     static func paste(_ item: ClipItem,
                       into targetApp: NSRunningApplication?,
-                      monitor: ClipboardMonitor) {
-        let change = copy(item)
+                      monitor: ClipboardMonitor,
+                      asPlainText: Bool = false,
+                      imageOverride: NSImage? = nil) {
+        let change = copy(item, asPlainText: asPlainText, imageOverride: imageOverride)
         monitor.suppressUntilChangeCount = change
         if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
 

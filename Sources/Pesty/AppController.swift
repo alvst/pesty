@@ -8,11 +8,15 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     let store = ClipboardStore.shared
     let monitor = ClipboardMonitor()
+    let pasteSequence = PasteSequence.shared
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
+    private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
+    private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
+    private let copyToast = CopyToastController()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -28,10 +32,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         monitor.start()
 
-        HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
+        HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
+        HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
 
-        setupStatusItem()
+        setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
 
@@ -55,6 +60,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         if app.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastActiveApp = app
+            // Command-Tab and app switching do not reliably make our borderless
+            // panel resign key. Treat activation of another app as an explicit
+            // dismissal so the bar never stays above the newly active app.
+            if barController?.window?.isVisible == true {
+                hideBar()
+            }
         }
     }
 
@@ -63,30 +74,67 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pesty")
-            button.image?.isTemplate = true
-        }
+        updateStatusItemIcon(item)
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Pesty   \(Settings.shared.hotkeyDisplay)",
                      action: #selector(menuOpen), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "").target = self
+        let settings = menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
+        settings.target = self
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        let pause = menu.addItem(withTitle: "Pause Pesty", action: #selector(menuTogglePause), keyEquivalent: "")
+        pause.target = self
+        pauseMenuItem = pause
+        let clear = menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "")
+        clear.target = self
+        clear.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
         menu.addItem(.separator())
         let about = menu.addItem(withTitle: "About Pesty", action: #selector(menuAbout), keyEquivalent: "")
         about.target = self
-        menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q").target = self
+        about.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        let quit = menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q")
+        quit.target = self
+        quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         item.menu = menu
         statusItem = item
+        updatePauseMenuItem()
+    }
+
+    func setMenuBarIconVisible(_ visible: Bool) {
+        if visible {
+            setupStatusItem()
+        } else if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+            pauseMenuItem = nil
+        }
     }
 
     @objc private func menuOpen() { showBar() }
     @objc private func menuSettings() { showSettings() }
     @objc private func menuClear() { store.clearHistory() }
+    @objc private func menuTogglePause() { togglePestyPause() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
     @objc private func menuAbout() { showAbout() }
+
+    func togglePestyPause() {
+        monitor.togglePause()
+        updatePauseMenuItem()
+        if let item = statusItem { updateStatusItemIcon(item) }
+    }
+
+    private func updatePauseMenuItem() {
+        let paused = monitor.isPaused
+        pauseMenuItem?.title = paused ? "Resume Pesty" : "Pause Pesty"
+        pauseMenuItem?.image = NSImage(systemSymbolName: paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+    }
+
+    private func updateStatusItemIcon(_ item: NSStatusItem) {
+        item.button?.image = NSImage(systemSymbolName: monitor.isPaused ? "pause.circle" : "doc.on.clipboard", accessibilityDescription: "Pesty")
+        item.button?.image?.isTemplate = true
+    }
 
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
@@ -129,6 +177,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func handleGlobalShortcut() {
+        toggleBar()
+    }
+
     func showBar() {
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -136,7 +188,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
-        store.selectFirst()
+        store.applyHistoryPolicy()
+        store.prepareForBarPresentation()
 
         if barController == nil {
             barController = BarWindowController()
@@ -150,21 +203,108 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.hide()
     }
 
-    func pasteSelected() {
+    func pasteSelected(asPlainText: Bool = false) {
         guard let item = store.selectedItem else { return }
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
     }
 
-    func pasteItem(_ item: ClipItem) {
+    func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
     }
 
     func copyItem(_ item: ClipItem) {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+        copyToast.show()
+    }
+
+    func copySelected() {
+        guard let item = store.selectedItem else { return }
+        let change = PasteService.copy(item)
+        monitor.suppressUntilChangeCount = change
+        hideBar()
+        copyToast.show()
+    }
+
+    func commandCopy() {
+        if pasteSequence.isBuilding, let item = store.selectedItem {
+            addToPasteStack(item)
+            return
+        }
+        copySelected()
+    }
+
+    func beginDragOut() {
+        // Let AppKit establish the dragging session before taking the source
+        // panel offscreen; the drag then continues naturally into another app.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.hideBar()
+        }
+    }
+
+    func beginPasteSequence() {
+        pasteSequence.begin()
+        showPasteStack()
+    }
+
+    func showPasteStack() {
+        if !pasteSequence.isCollecting { pasteSequence.begin() }
+        if pasteStackController == nil {
+            pasteStackController = PasteStackWindowController()
+        }
+        // Showing a sibling panel causes the bar to resign key. Keep the bar
+        // visible for that transition so its selected clip can be added with ⌘C.
+        suppressAutoHide = true
+        pasteStackController?.show()
+        DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
+    }
+
+    func hidePasteStack() {
+        pasteSequence.finishCollecting()
+        pasteStackController?.hide()
+    }
+
+    var isPasteStackVisible: Bool { pasteStackController?.isVisible == true }
+
+    func newPasteStack() {
+        pasteSequence.newStack()
+        showPasteStack()
+    }
+
+    func addToPasteStack(_ item: ClipItem) {
+        _ = pasteSequence.addIfNeeded(item)
+    }
+
+    func removePasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.remove(entry)
+    }
+
+    func reAddPasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.reAdd(entry)
+    }
+
+    func resetPasteStackProgress() {
+        pasteSequence.resetProgress()
+    }
+
+    func startPasteSequence() {
+        pasteNextInSequence()
+    }
+
+    func cancelPasteSequence() {
+        pasteSequence.finishCollecting()
+    }
+
+    func pasteNextInSequence() {
+        guard let entry = pasteSequence.next() else { return }
+        hideBar()
+        PasteService.paste(entry.item,
+                           into: previousApp,
+                           monitor: monitor,
+                           imageOverride: entry.imagePreview)
     }
 
     func showSettings() {
@@ -178,7 +318,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
-        win.setContentSize(NSSize(width: 520, height: 560))
+        win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
         win.isReleasedWhenClosed = false
         settingsWindow = win
@@ -204,28 +344,49 @@ final class AppController: NSObject, NSApplicationDelegate {
         let ctrl = flags.contains(.control)
         let opt = flags.contains(.option)
 
-        if cmd, let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...9).contains(n) {
+        if includes(Settings.shared.quickPasteModifier, in: flags),
+           let chars = event.charactersIgnoringModifiers,
+           let n = Int(chars), (1...9).contains(n) {
             let items = store.visibleItems
-            if n <= items.count { pasteItem(items[n - 1]) }
+            if n <= items.count {
+                pasteItem(items[n - 1], asPlainText: includes(Settings.shared.plainTextModifier, in: flags))
+            }
             return nil
         }
 
         switch code {
+        case kVK_Space:
+            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            return nil
         case kVK_Escape:
+            if pasteSequence.isBuilding {
+                cancelPasteSequence()
+                return nil
+            }
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
+            if pasteSequence.isBuilding {
+                pasteNextInSequence()
+                return nil
+            }
             pasteSelected(); return nil
+        case kVK_ANSI_C:
+            if cmd {
+                commandCopy()
+                return nil
+            }
         case kVK_LeftArrow, kVK_UpArrow:
-            store.moveSelection(by: -1); return nil
+            moveBarSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
-            store.moveSelection(by: 1); return nil
+            moveBarSelection(by: 1); return nil
         case kVK_Delete:
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
+            if let sel = store.selectedItem { store.delete(sel) }
             return nil
         case kVK_ForwardDelete:
             if let sel = store.selectedItem { store.delete(sel) }
@@ -244,6 +405,22 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         return event
     }
+
+    private func moveBarSelection(by delta: Int) {
+        store.moveSelection(by: delta)
+        QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+    }
+
+    private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
+        switch carbonModifier {
+        case cmdKey: flags.contains(.command)
+        case optionKey: flags.contains(.option)
+        case controlKey: flags.contains(.control)
+        case shiftKey: flags.contains(.shift)
+        default: false
+        }
+    }
+
 }
 
 extension Bundle {

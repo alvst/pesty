@@ -1,9 +1,21 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 
 final class BarPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // AppKit routes Command-key combinations through key equivalents before
+        // SwiftUI receives a keyDown event. Handle Copy at the panel level as a
+        // reliable counterpart to the navigation monitor in AppController.
+        if event.keyCode == kVK_ANSI_C, event.modifierFlags.contains(.command) {
+            AppController.shared.commandCopy()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
 @MainActor
@@ -25,7 +37,17 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovable = false
-        panel.contentView = NSHostingView(rootView: BarView())
+        let content = NSHostingView(rootView: BarView())
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.contentView = content
+            glass.cornerRadius = Theme.cornerRadius
+            glass.tintColor = NSColor.black.withAlphaComponent(0.12)
+            glass.style = .regular
+            panel.contentView = glass
+        } else {
+            panel.contentView = content
+        }
         super.init(window: panel)
         panel.delegate = self
     }
@@ -69,7 +91,17 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isPresenting, !AppController.shared.suppressAutoHide else { return }
-        AppController.shared.hideBar()
+        guard Settings.shared.hideOnClickOutside,
+              !isPresenting,
+              !AppController.shared.suppressAutoHide else { return }
+        // Key focus briefly moves to Quick Look or the Paste Stack tray while
+        // both remain companion surfaces to the bar. Defer one run loop so the
+        // new key window is known before deciding whether focus really left Pesty.
+        DispatchQueue.main.async {
+            guard QuickLookService.shared.isVisible || NSApp.keyWindow is PasteStackPanel else {
+                AppController.shared.hideBar()
+                return
+            }
+        }
     }
 }

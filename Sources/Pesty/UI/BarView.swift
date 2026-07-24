@@ -1,22 +1,44 @@
 import SwiftUI
 
 struct BarView: View {
+    private static let stripStartID = "pesty.clip-strip.start"
+
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    private var monitor: ClipboardMonitor { AppController.shared.monitor }
+    private var sequence: PasteSequence { AppController.shared.pasteSequence }
+    @State private var previewVisible = false
+    @State private var resizeStartHeight: Double?
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow)
-            Theme.panelTint
+            panelBackground
         }
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
+                if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                strip
+                HStack(spacing: 0) {
+                    if previewVisible, let item = store.selectedItem {
+                        SelectedClipPreviewView(item: item)
+                        Divider()
+                    }
+                    strip
+                }
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(macOS 26.0, *) {
+            Theme.panelTint
+        } else {
+            VisualEffectView(material: .hudWindow)
+            Theme.panelTint
+        }
     }
 
     private var topBar: some View {
@@ -26,10 +48,45 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if sequence.hasEntries { sequenceStatus }
+            previewButton
+            sequenceButton
             moreMenu
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
+    }
+
+    private var previewButton: some View {
+        Button { previewVisible.toggle() } label: {
+            Image(systemName: previewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(previewVisible ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(previewVisible ? "Hide clip preview" : "Show clip preview")
+    }
+
+    private var resizeHandle: some View {
+        HStack {
+            Capsule(style: .continuous)
+                .fill(Theme.textTertiary.opacity(0.7))
+                .frame(width: 42, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 14)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
+                    guard let start = resizeStartHeight else { return }
+                    settings.barHeight = min(720, max(300, start - value.translation.height))
+                }
+                .onEnded { _ in resizeStartHeight = nil }
+        )
+        .help("Drag to resize the Pesty bar")
     }
 
     private var syncButton: some View {
@@ -69,13 +126,25 @@ struct BarView: View {
 
     private var moreMenu: some View {
         Menu {
-            Button("Settings…") { AppController.shared.showSettings() }
-            Button("Clear History") { store.clearHistory() }
+            Button { AppController.shared.showSettings() } label: {
+                Label("Settings…", systemImage: "gearshape")
+            }
+            Button { AppController.shared.togglePestyPause() } label: {
+                Label(monitor.isPaused ? "Resume Pesty" : "Pause Pesty",
+                      systemImage: monitor.isPaused ? "play.fill" : "pause.fill")
+            }
+            Button { store.clearHistory() } label: {
+                Label("Clear History", systemImage: "trash")
+            }
             Divider()
-            Button("About Pesty") { AppController.shared.showAbout() }
-            Button("Quit Pesty") { NSApp.terminate(nil) }
+            Button { AppController.shared.showAbout() } label: {
+                Label("About Pesty", systemImage: "info.circle")
+            }
+            Button { NSApp.terminate(nil) } label: {
+                Label("Quit Pesty", systemImage: "power")
+            }
         } label: {
-            Image(systemName: "ellipsis")
+            Image(systemName: monitor.isPaused ? "pause.fill" : "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(width: 30, height: 30)
@@ -86,10 +155,37 @@ struct BarView: View {
         .fixedSize()
     }
 
+    private var sequenceButton: some View {
+        Button {
+            AppController.shared.beginPasteSequence()
+        } label: {
+            Image(systemName: sequence.hasEntries ? "rectangle.stack.fill" : "rectangle.stack.badge.plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(sequence.hasEntries ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(sequence.hasEntries ? "Show Paste Stack" : "Open Paste Stack")
+    }
+
+    private var sequenceStatus: some View {
+        Text(sequence.isBuilding ? "⌘C to add" : "\(sequence.pendingCount) ready")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.selection)
+            .lineLimit(1)
+    }
+
     private var strip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Theme.cardSpacing) {
+                    // This is a real scroll target, rather than an ID applied
+                    // to the HStack. Scrolling it to the leading edge leaves
+                    // one card-spacing of room before the first card.
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(Self.stripStartID)
+
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
                                      index: index,
@@ -100,13 +196,25 @@ struct BarView: View {
                                 removal: .opacity))
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 18)
+                .padding(.trailing, 28)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
             }
+            .scrollClipDisabled()
             .onChange(of: store.selectedID) { _, id in
                 guard let id else { return }
+                if store.initialScrollTargetID == id {
+                    store.initialScrollTargetID = nil
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        // The leading spacer preserves room for the first
+                        // card's focus ring when reopening Pesty.
+                        proxy.scrollTo(Self.stripStartID, anchor: .leading)
+                    }
+                    return
+                }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
                     proxy.scrollTo(id, anchor: .center)
                 }
