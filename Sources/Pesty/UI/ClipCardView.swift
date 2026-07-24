@@ -237,40 +237,64 @@ struct ClipCardView: View {
     private var menu: some View {
         if let entry = pasteStackEntry {
             if entry.isPasted {
-                Button("Re-add to Stack") { AppController.shared.reAddPasteStackEntry(entry) }
+                Button { AppController.shared.reAddPasteStackEntry(entry) } label: {
+                    Label("Re-add to Stack", systemImage: "arrow.uturn.left")
+                }
             } else {
-                Button("Paste") { AppController.shared.pasteStackEntry(entry) }
+                Button { AppController.shared.pasteStackEntry(entry) } label: {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
             }
-            Button("Copy") { AppController.shared.copyItem(item) }
+            Button { AppController.shared.copyItem(item) } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
             Divider()
-            Button("Remove from Paste Stack", role: .destructive) {
+            Button(role: .destructive) {
                 AppController.shared.removePasteStackEntry(entry)
+            } label: {
+                Label("Remove from Paste Stack", systemImage: "trash")
             }
         } else {
-            Button("Paste") { AppController.shared.pasteItem(item) }
-            Button("Copy") { AppController.shared.copyItem(item) }
+            Button { AppController.shared.pasteItem(item) } label: {
+                Label("Paste", systemImage: "doc.on.clipboard")
+            }
+            Button { AppController.shared.copyItem(item) } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
             Divider()
-            Button("Rename") {
+            Button {
                 if let t = TextPrompt.run(title: "Rename", message: "Card title",
                                           defaultValue: item.customTitle ?? "") {
                     store.setTitle(t, for: item)
                 }
+            } label: {
+                Label("Rename", systemImage: "pencil")
             }
-            Button("Delete", role: .destructive) { store.delete(item) }
+            Button(role: .destructive) {
+                store.delete(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
             Divider()
-            Menu("Pin") {
+            Menu {
                 if !store.pinboards.isEmpty {
                     ForEach(store.pinboards) { b in
-                        Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+                        Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                            Label(b.name, systemImage: "pin")
+                        }
                     }
                     Divider()
                 }
-                Button("New Pinboard…") {
+                Button {
                     if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
                         let b = store.addPinboard(name: name)
                         store.saveToPinboard(item, boardID: b.id)
                     }
+                } label: {
+                    Label("New Pinboard…", systemImage: "plus")
                 }
+            } label: {
+                Label("Pin", systemImage: "pin")
             }
         }
     }
