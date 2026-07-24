@@ -139,8 +139,22 @@ final class PasteSequence {
         ensureActiveStack()
         guard isCollecting,
               !entries.contains(where: { $0.item.id == item.id }) else { return false }
-        let imagePreview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
-        entries.append(PasteStackEntry(item: item, imagePreview: imagePreview))
+        entries.append(makeEntry(for: item))
+        if selectedEntryID == nil { selectFirst() }
+        persistActiveStack()
+        return true
+    }
+
+    /// Moves a user-selected history clip into the active Paste Stack. Unlike
+    /// passive clipboard capture, this also resumes collection so a stack can
+    /// be assembled directly from items already in Clipboard history.
+    @discardableResult
+    func addHistoryItem(_ item: ClipItem) -> Bool {
+        ensureActiveStack()
+        guard !containsHistoryItemID(item.id) else { return false }
+
+        isCollecting = true
+        entries.append(makeEntry(for: item))
         if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
         return true
@@ -266,6 +280,14 @@ final class PasteSequence {
         selectFirst()
         persistActiveStack()
         return entry
+    }
+
+    /// Capture an image preview while the original history item is still
+    /// readily available. The entry retains the ClipItem for persistence, and
+    /// the in-memory preview keeps the active Paste Stack visually stable.
+    private func makeEntry(for item: ClipItem) -> PasteStackEntry {
+        let imagePreview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
+        return PasteStackEntry(item: item, imagePreview: imagePreview)
     }
 
     private func ensureActiveStack() {

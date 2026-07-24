@@ -176,6 +176,17 @@ struct ClipCardView: View {
     private var menu: some View {
         Button("Paste") { AppController.shared.pasteItem(item) }
         Button("Copy") { AppController.shared.copyItem(item) }
+        if store.source == .history {
+            Button {
+                AppController.shared.moveHistoryItemToPasteStack(item)
+            } label: {
+                Label(isInPasteStack ? "Already in Paste Stack" : "Move to Paste Stack",
+                      systemImage: isInPasteStack
+                      ? "checkmark.circle.fill"
+                      : "rectangle.stack.badge.plus")
+            }
+            .disabled(isInPasteStack)
+        }
         Divider()
         if !store.pinboards.isEmpty {
             Menu("Save to Pinboard") {
@@ -198,5 +209,9 @@ struct ClipCardView: View {
         }
         Divider()
         Button("Delete", role: .destructive) { store.delete(item) }
+    }
+
+    private var isInPasteStack: Bool {
+        PasteSequence.shared.containsHistoryItemID(item.id)
     }
 }
