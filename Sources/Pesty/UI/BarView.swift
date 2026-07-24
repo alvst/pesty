@@ -2,6 +2,9 @@ import SwiftUI
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
+    /// A long enough field to keep a real phrase visible while keeping the
+    /// inactive control as compact as the rest of the bar chrome.
+    private static let expandedSearchWidth: CGFloat = 680
 
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
@@ -141,6 +144,8 @@ struct BarView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button { store.searchText = ""; store.selectFirst() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
@@ -149,9 +154,13 @@ struct BarView: View {
             }
         }
         .padding(.horizontal, store.searchText.isEmpty ? 0 : 10)
-        .frame(height: 30)
+        .frame(width: store.searchText.isEmpty ? 24 : Self.expandedSearchWidth,
+               height: 30,
+               alignment: .leading)
         .background(store.searchText.isEmpty ? Color.clear : Theme.fieldBG, in: Capsule())
-        .animation(.easeOut(duration: 0.15), value: store.searchText.isEmpty)
+        .layoutPriority(store.searchText.isEmpty ? 0 : 2)
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: store.searchText.isEmpty)
+        .accessibilityLabel(store.searchText.isEmpty ? "Search clipboard history" : "Clipboard history search")
     }
 
     private var moreMenu: some View {
