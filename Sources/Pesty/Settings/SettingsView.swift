@@ -245,6 +245,7 @@ private struct GeneralSettings: View {
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         Toggle(title, isOn: isOn)
             .font(.system(size: 14))
+            .toggleStyle(.switch)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -275,12 +276,12 @@ private struct GeneralSettings: View {
         VStack(alignment: .leading, spacing: 0) { content() }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.10))
             }
-            .shadow(color: .black.opacity(0.045), radius: 5, y: 2)
+            .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
     }
 }
 
@@ -323,6 +324,7 @@ private struct PrivacySettings: View {
                     SettingsSurface {
                         Toggle("Ignore concealed clipboard content", isOn: $settings.ignoreConcealed)
                             .font(.system(size: 14))
+                            .toggleStyle(.switch)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Pesty also respects the standard macOS concealed-clipboard marker used by password managers.")
@@ -417,10 +419,12 @@ private struct ShortcutsSettings: View {
                         Divider()
                         Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
                             .font(.system(size: 14))
+                            .toggleStyle(.switch)
                             .padding(.vertical, 10)
                         Divider()
                         Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
                             .font(.system(size: 14))
+                            .toggleStyle(.switch)
                             .padding(.vertical, 10)
                         Text("While Paste Stack is open, select a clip and press ⌘C to add it. Keep pasted items enabled to re-add completed clips later.")
                             .font(.caption)
@@ -471,10 +475,11 @@ private struct SyncSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("iCloud Drive") {
                     SettingsSurface {
-                        Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
+                    Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
                             get: { settings.iCloudSync },
                             set: { _ in AppController.shared.toggleICloudSync() }))
                         .font(.system(size: 14))
+                        .toggleStyle(.switch)
                         .padding(.vertical, 10)
                         Text(ClipboardStore.shared.iCloudAvailable
                              ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
@@ -520,12 +525,12 @@ private struct SettingsSurface<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.10))
             }
-            .shadow(color: .black.opacity(0.045), radius: 5, y: 2)
+            .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
     }
 }
 
