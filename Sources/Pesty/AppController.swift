@@ -31,7 +31,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
         HotKeyCenter.shared.start()
 
-        setupStatusItem()
+        setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
 
@@ -63,6 +63,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pesty")
@@ -80,6 +81,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q").target = self
         item.menu = menu
         statusItem = item
+    }
+
+    func setMenuBarIconVisible(_ visible: Bool) {
+        if visible {
+            setupStatusItem()
+        } else if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
     }
 
     @objc private func menuOpen() { showBar() }
@@ -136,7 +146,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
+        store.applyHistoryPolicy()
         store.selectFirst()
+        store.inlinePreviewVisible = false
 
         if barController == nil {
             barController = BarWindowController()
@@ -147,18 +159,23 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func hideBar() {
         stopKeyMonitor()
+        store.inlinePreviewVisible = false
         barController?.hide()
     }
 
-    func pasteSelected() {
-        guard let item = store.selectedItem else { return }
-        hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+    func resizeVisibleBar(to height: Double) {
+        barController?.resize(to: CGFloat(height))
     }
 
-    func pasteItem(_ item: ClipItem) {
+    func pasteSelected(asPlainText: Bool = false) {
+        guard let item = store.selectedItem else { return }
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
+    }
+
+    func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
+        hideBar()
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
     }
 
     func copyItem(_ item: ClipItem) {
@@ -178,7 +195,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
-        win.setContentSize(NSSize(width: 520, height: 560))
+        win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
         win.isReleasedWhenClosed = false
         settingsWindow = win
@@ -204,13 +221,24 @@ final class AppController: NSObject, NSApplicationDelegate {
         let ctrl = flags.contains(.control)
         let opt = flags.contains(.option)
 
-        if cmd, let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...9).contains(n) {
+        if includes(Settings.shared.quickPasteModifier, in: flags),
+           let chars = event.charactersIgnoringModifiers,
+           let n = Int(chars), (1...9).contains(n) {
             let items = store.visibleItems
-            if n <= items.count { pasteItem(items[n - 1]) }
+            if n <= items.count {
+                pasteItem(items[n - 1], asPlainText: includes(Settings.shared.plainTextModifier, in: flags))
+            }
             return nil
         }
 
         switch code {
+        case kVK_Space where store.searchText.isEmpty:
+            if Settings.shared.clipPreviewStyle == .nativeQuickLook {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            } else if store.selectedItem != nil {
+                store.inlinePreviewVisible.toggle()
+            }
+            return nil
         case kVK_Escape:
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
@@ -218,9 +246,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
-            store.moveSelection(by: -1); return nil
+            moveBarSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
-            store.moveSelection(by: 1); return nil
+            moveBarSelection(by: 1); return nil
         case kVK_Delete:
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
@@ -243,6 +271,21 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return event
+    }
+
+    private func moveBarSelection(by delta: Int) {
+        store.moveSelection(by: delta)
+        QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+    }
+
+    private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
+        switch carbonModifier {
+        case cmdKey: return flags.contains(.command)
+        case optionKey: return flags.contains(.option)
+        case controlKey: return flags.contains(.control)
+        case shiftKey: return flags.contains(.shift)
+        default: return false
+        }
     }
 }
 

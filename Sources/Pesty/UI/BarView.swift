@@ -3,6 +3,7 @@ import SwiftUI
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @State private var resizeStartHeight: Double?
 
     var body: some View {
         ZStack {
@@ -11,25 +12,69 @@ struct BarView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
+                if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                strip
+                HStack(spacing: 0) {
+                    if settings.clipPreviewStyle == .inlinePesty,
+                       store.inlinePreviewVisible,
+                       let item = store.selectedItem {
+                        SelectedClipPreviewView(item: item)
+                        Divider()
+                    }
+                    strip
+                }
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
     }
 
+    private var resizeHandle: some View {
+        HStack {
+            Capsule(style: .continuous)
+                .fill(Theme.textTertiary.opacity(0.7))
+                .frame(width: 42, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 14)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
+                    guard let start = resizeStartHeight else { return }
+                    settings.barHeight = min(720, max(300, start - value.translation.height))
+                }
+                .onEnded { _ in resizeStartHeight = nil }
+        )
+        .help("Drag to resize the Pesty bar")
+    }
+
     private var topBar: some View {
         HStack(spacing: 14) {
-            syncButton
+            if settings.iCloudSync {
+                syncButton
+            }
             searchIndicator
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if settings.clipPreviewStyle == .inlinePesty { previewButton }
             moreMenu
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
+    }
+
+    private var previewButton: some View {
+        Button { store.inlinePreviewVisible.toggle() } label: {
+            Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(store.inlinePreviewVisible ? "Hide clip preview" : "Show clip preview")
     }
 
     private var syncButton: some View {
@@ -108,12 +153,22 @@ struct BarView: View {
             .onChange(of: store.selectedID) { _, id in
                 guard let id else { return }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
+                    proxy.scrollTo(id, anchor: selectedClipAnchor)
+                }
+            }
+            .onChange(of: settings.selectedClipPosition) { _, _ in
+                guard let id = store.selectedID else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                    proxy.scrollTo(id, anchor: selectedClipAnchor)
                 }
             }
             .overlay { if store.visibleItems.isEmpty { emptyState } }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private var selectedClipAnchor: UnitPoint {
+        settings.selectedClipPosition == .rightEdge ? .trailing : .center
     }
 
     private var emptyState: some View {
