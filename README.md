@@ -73,6 +73,8 @@ The build is signed with a Developer ID and notarized by Apple, so it opens with
 | Key | Action |
 | --- | --- |
 | `⌘⇧V` | Show / hide the strip (configurable) |
+| `⌘⇧S` (with strip open) | Open Settings |
+| `⌘⇧P` (with strip open) | Pause / resume clipboard monitoring |
 | `←` `→` `↑` `↓` | Move selection |
 | `return` | Paste selected clip |
 | `⌘1`–`⌘9` | Quick-paste the Nth clip |
