@@ -68,23 +68,15 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         })
     }
 
-    func setInlinePreviewVisible(_ visible: Bool) {
-        guard let panel = window, panel.isVisible else { return }
-        guard let screen = panel.screen
-                ?? NSScreen.screens.first(where: { $0.frame.intersects(panel.frame) })
-                ?? NSScreen.main else { return }
-        let frame = screen.visibleFrame
-        let height = visible ? max(CGFloat(Settings.shared.barHeight), 620) : CGFloat(Settings.shared.barHeight)
-        panel.setFrame(NSRect(x: frame.minX, y: frame.minY, width: frame.width, height: height), display: true)
-    }
-
     func windowDidResignKey(_ notification: Notification) {
         guard !isPresenting, !AppController.shared.suppressAutoHide else { return }
-        // Quick Look becomes key immediately after the strip hands it a preview.
+        // Quick Look and the separate inline preview can become key while Pesty
+        // remains open behind them.
         // Defer until that transition is visible before deciding whether focus
         // actually left Pesty.
         DispatchQueue.main.async {
-            guard !QuickLookService.shared.isVisible else { return }
+            guard !QuickLookService.shared.isVisible,
+                  !ClipboardStore.shared.inlinePreviewVisible else { return }
             AppController.shared.hideBar()
         }
     }

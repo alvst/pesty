@@ -11,25 +11,23 @@ struct BarView: View {
             Theme.panelTint
             VStack(spacing: 0) {
                 topBar
-                if settings.clipPreviewStyle == .inlinePesty,
-                   store.inlinePreviewVisible {
-                    Spacer(minLength: 0)
-                    strip.frame(height: 280)
-                } else {
-                    strip
-                }
+                strip
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            if settings.clipPreviewStyle == .inlinePesty,
-               store.inlinePreviewVisible,
-               let item = store.selectedItem {
-                PestyPreviewPopover(
-                    item: item,
-                    pointer: cardFrames[item.id].map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero)
-            }
         }
         .coordinateSpace(name: "PestyBar")
-        .onPreferenceChange(ClipCardFramePreferenceKey.self) { cardFrames = $0 }
+        .onPreferenceChange(ClipCardFramePreferenceKey.self) {
+            cardFrames = $0
+            updateExternalPreview()
+        }
+        .onChange(of: store.inlinePreviewVisible) { _, visible in
+            guard visible else { return }
+            DispatchQueue.main.async { updateExternalPreview() }
+        }
+        .onChange(of: store.selectedID) { _, _ in
+            guard store.inlinePreviewVisible else { return }
+            DispatchQueue.main.async { updateExternalPreview() }
+        }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
     }
@@ -161,6 +159,14 @@ struct BarView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textSecondary)
         }
+    }
+
+    private func updateExternalPreview() {
+        guard settings.clipPreviewStyle == .inlinePesty,
+              store.inlinePreviewVisible,
+              let item = store.selectedItem,
+              let cardFrame = cardFrames[item.id] else { return }
+        AppController.shared.updateInlinePreview(item: item, cardFrame: cardFrame)
     }
 }
 

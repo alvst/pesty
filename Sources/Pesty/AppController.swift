@@ -10,6 +10,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     let monitor = ClipboardMonitor()
 
     private var barController: BarWindowController?
+    private var inlinePreviewController: InlinePreviewWindowController?
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var keyMonitor: Any?
@@ -138,6 +139,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.source = .history
         store.selectFirst()
         store.inlinePreviewVisible = false
+        inlinePreviewController?.hide()
 
         if barController == nil {
             barController = BarWindowController()
@@ -149,21 +151,34 @@ final class AppController: NSObject, NSApplicationDelegate {
     func hideBar() {
         stopKeyMonitor()
         store.inlinePreviewVisible = false
-        barController?.setInlinePreviewVisible(false)
+        inlinePreviewController?.hide()
         barController?.hide()
     }
 
     func toggleInlinePreview() {
         guard Settings.shared.clipPreviewStyle == .inlinePesty,
               store.selectedItem != nil else { return }
-        store.inlinePreviewVisible.toggle()
-        barController?.setInlinePreviewVisible(store.inlinePreviewVisible)
+        if store.inlinePreviewVisible {
+            hideInlinePreview()
+        } else {
+            store.inlinePreviewVisible = true
+        }
     }
 
     func hideInlinePreview() {
         guard store.inlinePreviewVisible else { return }
         store.inlinePreviewVisible = false
-        barController?.setInlinePreviewVisible(false)
+        inlinePreviewController?.hide()
+    }
+
+    func updateInlinePreview(item: ClipItem, cardFrame: CGRect) {
+        guard store.inlinePreviewVisible,
+              let barPanel = barController?.window,
+              barPanel.isVisible else { return }
+        if inlinePreviewController == nil {
+            inlinePreviewController = InlinePreviewWindowController()
+        }
+        inlinePreviewController?.show(item: item, anchoredTo: cardFrame, in: barPanel)
     }
 
     func pasteSelected() {

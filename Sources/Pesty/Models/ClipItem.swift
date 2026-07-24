@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 struct ClipItem: Identifiable, Codable, Equatable {
     let id: UUID
@@ -43,6 +44,25 @@ struct ClipItem: Identifiable, Codable, Equatable {
     }
 
     var charCount: Int { text?.count ?? 0 }
+
+    /// Files copied from Finder remain file clips so they paste back as files,
+    /// but image files should be presented to the person as images.
+    var imageFileURL: URL? {
+        guard type == .file,
+              fileURLs.count == 1,
+              let value = fileURLs.first,
+              let url = URL(string: value),
+              url.isFileURL,
+              let fileType = UTType(filenameExtension: url.pathExtension),
+              fileType.conforms(to: .image) else { return nil }
+        return url
+    }
+
+    var isImageFile: Bool { imageFileURL != nil }
+
+    var presentationType: ClipType {
+        isImageFile ? .image : type
+    }
 
     var displayTitle: String {
         if let t = customTitle, !t.isEmpty { return t }

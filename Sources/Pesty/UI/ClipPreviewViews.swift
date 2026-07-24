@@ -134,66 +134,82 @@ struct LinkCardPreview: View {
 
 struct PestyPreviewPopover: View {
     let item: ClipItem
-    let pointer: CGPoint
+    let pointerOffset: CGFloat
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var hasAppeared = false
 
     private var url: URL? {
         guard item.type == .link else { return nil }
         return URL(string: (item.text ?? item.displayTitle).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    var body: some View {
-        GeometryReader { proxy in
-            let inset: CGFloat = 24
-            let width = max(280, min(980, proxy.size.width - inset * 2))
-            let targetX = pointer.x > 0 ? pointer.x : proxy.size.width / 2
-            let left = min(max(inset, targetX - width / 2), max(inset, proxy.size.width - width - inset))
-            let cardTop = pointer.y > 0 ? pointer.y : proxy.size.height - 44
-            let height = min(520, max(220, cardTop - 84))
-            let totalHeight = height + 13
-            let arrowOffset = min(width / 2 - 22, max(-width / 2 + 22, targetX - left - width / 2))
-            let centerY = max(20 + totalHeight / 2, cardTop - 12 - totalHeight / 2)
+    private var surfaceColor: Color { Color(nsColor: .windowBackgroundColor) }
+    private var documentColor: Color { Color(nsColor: .textBackgroundColor) }
+    private var chromeBorder: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.13)
+    }
 
-            VStack(spacing: 0) {
-                previewPanel
-                    .frame(height: height)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(.white.opacity(0.22))
-                    }
-                PreviewPointer()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .frame(width: 24, height: 13)
-                    .offset(x: arrowOffset)
+    var body: some View {
+        VStack(spacing: 0) {
+            previewPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(surfaceColor, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(chromeBorder)
+                }
+            PreviewPointer()
+                .fill(surfaceColor)
+                .frame(width: 26, height: 12)
+                .offset(x: pointerOffset)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .opacity(hasAppeared ? 1 : 0)
+        .scaleEffect(hasAppeared ? 1 : 0.84, anchor: .bottom)
+        .offset(y: hasAppeared ? 0 : 24)
+        .onAppear {
+            withAnimation(.spring(response: 0.44, dampingFraction: 0.62, blendDuration: 0.12)) {
+                hasAppeared = true
             }
-            .frame(width: width)
-            .shadow(color: .black.opacity(0.38), radius: 24, y: 10)
-            .position(x: left + width / 2, y: centerY)
         }
         .allowsHitTesting(true)
     }
 
     private var previewPanel: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 11) {
                 Button { AppController.shared.hideInlinePreview() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                Text(item.type.label)
-                    .font(.system(size: 17, weight: .bold))
+                Text(item.presentationType.label)
+                    .font(.system(size: 18, weight: .bold))
                 Spacer()
+                Menu {
+                    Button("Copy") { AppController.shared.copyItem(item) }
+                    Button("Paste") { AppController.shared.pasteItem(item) }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 if let url {
                     Button("Open in Safari") { NSWorkspace.shared.open(url) }
                         .buttonStyle(.bordered)
+                        .controlSize(.regular)
                 }
             }
-            .padding(.horizontal, 16)
-            .frame(height: 52)
+            .padding(.horizontal, 20)
+            .frame(height: 56)
 
-            Divider()
+            Divider().overlay(chromeBorder)
 
             Group {
                 if let url {
@@ -202,9 +218,60 @@ struct PestyPreviewPopover: View {
                     SelectedClipPreviewView(item: item)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(documentColor, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .padding(10)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            PreviewMetadataFooter(item: item)
+                .padding(.horizontal, 22)
+                .frame(height: 42)
         }
+    }
+}
+
+private struct PreviewMetadataFooter: View {
+    let item: ClipItem
+
+    private var metrics: [String] {
+        if item.isImageFile {
+            return ["Image", item.createdAt.clipRelativeLong]
+        }
+        switch item.type {
+        case .text, .richText, .link:
+            let text = item.text ?? ""
+            let characters = text.count
+            let words = text.split { $0.isWhitespace || $0.isNewline }.count
+            let lines = max(1, text.split(separator: "\n", omittingEmptySubsequences: false).count)
+            return [
+                "\(characters) character\(characters == 1 ? "" : "s")",
+                "\(words) word\(words == 1 ? "" : "s")",
+                "\(lines) line\(lines == 1 ? "" : "s")"
+            ]
+        case .image:
+            return ["Image", item.createdAt.clipRelativeLong]
+        case .file:
+            return ["\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")", item.createdAt.clipRelativeLong]
+        case .color:
+            return [item.colorHex ?? "Color", item.createdAt.clipRelativeLong]
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(metrics.enumerated()), id: \.offset) { index, metric in
+                if index > 0 {
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                }
+                Text(metric)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 }
 
@@ -241,29 +308,8 @@ struct SelectedClipPreviewView: View {
     private var store: ClipboardStore { ClipboardStore.shared }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: item.type.symbol)
-                    .foregroundStyle(item.type.accent)
-                Text(item.type.label)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer()
-                Text(item.createdAt.clipRelativeLong)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            previewContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            Text(item.displayTitle)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.textSecondary)
-                .lineLimit(2)
-        }
-        .padding(16)
-        .frame(width: 340)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white.opacity(0.58))
+        previewContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
@@ -276,24 +322,20 @@ struct SelectedClipPreviewView: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(14)
             } else { missingPreview("photo") }
         case .richText:
             ScrollView {
-                RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 26))
+                    .foregroundStyle(Color.primary)
+                    .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                    .padding(28)
             }
         case .link:
-            VStack(spacing: 14) {
-                LinkPreviewContent(text: item.text ?? item.displayTitle, compact: false)
-                Text(item.text ?? "")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-                Spacer()
-            }
+            LinkPreviewContent(text: item.text ?? item.displayTitle, compact: false)
+                .padding(28)
         case .file:
             if let image = filePreviewImage {
                 Image(nsImage: image)
@@ -301,43 +343,46 @@ struct SelectedClipPreviewView: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(14)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     Image(systemName: "doc.fill")
-                        .font(.system(size: 46, weight: .light))
+                        .font(.system(size: 52, weight: .light))
                         .foregroundStyle(item.type.accent)
                     Text(item.displayTitle)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 18, weight: .medium))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.textPrimary)
-                    Spacer()
+                        .foregroundStyle(Color.primary)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .color:
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(hex: item.colorHex ?? "#000") ?? .black)
                 .overlay {
                     Text(item.colorHex ?? "")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
                         .foregroundStyle(.white)
                         .shadow(radius: 2)
                 }
+                .padding(22)
         case .text:
             ScrollView {
                 Text(item.text ?? "")
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(.system(size: 28, weight: .regular))
+                    .foregroundStyle(Color.primary)
+                    .lineSpacing(7)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                    .padding(28)
             }
         }
     }
 
     private func missingPreview(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 38, weight: .light))
-            .foregroundStyle(Theme.textTertiary)
+            .font(.system(size: 44, weight: .light))
+            .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

@@ -8,6 +8,10 @@ struct ClipCardView: View {
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var presentationType: ClipType { item.presentationType }
+    private var imageFile: NSImage? {
+        item.imageFileURL.flatMap(NSImage.init(contentsOf:))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,7 +42,7 @@ struct ClipCardView: View {
             headerColor
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.type.label)
+                    Text(presentationType.label)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     Text(item.createdAt.clipRelativeLong)
@@ -97,14 +101,22 @@ struct ClipCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .file:
-            VStack(spacing: 9) {
-                Image(systemName: "doc.fill").font(.system(size: 32))
-                    .foregroundStyle(headerColor)
-                Text(item.displayTitle).font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary).lineLimit(2)
-                    .multilineTextAlignment(.center)
+            if let imageFile {
+                Image(nsImage: imageFile)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 9) {
+                    Image(systemName: "doc.fill").font(.system(size: 32))
+                        .foregroundStyle(headerColor)
+                    Text(item.displayTitle).font(.system(size: 12))
+                        .foregroundStyle(Theme.textSecondary).lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .link:
             LinkCardPreview(text: item.text ?? item.displayTitle)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -153,7 +165,9 @@ struct ClipCardView: View {
             return (item.text ?? "").replacingOccurrences(of: "https://", with: "")
                                     .replacingOccurrences(of: "http://", with: "")
         case .file:
-            return "\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")"
+            return item.isImageFile
+                ? "Image"
+                : "\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")"
         case .image:
             return "Image"
         case .color:
