@@ -10,7 +10,6 @@ struct BarView: View {
     private var showsStackDeck: Bool {
         store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
     }
-    @State private var previewVisible = false
     @State private var resizeStartHeight: Double?
 
     var body: some View {
@@ -25,7 +24,9 @@ struct BarView: View {
                     PasteStackContentView()
                 } else {
                     HStack(spacing: 0) {
-                        if previewVisible, let item = store.selectedItem {
+                        if settings.clipPreviewStyle == .inlinePesty,
+                           store.inlinePreviewVisible,
+                           let item = store.selectedItem {
                             SelectedClipPreviewView(item: item)
                             Divider()
                         }
@@ -58,7 +59,7 @@ struct BarView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             if store.source != .pasteStack {
-                previewButton
+                if settings.clipPreviewStyle == .inlinePesty { previewButton }
                 startPasteStackButton
             }
             moreMenu
@@ -68,14 +69,14 @@ struct BarView: View {
     }
 
     private var previewButton: some View {
-        Button { previewVisible.toggle() } label: {
-            Image(systemName: previewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+        Button { store.inlinePreviewVisible.toggle() } label: {
+            Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(previewVisible ? Theme.selection : Theme.textSecondary)
+                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.textSecondary)
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
-        .help(previewVisible ? "Hide clip preview" : "Show clip preview")
+        .help(store.inlinePreviewVisible ? "Hide clip preview" : "Show clip preview")
     }
 
     private var startPasteStackButton: some View {
