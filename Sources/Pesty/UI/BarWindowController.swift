@@ -105,6 +105,11 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.setFrame(frame, display: true)
     }
 
+    func setInlinePreviewVisible(_ visible: Bool) {
+        let height = visible ? max(CGFloat(Settings.shared.barHeight), 620) : CGFloat(Settings.shared.barHeight)
+        resize(to: height)
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         guard Settings.shared.hideOnClickOutside,
               !isPresenting,

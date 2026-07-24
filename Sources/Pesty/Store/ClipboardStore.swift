@@ -18,6 +18,7 @@ final class ClipboardStore {
     var source: BarSource = .history
     var searchText: String = ""
     var selectedID: UUID?
+    var inlinePreviewVisible = false
     /// Used by the strip to restore its opening position without animating from
     /// whichever card was selected the last time the bar was visible.
     var initialScrollTargetID: UUID?

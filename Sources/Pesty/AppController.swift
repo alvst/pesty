@@ -190,6 +190,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.source = requestedSource ?? .history
         store.applyHistoryPolicy()
         store.prepareForBarPresentation()
+        store.inlinePreviewVisible = false
 
         if barController == nil {
             barController = BarWindowController()
@@ -200,7 +201,23 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func hideBar() {
         stopKeyMonitor()
+        store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
         barController?.hide()
+    }
+
+    func toggleInlinePreview() {
+        guard Settings.shared.clipPreviewStyle == .inlinePesty,
+              store.source != .pasteStack,
+              store.selectedItem != nil else { return }
+        store.inlinePreviewVisible.toggle()
+        barController?.setInlinePreviewVisible(store.inlinePreviewVisible)
+    }
+
+    func hideInlinePreview() {
+        guard store.inlinePreviewVisible else { return }
+        store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
     }
 
     func resizeVisibleBar(to height: Double) {
@@ -457,7 +474,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         switch code {
         case kVK_Space:
-            if store.source == .pasteStack {
+            if Settings.shared.clipPreviewStyle == .inlinePesty,
+               store.source != .pasteStack,
+               store.selectedItem != nil {
+                toggleInlinePreview()
+            } else if store.source == .pasteStack {
                 QuickLookService.shared.toggle(items: pasteSequence.displayEntries.map(\.item),
                                                selectedID: pasteSequence.selectedEntry?.item.id)
             } else {

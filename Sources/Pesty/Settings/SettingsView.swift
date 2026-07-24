@@ -193,6 +193,29 @@ private struct GeneralSettings: View {
                     }
                 }
 
+                settingsGroup("Clip Previews") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            LabeledContent("Preview style") {
+                                Picker("", selection: $settings.clipPreviewStyle) {
+                                    ForEach(ClipPreviewStyle.allCases) { style in
+                                        Text(style.title).tag(style)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                            Divider()
+                            Text(settings.clipPreviewStyle.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 10)
+                        }
+                    }
+                }
+
                 #if !MAS
                 settingsGroup("Accessibility") {
                     settingCard {

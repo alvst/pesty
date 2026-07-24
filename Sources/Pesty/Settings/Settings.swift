@@ -2,6 +2,27 @@ import AppKit
 import Carbon.HIToolbox
 import Observation
 
+enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
+    case nativeQuickLook
+    case inlinePesty
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .nativeQuickLook: "Native Quick Look"
+        case .inlinePesty: "Inline Pesty preview"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .nativeQuickLook: "Open a macOS Quick Look panel with Space."
+        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty."
+        }
+    }
+}
+
 enum ShortcutModifier: CaseIterable, Identifiable {
     case command, option, control, shift
     var id: Int { carbonValue }
@@ -154,6 +175,7 @@ final class Settings {
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
+        static let clipPreviewStyle = "clipPreviewStyle"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -267,6 +289,14 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(showBarResizeHandle, forKey: Keys.showBarResizeHandle) }
     }
 
+    var clipPreviewStyle: ClipPreviewStyle {
+        didSet {
+            guard isLoaded else { return }
+            d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle)
+            if clipPreviewStyle != .inlinePesty { ClipboardStore.shared.inlinePreviewVisible = false }
+        }
+    }
+
     var showMenuBarIcon: Bool {
         didSet {
             guard isLoaded else { return }
@@ -305,6 +335,7 @@ final class Settings {
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
+            Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
@@ -330,6 +361,7 @@ final class Settings {
             .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
+        clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
