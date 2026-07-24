@@ -248,6 +248,13 @@ struct ClipCardView: View {
             }
         } else {
             Button("Paste") { AppController.shared.pasteItem(item) }
+            if item.text != nil || item.colorHex != nil {
+                Button {
+                    AppController.shared.pasteItem(item, asPlainText: true)
+                } label: {
+                    Label("Paste as Plain Text", systemImage: "text.alignleft")
+                }
+            }
             Button("Copy") { AppController.shared.copyItem(item) }
             Divider()
             if !store.pinboards.isEmpty {
