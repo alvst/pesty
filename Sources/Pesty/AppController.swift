@@ -326,6 +326,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    func addHistoryItemToPasteStack(_ item: ClipItem) {
+        guard pasteSequence.addHistoryItem(item) else {
+            copyToast.show(message: "Already in Paste Stack", symbol: "checkmark.circle.fill")
+            return
+        }
+
+        // Once added, the clip is represented by its Paste Stack deck instead
+        // of an individual Clipboard card.
+        if store.source == .history, store.searchText.isEmpty, store.selectedID == item.id {
+            store.selectFirst()
+        }
+        copyToast.show(message: "Added to Paste Stack", symbol: "rectangle.stack.badge.plus")
+    }
+
     func removePasteStackEntry(_ entry: PasteStackEntry) {
         pasteSequence.remove(entry)
     }
