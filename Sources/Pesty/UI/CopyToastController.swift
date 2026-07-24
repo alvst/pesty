@@ -18,16 +18,20 @@ final class CopyToastController {
         panel.level = .floating
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
-        panel.contentView = NSHostingView(rootView: CopyToastView())
+        panel.contentView = NSHostingView(
+            rootView: CopyToastView(message: "Copied to Clipboard", symbol: "checkmark.circle.fill")
+        )
     }
 
-    func show() {
+    func show(message: String = "Copied to Clipboard",
+              symbol: String = "checkmark.circle.fill") {
         dismissWorkItem?.cancel()
         let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
             ?? NSScreen.main
             ?? NSScreen.screens.first
         guard let screen else { return }
 
+        panel.contentView = NSHostingView(rootView: CopyToastView(message: message, symbol: symbol))
         let frame = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: frame.midX - panel.frame.width / 2, y: frame.minY + 34))
         panel.alphaValue = 0
@@ -54,12 +58,15 @@ final class CopyToastController {
 }
 
 private struct CopyToastView: View {
+    let message: String
+    let symbol: String
+
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Theme.selection)
-            Text("Copied to Clipboard")
+            Text(message)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
         }
