@@ -173,29 +173,83 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private var menu: some View {
-        Button("Paste") { AppController.shared.pasteItem(item) }
-        Button("Copy") { AppController.shared.copyItem(item) }
+        Button { AppController.shared.pasteItem(item) } label: {
+            Label(AppController.shared.pasteMenuTitle, systemImage: "doc.on.clipboard")
+        }
+        .keyboardShortcut(.return, modifiers: [])
+
+        Button { AppController.shared.pasteItem(item, asPlainText: true) } label: {
+            Label("Paste as Plain Text", systemImage: "text.alignleft")
+        }
+        .keyboardShortcut(.return, modifiers: .shift)
+        .disabled(item.plainText == nil)
+
+        Button { AppController.shared.copyItem(item) } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        .keyboardShortcut("c", modifiers: .command)
+
         Divider()
-        if !store.pinboards.isEmpty {
-            Menu("Save to Pinboard") {
+
+        Button { renameItem() } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+        .keyboardShortcut("r", modifiers: .command)
+
+        Button(role: .destructive) { store.delete(item) } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .keyboardShortcut(.delete, modifiers: [])
+
+        Divider()
+
+        Menu {
+            if store.pinboards.isEmpty {
+                Button("No Pinboards Yet") {}
+                    .disabled(true)
+            } else {
                 ForEach(store.pinboards) { b in
-                    Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+                    Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                        Label {
+                            Text(b.name)
+                        } icon: {
+                            Image(systemName: "circle.fill")
+                                .foregroundStyle(b.color)
+                        }
+                    }
                 }
             }
-        }
-        Button("Save to New Pinboard…") {
-            if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
-                let b = store.addPinboard(name: name)
-                store.saveToPinboard(item, boardID: b.id)
+            Divider()
+            Button { pinToNewBoard() } label: {
+                Label("Create Pinboard…", systemImage: "plus")
             }
+        } label: {
+            Label("Pin", systemImage: "pin")
         }
-        Button("Edit Title…") {
-            if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
-                                      defaultValue: item.customTitle ?? "") {
-                store.setTitle(t, for: item)
-            }
-        }
+
         Divider()
-        Button("Delete", role: .destructive) { store.delete(item) }
+
+        Button { AppController.shared.showPreview(for: item) } label: {
+            Label("Preview", systemImage: "eye")
+        }
+        .keyboardShortcut(.space, modifiers: [])
+
+        Button { AppController.shared.showSharePicker(for: item) } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func renameItem() {
+        if let title = TextPrompt.run(title: "Rename", message: "Enter a name",
+                                      defaultValue: item.displayTitle) {
+            store.setTitle(title, for: item)
+        }
+    }
+
+    private func pinToNewBoard() {
+        if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
+            let board = store.addPinboard(name: name)
+            store.saveToPinboard(item, boardID: board.id)
+        }
     }
 }

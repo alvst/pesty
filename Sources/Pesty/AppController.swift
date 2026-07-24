@@ -12,6 +12,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
+    private var previewWindow: NSWindow?
     private var keyMonitor: Any?
 
     private(set) var previousApp: NSRunningApplication?
@@ -131,7 +132,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func showBar() {
         let front = NSWorkspace.shared.frontmostApplication
-        if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
+        if let front, !isPesty(front) {
             previousApp = front
         }
         store.searchText = ""
@@ -152,19 +153,86 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func pasteSelected() {
         guard let item = store.selectedItem else { return }
-        hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        pasteItem(item)
     }
 
-    func pasteItem(_ item: ClipItem) {
+    /// The app that will receive a paste after the floating Pesty panel closes.
+    /// `previousApp` is captured before the panel activates, while
+    /// `lastActiveApp` covers menu-bar and reopen paths where it is unavailable.
+    private var pasteTarget: NSRunningApplication? {
+        [previousApp, lastActiveApp, NSWorkspace.shared.frontmostApplication]
+            .compactMap { $0 }
+            .first { !$0.isTerminated && !isPesty($0) }
+    }
+
+    var pasteMenuTitle: String {
+        guard let name = pasteTarget?.localizedName,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "Paste"
+        }
+        return "Paste to \(name)"
+    }
+
+    func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
+        let target = pasteTarget
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
     }
 
     func copyItem(_ item: ClipItem) {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+    }
+
+    func showPreview(for item: ClipItem) {
+        let host = NSHostingController(rootView: ClipPreviewView(item: item))
+        let title = "Preview — \(item.displayTitle)"
+
+        if let window = previewWindow {
+            window.title = title
+            window.contentViewController = host
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let previewWindow = NSWindow(contentViewController: host)
+        previewWindow.title = title
+        previewWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        previewWindow.setContentSize(NSSize(width: 540, height: 400))
+        previewWindow.minSize = NSSize(width: 400, height: 260)
+        previewWindow.isReleasedWhenClosed = false
+        previewWindow.center()
+        self.previewWindow = previewWindow
+        previewWindow.makeKeyAndOrderFront(nil)
+    }
+
+    func showSharePicker(for item: ClipItem) {
+        let items = shareItems(for: item)
+        guard !items.isEmpty,
+              let view = barController?.window?.contentView ?? NSApp.keyWindow?.contentView else { return }
+
+        let picker = NSSharingServicePicker(items: items)
+        let anchor = NSRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        picker.show(relativeTo: anchor, of: view, preferredEdge: .maxY)
+    }
+
+    private func shareItems(for item: ClipItem) -> [Any] {
+        switch item.type {
+        case .image:
+            return store.loadImage(for: item).map { [$0] } ?? []
+        case .file:
+            let urls = item.fileURLs.compactMap(URL.init(string:))
+            return urls.isEmpty ? item.plainText.map { [$0 as NSString] } ?? [] : urls
+        case .color, .text, .richText, .link:
+            return item.plainText.map { [$0 as NSString] } ?? []
+        }
+    }
+
+    private func isPesty(_ app: NSRunningApplication) -> Bool {
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return true }
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        return app.bundleIdentifier == bundleID
     }
 
     func showSettings() {
