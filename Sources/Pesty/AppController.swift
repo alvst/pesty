@@ -222,13 +222,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_RightArrow, kVK_DownArrow:
             store.moveSelection(by: 1); return nil
         case kVK_Delete:
-            if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
+            if cmd { store.deleteSelected(); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
             return nil
         case kVK_ForwardDelete:
-            if let sel = store.selectedItem { store.delete(sel) }
+            store.deleteSelected()
             return nil
         default:
             break
