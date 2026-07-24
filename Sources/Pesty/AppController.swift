@@ -167,6 +167,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         hideBar()
     }
 
+    func beginDragOut() {
+        // Let AppKit establish the dragging session before taking the source
+        // panel offscreen; the drag can then continue naturally into another app.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.hideBar()
+        }
+    }
+
     func showSettings() {
         NSApp.activate(ignoringOtherApps: true)
         if let win = settingsWindow {
