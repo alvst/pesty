@@ -198,6 +198,28 @@ final class PasteSequence {
         persistActiveStack()
     }
 
+    /// Reorders the still-pending portion of the active Paste Stack. Pasted
+    /// entries remain grouped at the end of the deck so progress stays clear
+    /// and the next entry to paste is always the first pending one.
+    func movePendingEntry(_ entryID: UUID, before destinationID: UUID? = nil) {
+        var pendingEntries = entries.filter { !$0.isPasted }
+        guard let sourceIndex = pendingEntries.firstIndex(where: { $0.id == entryID }) else { return }
+
+        let entry = pendingEntries.remove(at: sourceIndex)
+        if let destinationID {
+            guard let destinationIndex = pendingEntries.firstIndex(where: { $0.id == destinationID }) else {
+                return
+            }
+            pendingEntries.insert(entry, at: destinationIndex)
+        } else {
+            pendingEntries.append(entry)
+        }
+
+        entries = pendingEntries + entries.filter(\.isPasted)
+        selectedEntryID = entryID
+        persistActiveStack()
+    }
+
     func resetProgress() {
         for index in entries.indices { entries[index].isPasted = false }
         isCollecting = false
