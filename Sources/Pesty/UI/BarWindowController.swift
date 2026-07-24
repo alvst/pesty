@@ -90,6 +90,21 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         })
     }
 
+    /// Updates the open panel immediately so dragging the resize handle feels
+    /// attached to the bar instead of merely changing a future preference.
+    func resize(to height: CGFloat) {
+        guard let panel = window, panel.isVisible else { return }
+        guard let screen = panel.screen
+                ?? NSScreen.screens.first(where: { $0.frame.intersects(panel.frame) })
+                ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let frame = NSRect(x: visible.minX,
+                           y: visible.minY,
+                           width: visible.width,
+                           height: height)
+        panel.setFrame(frame, display: true)
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         guard Settings.shared.hideOnClickOutside,
               !isPresenting,

@@ -203,6 +203,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.hide()
     }
 
+    func resizeVisibleBar(to height: Double) {
+        barController?.resize(to: CGFloat(height))
+    }
+
     func pasteSelected(asPlainText: Bool = false) {
         guard let item = store.selectedItem else { return }
         hideBar()
