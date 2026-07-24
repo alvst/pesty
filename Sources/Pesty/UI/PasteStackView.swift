@@ -1,7 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PasteStackView: View {
     @Bindable private var stack = PasteSequence.shared
+    @State private var draggedEntryID: UUID?
+    @State private var dropTargetEntryID: UUID?
+    @State private var isDropTargetAtEnd = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,9 +87,28 @@ struct PasteStackView: View {
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 7) {
-                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: false)
+                            .modifier(PasteStackEntryReorderModifier(
+                                entry: entry,
+                                draggedEntryID: $draggedEntryID,
+                                dropTargetEntryID: $dropTargetEntryID,
+                                isDropTargetAtEnd: $isDropTargetAtEnd
+                            ))
+                    }
+                    if stack.pendingCount > 1 {
+                        PasteStackEntryEndDropTarget(
+                            draggedEntryID: $draggedEntryID,
+                            dropTargetEntryID: $dropTargetEntryID,
+                            isDropTargeted: $isDropTargetAtEnd
+                        )
+                    }
+                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: stack.pendingCount + index + 1,
                                            selected: stack.selectedEntryID == entry.id,
                                            showsPasteAction: false)
                     }
@@ -145,6 +168,13 @@ private struct PasteStackEntryRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .frame(width: 14)
+                .opacity(entry.isPasted ? 0 : 1)
+                .accessibilityHidden(entry.isPasted)
+                .help(entry.isPasted ? "Pasted clip" : "Drag to reorder Paste Stack")
             Text("\(index)")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(entry.item.type.accent)
@@ -247,6 +277,9 @@ private struct PasteStackEntryRow: View {
 /// turning its entries into ordinary clipboard-history cards.
 struct PasteStackContentView: View {
     private var stack: PasteSequence { AppController.shared.pasteSequence }
+    @State private var draggedEntryID: UUID?
+    @State private var dropTargetEntryID: UUID?
+    @State private var isDropTargetAtEnd = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -352,9 +385,28 @@ struct PasteStackContentView: View {
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 8) {
-                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: true)
+                            .modifier(PasteStackEntryReorderModifier(
+                                entry: entry,
+                                draggedEntryID: $draggedEntryID,
+                                dropTargetEntryID: $dropTargetEntryID,
+                                isDropTargetAtEnd: $isDropTargetAtEnd
+                            ))
+                    }
+                    if stack.pendingCount > 1 {
+                        PasteStackEntryEndDropTarget(
+                            draggedEntryID: $draggedEntryID,
+                            dropTargetEntryID: $dropTargetEntryID,
+                            isDropTargeted: $isDropTargetAtEnd
+                        )
+                    }
+                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: stack.pendingCount + index + 1,
                                            selected: stack.selectedEntryID == entry.id,
                                            showsPasteAction: true)
                     }
@@ -378,5 +430,111 @@ struct PasteStackContentView: View {
     private func stackLabel(for saved: SavedPasteStack) -> String {
         let state = saved.pendingCount > 0 ? "\(saved.pendingCount) ready" : "completed"
         return "\(saved.createdAt.clipRelativeLong) · \(state)"
+    }
+}
+
+private enum PasteStackEntryDrag {
+    static let entryType = UTType(exportedAs: "com.greycorelabs.pesty.paste-stack-entry")
+
+    static func provider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(
+            forTypeIdentifier: entryType.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            completion(id.uuidString.data(using: .utf8), nil)
+            return nil
+        }
+        return provider
+    }
+}
+
+private struct PasteStackEntryReorderModifier: ViewModifier {
+    let entry: PasteStackEntry
+    @Binding var draggedEntryID: UUID?
+    @Binding var dropTargetEntryID: UUID?
+    @Binding var isDropTargetAtEnd: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if entry.isPasted {
+            content
+        } else {
+            content
+                .onDrag {
+                    draggedEntryID = entry.id
+                    return PasteStackEntryDrag.provider(for: entry.id)
+                }
+                .onDrop(of: [PasteStackEntryDrag.entryType], isTargeted: isDropTarget) { _ in
+                    guard let draggedEntryID, draggedEntryID != entry.id else {
+                        clearDragState()
+                        return false
+                    }
+                    PasteSequence.shared.movePendingEntry(draggedEntryID, before: entry.id)
+                    clearDragState()
+                    return true
+                }
+                .overlay(alignment: .top) {
+                    if dropTargetEntryID == entry.id, draggedEntryID != entry.id {
+                        Capsule()
+                            .fill(Theme.selection)
+                            .frame(height: 3)
+                            .padding(.horizontal, 10)
+                            .offset(y: -3)
+                    }
+                }
+        }
+    }
+
+    private var isDropTarget: Binding<Bool> {
+        Binding(
+            get: { dropTargetEntryID == entry.id },
+            set: { isTargeted in
+                if isTargeted {
+                    dropTargetEntryID = entry.id
+                    isDropTargetAtEnd = false
+                } else if dropTargetEntryID == entry.id {
+                    dropTargetEntryID = nil
+                }
+            }
+        )
+    }
+
+    private func clearDragState() {
+        draggedEntryID = nil
+        dropTargetEntryID = nil
+        isDropTargetAtEnd = false
+    }
+}
+
+private struct PasteStackEntryEndDropTarget: View {
+    @Binding var draggedEntryID: UUID?
+    @Binding var dropTargetEntryID: UUID?
+    @Binding var isDropTargeted: Bool
+
+    var body: some View {
+        Capsule()
+            .fill(isDropTargeted ? Theme.selection : .clear)
+            .frame(height: isDropTargeted ? 3 : 10)
+            .padding(.horizontal, 10)
+            .contentShape(Rectangle())
+            .onDrop(of: [PasteStackEntryDrag.entryType], isTargeted: $isDropTargeted) { _ in
+                guard let draggedEntryID else {
+                    clearDragState()
+                    return false
+                }
+                PasteSequence.shared.movePendingEntry(draggedEntryID)
+                clearDragState()
+                return true
+            }
+            .onChange(of: isDropTargeted) { _, isTargeted in
+                if isTargeted { dropTargetEntryID = nil }
+            }
+    }
+
+    private func clearDragState() {
+        draggedEntryID = nil
+        dropTargetEntryID = nil
+        isDropTargeted = false
     }
 }
