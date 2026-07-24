@@ -17,6 +17,9 @@ final class ClipboardStore {
     var source: BarSource = .history
     var searchText: String = ""
     var selectedID: UUID?
+    /// Lets the strip restore its opening position without animating from the
+    /// card that happened to be selected when Pesty was last hidden.
+    var initialScrollTargetID: UUID?
 
     var historyLimit: Int {
         get { Settings.shared.historyLimit }
@@ -171,6 +174,12 @@ final class ClipboardStore {
     }
 
     func selectFirst() { selectedID = visibleItems.first?.id }
+
+    func prepareForBarPresentation() {
+        let firstID = visibleItems.first?.id
+        initialScrollTargetID = firstID
+        selectedID = firstID
+    }
 
     func moveSelection(by delta: Int) {
         let items = visibleItems

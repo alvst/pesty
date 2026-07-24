@@ -136,7 +136,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
-        store.selectFirst()
+        store.prepareForBarPresentation()
 
         if barController == nil {
             barController = BarWindowController()
