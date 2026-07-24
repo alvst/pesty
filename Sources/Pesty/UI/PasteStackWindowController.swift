@@ -48,14 +48,8 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        // A collecting stack deliberately lives above another app while the
-        // user copies clips there, so never dismiss it merely for losing focus.
-        guard !AppController.shared.pasteSequence.isCollecting else { return }
-        DispatchQueue.main.async {
-            guard Settings.shared.hideOnClickOutside,
-                  !(NSApp.keyWindow is BarPanel) else { return }
-            AppController.shared.hideBar()
-            AppController.shared.hidePasteStack()
-        }
+        // The collector is deliberately persistent: after a paste it shows
+        // which clip is next, even though focus has returned to the target app.
+        // The user closes it explicitly with its close button.
     }
 }
