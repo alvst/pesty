@@ -13,6 +13,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var keyMonitor: Any?
+    private let copyToast = CopyToastController()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -165,6 +166,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+        copyToast.show()
+    }
+
+    func copySelected() {
+        guard let item = store.selectedItem else { return }
+        let change = PasteService.copy(item)
+        monitor.suppressUntilChangeCount = change
+        hideBar()
+        copyToast.show()
     }
 
     func showSettings() {
@@ -217,6 +227,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
             pasteSelected(); return nil
+        case kVK_ANSI_C:
+            if cmd {
+                copySelected()
+                return nil
+            }
         case kVK_LeftArrow, kVK_UpArrow:
             store.moveSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:

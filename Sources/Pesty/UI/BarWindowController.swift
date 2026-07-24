@@ -1,9 +1,20 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 
 final class BarPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // AppKit handles Command-key equivalents before SwiftUI receives key-down
+        // events, so copy at the panel level as well as in AppController's monitor.
+        if event.keyCode == kVK_ANSI_C, event.modifierFlags.contains(.command) {
+            AppController.shared.copySelected()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
 @MainActor
