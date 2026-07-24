@@ -12,6 +12,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
+    private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
@@ -97,15 +98,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pesty")
-            button.image?.isTemplate = true
-        }
+        updateStatusItemIcon(item)
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Pesty   \(Settings.shared.hotkeyDisplay)",
                      action: #selector(menuOpen), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",").target = self
+        let pause = menu.addItem(withTitle: "Pause Pesty", action: #selector(menuTogglePause), keyEquivalent: "")
+        pause.target = self
+        pauseMenuItem = pause
         menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "").target = self
         menu.addItem(.separator())
         let about = menu.addItem(withTitle: "About Pesty", action: #selector(menuAbout), keyEquivalent: "")
@@ -127,8 +128,22 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func menuOpen() { showBar() }
     @objc private func menuSettings() { showSettings() }
     @objc private func menuClear() { store.clearHistory() }
+    @objc private func menuTogglePause() { togglePestyPause() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
     @objc private func menuAbout() { showAbout() }
+
+    func togglePestyPause() {
+        monitor.togglePause()
+        pauseMenuItem?.title = monitor.isPaused ? "Resume Pesty" : "Pause Pesty"
+        if let item = statusItem { updateStatusItemIcon(item) }
+    }
+
+    private func updateStatusItemIcon(_ item: NSStatusItem) {
+        item.button?.image = NSImage(
+            systemSymbolName: monitor.isPaused ? "pause.circle" : "doc.on.clipboard",
+            accessibilityDescription: "Pesty")
+        item.button?.image?.isTemplate = true
+    }
 
     func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
@@ -388,6 +403,27 @@ final class AppController: NSObject, NSApplicationDelegate {
         win.makeKeyAndOrderFront(nil)
     }
 
+    /// Handles commands that only apply while the Paste Bar owns keyboard focus.
+    /// The panel's key-equivalent path calls this before SwiftUI receives command keys.
+    func handleBarCommandShortcut(_ event: NSEvent) -> Bool {
+        guard barController?.window?.isKeyWindow == true else { return false }
+
+        let flags = event.modifierFlags
+        guard flags.contains(.command), flags.contains(.shift),
+              !flags.contains(.control), !flags.contains(.option) else { return false }
+
+        switch Int(event.keyCode) {
+        case kVK_ANSI_S:
+            showSettings()
+            return true
+        case kVK_ANSI_P:
+            togglePestyPause()
+            return true
+        default:
+            return false
+        }
+    }
+
     private func startKeyMonitor() {
         stopKeyMonitor()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -401,6 +437,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        if handleBarCommandShortcut(event) { return nil }
+
         let code = Int(event.keyCode)
         let flags = event.modifierFlags
         let cmd = flags.contains(.command)

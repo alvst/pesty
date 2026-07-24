@@ -8,6 +8,7 @@ final class ClipboardMonitor {
     private var timer: Timer?
 
     var suppressUntilChangeCount: Int = -1
+    private(set) var isPaused = false
 
     init() {
         lastChangeCount = pasteboard.changeCount
@@ -24,10 +25,13 @@ final class ClipboardMonitor {
 
     func stop() { timer?.invalidate(); timer = nil }
 
+    func togglePause() { isPaused.toggle() }
+
     private func poll() {
         let current = pasteboard.changeCount
         guard current != lastChangeCount else { return }
         lastChangeCount = current
+        guard !isPaused else { return }
         if current == suppressUntilChangeCount { return }
         guard let item = makeItem() else { return }
         let storedItem = ClipboardStore.shared.addCaptured(item)
