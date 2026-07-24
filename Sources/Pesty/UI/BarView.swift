@@ -179,6 +179,13 @@ struct BarView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Theme.cardSpacing) {
+                    // This is a real scroll target, rather than an ID applied
+                    // to the HStack. Scrolling it to the leading edge leaves
+                    // one card-spacing of room before the first card.
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(Self.stripStartID)
+
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
                                      index: index,
@@ -189,10 +196,9 @@ struct BarView: View {
                                 removal: .opacity))
                     }
                 }
-                .padding(.horizontal, 28)
+                .padding(.trailing, 28)
                 .padding(.top, 16)
                 .padding(.bottom, 26)
-                .id(Self.stripStartID)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
             }
             .scrollClipDisabled()
@@ -203,8 +209,8 @@ struct BarView: View {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        // Scroll to the padded strip itself, rather than the
-                        // first card. That preserves room for its focus ring.
+                        // The leading spacer preserves room for the first
+                        // card's focus ring when reopening Pesty.
                         proxy.scrollTo(Self.stripStartID, anchor: .leading)
                     }
                     return
