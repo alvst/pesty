@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PinboardTabs: View {
     @Bindable private var store = ClipboardStore.shared
+    private var stack: PasteSequence { AppController.shared.pasteSequence }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -11,6 +12,14 @@ struct PinboardTabs: View {
                      icon: "clock",
                      selected: store.source == .history) {
                     store.source = .history; store.selectFirst()
+                }
+
+                pill(title: "Paste Stack",
+                     dot: nil,
+                     icon: "rectangle.stack.fill",
+                     badge: stack.pendingCount,
+                     selected: store.source == .pasteStack) {
+                    AppController.shared.showPasteStackTab()
                 }
 
                 ForEach(store.pinboards) { board in
@@ -41,6 +50,7 @@ struct PinboardTabs: View {
     }
 
     private func pill(title: String, dot: Color?, icon: String? = nil,
+                      badge: Int? = nil,
                       selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
@@ -54,6 +64,14 @@ struct PinboardTabs: View {
                 Text(title)
                     .font(.system(size: 12.5, weight: .medium))
                     .lineLimit(1)
+                if let badge, badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(selected ? .white : Theme.selection)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(selected ? Theme.selection : Theme.selection.opacity(0.14), in: Capsule())
+                }
             }
             .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 12)

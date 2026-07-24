@@ -133,14 +133,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
-    func showBar() {
+    func showBar(source requestedSource: BarSource? = nil) {
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
         }
         store.searchText = ""
-        store.source = .history
-        store.selectFirst()
+        store.source = requestedSource ?? .history
+        if store.source != .pasteStack { store.selectFirst() }
 
         if barController == nil {
             barController = BarWindowController()
@@ -190,32 +190,87 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteStackController?.show()
     }
 
+    func hidePasteStack() {
+        pasteStackController?.hide()
+    }
+
+    func showPasteStackTab() {
+        store.searchText = ""
+        store.source = .pasteStack
+        pasteSequence.selectFirst()
+        pasteStackController?.hide()
+        if barController?.window?.isVisible != true {
+            showBar(source: .pasteStack)
+        }
+    }
+
     func cancelPasteSequence() {
         pasteSequence.cancel()
         pasteStackController?.hide()
         pasteStackTargetApp = nil
     }
 
+    func newPasteStack() {
+        pasteStackTargetApp = previousApp ?? lastActiveApp
+        pasteSequence.newStack()
+        showPasteStack()
+        hideBar()
+
+        let target = pasteStackTargetApp
+        DispatchQueue.main.async {
+            target?.activate(options: [])
+        }
+    }
+
+    func pausePasteSequence() {
+        pasteSequence.pause()
+    }
+
+    func clearPasteStack() {
+        cancelPasteSequence()
+    }
+
     func capturePasteStackItem(_ item: ClipItem) {
         _ = pasteSequence.addIfNeeded(item)
     }
 
-    func pasteNextInSequence() {
-        guard pasteSequence.hasEntries else { return }
+    func removePasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.remove(entry)
+    }
 
+    func reAddPasteStackEntry(_ entry: PasteStackEntry) {
+        pasteSequence.reAdd(entry)
+    }
+
+    func resetPasteStackProgress() {
+        pasteSequence.resetProgress()
+    }
+
+    func pasteNextInSequence() {
         #if !MAS
         guard !Settings.shared.pasteDirectly || PasteService.ensureAccessibility(prompt: true) else { return }
         #endif
 
         guard let entry = pasteSequence.next() else { return }
+        performPasteStackEntry(entry)
+    }
+
+    func pasteStackEntry(_ entry: PasteStackEntry) {
+        guard let entry = pasteSequence.next(entryID: entry.id) else { return }
+        performPasteStackEntry(entry)
+    }
+
+    func pasteSelectedStackEntry() {
+        guard let entry = pasteSequence.selectedEntry else { return }
+        pasteStackEntry(entry)
+    }
+
+    private func performPasteStackEntry(_ entry: PasteStackEntry) {
+        hideBar()
         PasteService.paste(entry.item,
                            into: pasteStackTargetApp ?? previousApp,
                            monitor: monitor,
                            imageOverride: entry.imagePreview)
-        if !pasteSequence.hasEntries {
-            pasteStackController?.hide()
-            pasteStackTargetApp = nil
-        }
     }
 
     func showSettings() {
@@ -255,7 +310,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         let ctrl = flags.contains(.control)
         let opt = flags.contains(.option)
 
-        if cmd, let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...9).contains(n) {
+        if store.source != .pasteStack,
+           cmd,
+           let chars = event.charactersIgnoringModifiers,
+           let n = Int(chars),
+           (1...9).contains(n) {
             let items = store.visibleItems
             if n <= items.count { pasteItem(items[n - 1]) }
             return nil
@@ -267,25 +326,46 @@ final class AppController: NSObject, NSApplicationDelegate {
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
+            if store.source == .pasteStack {
+                pasteSelectedStackEntry()
+                return nil
+            }
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
+            if store.source == .pasteStack {
+                pasteSequence.moveSelection(by: -1)
+                return nil
+            }
             store.moveSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
+            if store.source == .pasteStack {
+                pasteSequence.moveSelection(by: 1)
+                return nil
+            }
             store.moveSelection(by: 1); return nil
         case kVK_Delete:
+            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+                removePasteStackEntry(entry)
+                return nil
+            }
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
             return nil
         case kVK_ForwardDelete:
+            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+                removePasteStackEntry(entry)
+                return nil
+            }
             if let sel = store.selectedItem { store.delete(sel) }
             return nil
         default:
             break
         }
 
-        if !cmd && !ctrl && !opt,
+        if store.source != .pasteStack,
+           !cmd && !ctrl && !opt,
            let chars = event.characters, chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 32, scalar.value != 127 {

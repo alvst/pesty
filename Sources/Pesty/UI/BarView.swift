@@ -3,6 +3,11 @@ import SwiftUI
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    private var sequence: PasteSequence { AppController.shared.pasteSequence }
+
+    private var showsStackDeck: Bool {
+        store.source == .history && store.searchText.isEmpty && sequence.hasEntries
+    }
 
     var body: some View {
         ZStack {
@@ -12,7 +17,11 @@ struct BarView: View {
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
                 topBar
-                strip
+                if store.source == .pasteStack {
+                    PasteStackContentView()
+                } else {
+                    strip
+                }
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
@@ -22,7 +31,7 @@ struct BarView: View {
     private var topBar: some View {
         HStack(spacing: 14) {
             syncButton
-            searchIndicator
+            if store.source != .pasteStack { searchIndicator }
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
@@ -104,6 +113,11 @@ struct BarView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Theme.cardSpacing) {
+                    if showsStackDeck {
+                        PasteStackDeckCard()
+                            .id("pesty.paste-stack.deck")
+                    }
+
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
                                      index: index,
@@ -125,7 +139,9 @@ struct BarView: View {
                     proxy.scrollTo(id, anchor: .center)
                 }
             }
-            .overlay { if store.visibleItems.isEmpty { emptyState } }
+            .overlay {
+                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
+            }
         }
         .frame(maxHeight: .infinity)
     }

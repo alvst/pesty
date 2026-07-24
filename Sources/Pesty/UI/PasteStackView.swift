@@ -32,13 +32,33 @@ struct PasteStackView: View {
             }
             Spacer()
             Button {
-                AppController.shared.cancelPasteSequence()
+                AppController.shared.showPasteStackTab()
+            } label: {
+                Image(systemName: "rectangle.stack.fill")
+                    .foregroundStyle(Theme.selection)
+            }
+            .buttonStyle(.plain)
+            .help("Open Paste Stack in Pesty")
+            Button {
+                if stack.isCollecting {
+                    AppController.shared.pausePasteSequence()
+                } else {
+                    AppController.shared.beginPasteSequence()
+                }
+            } label: {
+                Image(systemName: stack.isCollecting ? "pause.circle.fill" : "play.circle.fill")
+                    .foregroundStyle(stack.isCollecting ? .orange : Theme.selection)
+            }
+            .buttonStyle(.plain)
+            .help(stack.isCollecting ? "Pause collecting clips" : "Resume collecting clips")
+            Button {
+                AppController.shared.hidePasteStack()
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Cancel Paste Stack")
+            .help("Hide Paste Stack")
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 12)
@@ -63,8 +83,11 @@ struct PasteStackView: View {
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 7) {
-                    ForEach(Array(stack.entries.enumerated()), id: \.element.id) { index, entry in
-                        PasteStackEntryRow(entry: entry, index: index + 1)
+                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: false)
                     }
                 }
                 .padding(12)
@@ -81,12 +104,19 @@ struct PasteStackView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(!stack.hasEntries)
+            .disabled(stack.pendingCount == 0)
 
             Text(Settings.shared.sequenceHotkeyDisplay)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
             Spacer()
+            if stack.hasEntries {
+                Button { AppController.shared.clearPasteStack() } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Clear Paste Stack")
+            }
         }
         .padding(.horizontal, 15)
         .frame(height: 52)
@@ -96,13 +126,18 @@ struct PasteStackView: View {
         if stack.isCollecting {
             return stack.hasEntries ? "\(stack.pendingCount) collected - copy more" : "Copy clips in another app"
         }
-        return stack.hasEntries ? "\(stack.pendingCount) ready to paste" : "Stack complete"
+        if stack.pendingCount > 0 { return "\(stack.pendingCount) ready to paste" }
+        return stack.hasEntries ? "Stack complete" : "Collection paused"
     }
 }
 
 private struct PasteStackEntryRow: View {
     let entry: PasteStackEntry
     let index: Int
+    let selected: Bool
+    let showsPasteAction: Bool
+
+    private var stack: PasteSequence { AppController.shared.pasteSequence }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -120,11 +155,41 @@ private struct PasteStackEntryRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            sourceAppIcon
+            VStack(alignment: .trailing, spacing: 6) {
+                if showsPasteAction {
+                    if entry.isPasted {
+                        Button("Re-add") { AppController.shared.reAddPasteStackEntry(entry) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                    } else {
+                        Button("Paste") { AppController.shared.pasteStackEntry(entry) }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.mini)
+                    }
+                }
+                HStack(spacing: 7) {
+                    sourceAppIcon
+                    Button { AppController.shared.removePasteStackEntry(entry) } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Remove from Paste Stack")
+                }
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(selected ? Theme.selection : .clear, lineWidth: selected ? 2 : 0)
+        }
+        .opacity(entry.isPasted ? 0.52 : 1)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture { stack.select(entry) }
+        .help(entry.isPasted ? "Pasted clip" : "Select this stack clip")
     }
 
     @ViewBuilder
@@ -165,5 +230,115 @@ private struct PasteStackEntryRow: View {
             .frame(width: 19, height: 19)
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             .help(entry.item.sourceAppName ?? "Source app")
+    }
+
+    private var rowBackground: Color {
+        selected ? Theme.selection.opacity(0.13) : Color.white.opacity(0.10)
+    }
+}
+
+/// The full Paste Stack tab in Pesty. It exposes the active deck without
+/// turning its entries into ordinary clipboard-history cards.
+struct PasteStackContentView: View {
+    private var stack: PasteSequence { AppController.shared.pasteSequence }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            entries
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var header: some View {
+        HStack(spacing: 9) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Paste Stack")
+                    .font(.system(size: 16, weight: .bold))
+                Text(summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer()
+
+            Button {
+                if stack.isCollecting {
+                    AppController.shared.pausePasteSequence()
+                } else {
+                    AppController.shared.beginPasteSequence()
+                }
+            } label: {
+                Label(stack.isCollecting ? "Pause" : "Collect",
+                      systemImage: stack.isCollecting ? "pause.fill" : "play.fill")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(stack.isCollecting ? .orange : Theme.selection)
+
+            if stack.pendingCount > 0 {
+                Button("Paste Next") { AppController.shared.pasteNextInSequence() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+
+            if stack.pastedCount > 0 {
+                Button("Reset") { AppController.shared.resetPasteStackProgress() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Make every Paste Stack clip ready again")
+            }
+
+            Button("New Stack") { AppController.shared.newPasteStack() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+            if stack.hasEntries {
+                Button(role: .destructive) { AppController.shared.clearPasteStack() } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Clear Paste Stack")
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 13)
+    }
+
+    @ViewBuilder
+    private var entries: some View {
+        if stack.entries.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: "rectangle.stack.badge.plus")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(Theme.selection)
+                Text("Start collecting clips")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Choose Collect, then copy text, images, or files in any app.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 8) {
+                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: true)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private var summary: String {
+        if stack.isCollecting { return "Collecting clips from other apps" }
+        if stack.pendingCount > 0 { return "\(stack.pendingCount) clips ready to paste" }
+        return stack.hasEntries ? "All clips pasted" : "Collection paused"
     }
 }
