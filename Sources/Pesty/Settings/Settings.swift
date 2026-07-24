@@ -143,6 +143,7 @@ final class Settings {
         static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
         static let stackPasteInReverse = "stackPasteInReverse"
         static let keepPastedStackItems = "keepPastedStackItems"
+        static let pasteStacksFollowHistory = "pasteStacksFollowHistory"
         static let quickPasteModifier = "quickPasteModifier"
         static let plainTextModifier = "plainTextModifier"
         static let launchAtLogin = "launchAtLogin"
@@ -211,6 +212,12 @@ final class Settings {
 
     var keepPastedStackItems: Bool {
         didSet { guard isLoaded else { return }; d.set(keepPastedStackItems, forKey: Keys.keepPastedStackItems) }
+    }
+
+    /// When enabled, removing clipboard history also removes those clips from
+    /// saved Paste Stacks. The default keeps stacks until the user deletes them.
+    var pasteStacksFollowHistory: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStacksFollowHistory, forKey: Keys.pasteStacksFollowHistory) }
     }
 
     var quickPasteModifier: Int {
@@ -287,6 +294,7 @@ final class Settings {
             Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
             Keys.stackPasteInReverse: false,
             Keys.keepPastedStackItems: true,
+            Keys.pasteStacksFollowHistory: false,
             Keys.quickPasteModifier: ShortcutModifier.command.carbonValue,
             Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
             Keys.launchAtLogin: false,
@@ -310,6 +318,7 @@ final class Settings {
         sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         stackPasteInReverse = d.bool(forKey: Keys.stackPasteInReverse)
         keepPastedStackItems = d.bool(forKey: Keys.keepPastedStackItems)
+        pasteStacksFollowHistory = d.bool(forKey: Keys.pasteStacksFollowHistory)
         quickPasteModifier = d.integer(forKey: Keys.quickPasteModifier)
         plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)

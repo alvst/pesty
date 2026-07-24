@@ -194,6 +194,22 @@ struct PasteStackContentView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textSecondary)
                 }
+                if savedStacks.count > 1 {
+                    Menu {
+                        ForEach(savedStacks) { saved in
+                            Button(stackLabel(for: saved)) {
+                                stack.selectStack(saved.id)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .help("Choose a saved Paste Stack")
+                }
                 Spacer()
                 Button {
                     settings.stackPasteInReverse.toggle()
@@ -311,6 +327,15 @@ struct PasteStackContentView: View {
         if stack.isCollecting { return "Collecting external copies" }
         if stack.pendingCount > 0 { return "\(stack.pendingCount) clips ready to paste" }
         return stack.hasEntries ? "All clips pasted" : "Collection paused"
+    }
+
+    private var savedStacks: [SavedPasteStack] {
+        stack.savedStacks.filter(\.hasEntries)
+    }
+
+    private func stackLabel(for saved: SavedPasteStack) -> String {
+        let state = saved.pendingCount > 0 ? "\(saved.pendingCount) ready" : "completed"
+        return "\(saved.createdAt.clipRelativeLong) · \(state)"
     }
 }
 

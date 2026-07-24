@@ -8,7 +8,7 @@ struct BarView: View {
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
     private var showsStackDeck: Bool {
-        store.source == .history && store.searchText.isEmpty && sequence.hasEntries
+        store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
     }
     @State private var previewVisible = false
     @State private var resizeStartHeight: Double?
@@ -79,7 +79,7 @@ struct BarView: View {
     }
 
     private var startPasteStackButton: some View {
-        Button { AppController.shared.beginPasteSequence() } label: {
+        Button { AppController.shared.newPasteStack() } label: {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.selection)
@@ -188,8 +188,12 @@ struct BarView: View {
                         .id(Self.stripStartID)
 
                     if showsStackDeck {
-                        PasteStackDeckCard()
-                            .id("pesty.paste-stack.deck")
+                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                            PasteStackDeckCard(stack: stack,
+                                               isActive: stack.id == sequence.activeStackID,
+                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+                                .id(stack.id)
+                        }
                     }
 
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
