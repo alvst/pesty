@@ -442,6 +442,28 @@ final class AppController: NSObject, NSApplicationDelegate {
         win.makeKeyAndOrderFront(nil)
     }
 
+    /// Handles the small set of commands that are only meaningful while the
+    /// Paste Bar is active. Keeping this separate lets both the local event
+    /// monitor and NSPanel key-equivalent path consume the same shortcuts.
+    func handleBarCommandShortcut(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags
+        guard flags.contains(.command),
+              flags.contains(.shift),
+              !flags.contains(.option),
+              !flags.contains(.control) else { return false }
+
+        switch Int(event.keyCode) {
+        case kVK_ANSI_S:
+            showSettings()
+            return true
+        case kVK_ANSI_P:
+            togglePestyPause()
+            return true
+        default:
+            return false
+        }
+    }
+
     private func startKeyMonitor() {
         stopKeyMonitor()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -455,6 +477,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        if handleBarCommandShortcut(event) { return nil }
+
         let code = Int(event.keyCode)
         let flags = event.modifierFlags
         let cmd = flags.contains(.command)
