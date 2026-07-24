@@ -195,7 +195,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
-        win.setContentSize(NSSize(width: 680, height: 560))
+        win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
         win.isReleasedWhenClosed = false
         settingsWindow = win
