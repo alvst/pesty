@@ -156,13 +156,20 @@ private struct GeneralSettings: View {
             Section("Behavior") {
                 #if !MAS
                 Toggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
+                    .toggleStyle(.switch)
                 #endif
                 Toggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
+                    .toggleStyle(.switch)
                 Toggle("Play sound on paste", isOn: $settings.playSound)
+                    .toggleStyle(.switch)
                 Toggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
+                    .toggleStyle(.switch)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                    .toggleStyle(.switch)
                 Toggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
+                    .toggleStyle(.switch)
                 Toggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
+                    .toggleStyle(.switch)
                 VStack(alignment: .leading) {
                     LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                     Slider(value: $settings.barHeight, in: 300...720, step: 10)
@@ -189,6 +196,7 @@ private struct GeneralSettings: View {
                 Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
                     get: { settings.iCloudSync },
                     set: { _ in AppController.shared.toggleICloudSync() }))
+                    .toggleStyle(.switch)
                 Text(ClipboardStore.shared.iCloudAvailable
                      ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
                      : "Sign in to iCloud and enable iCloud Drive to use sync.")
