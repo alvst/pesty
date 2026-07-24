@@ -47,7 +47,9 @@ struct BarView: View {
 
     private var topBar: some View {
         HStack(spacing: 14) {
-            syncButton
+            if settings.iCloudSync {
+                syncButton
+            }
             if store.source != .pasteStack { searchIndicator }
             PinboardTabs()
                 .layoutPriority(1)
