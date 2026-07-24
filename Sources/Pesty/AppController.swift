@@ -322,11 +322,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteNextInSequence() {
+        guard ensureStackCanPaste() else { return }
         guard let entry = pasteSequence.next() else { return }
         performPasteStackEntry(entry)
     }
 
     func pasteStackEntry(_ entry: PasteStackEntry) {
+        guard ensureStackCanPaste() else { return }
         guard let entry = pasteSequence.next(entryID: entry.id) else { return }
         performPasteStackEntry(entry)
     }
@@ -337,11 +339,42 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func performPasteStackEntry(_ entry: PasteStackEntry) {
+        // A global Paste Stack shortcut can fire while Pesty's floating
+        // collector is key. Resolve the real foreground/last-used app at the
+        // moment of the shortcut instead of relying on the app that first
+        // opened the bar.
+        let target = pasteTargetApp()
         hideBar()
         PasteService.paste(entry.item,
-                           into: previousApp,
+                           into: target,
                            monitor: monitor,
                            imageOverride: entry.imagePreview)
+    }
+
+    private func pasteTargetApp() -> NSRunningApplication? {
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousApp = frontmost
+            return frontmost
+        }
+        if let lastActiveApp,
+           lastActiveApp.bundleIdentifier != Bundle.main.bundleIdentifier,
+           !lastActiveApp.isTerminated {
+            return lastActiveApp
+        }
+        return previousApp
+    }
+
+    private func ensureStackCanPaste() -> Bool {
+        #if MAS
+        return true
+        #else
+        // Do not advance the queue when direct pasting is enabled but macOS has
+        // not granted Accessibility yet. Prompting here makes the shortcut's
+        // first use self-explanatory instead of silently copying only.
+        guard Settings.shared.pasteDirectly else { return true }
+        return PasteService.ensureAccessibility(prompt: true)
+        #endif
     }
 
     private func returnToPreviousAppForStackCapture() {
