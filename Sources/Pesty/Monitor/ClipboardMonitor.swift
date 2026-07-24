@@ -38,6 +38,7 @@ final class ClipboardMonitor {
         if current == suppressUntilChangeCount { return }
         guard let item = makeItem() else { return }
         ClipboardStore.shared.addCaptured(item)
+        AppController.shared.capturePasteStackItem(item)
     }
 
     private func makeItem() -> ClipItem? {

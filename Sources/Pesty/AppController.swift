@@ -230,10 +230,6 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func commandCopy() {
-        if pasteSequence.isBuilding, let item = store.selectedItem {
-            addToPasteStack(item)
-            return
-        }
         copySelected()
     }
 
@@ -248,18 +244,21 @@ final class AppController: NSObject, NSApplicationDelegate {
     func beginPasteSequence() {
         pasteSequence.begin()
         showPasteStack()
+        hideBar()
+
+        // Capture happens in the app where the user is working. Return focus
+        // there after showing the tray, which stays floating above that app.
+        let target = previousApp ?? lastActiveApp
+        DispatchQueue.main.async {
+            target?.activate(options: [])
+        }
     }
 
     func showPasteStack() {
-        if !pasteSequence.isCollecting { pasteSequence.begin() }
         if pasteStackController == nil {
             pasteStackController = PasteStackWindowController()
         }
-        // Showing a sibling panel causes the bar to resign key. Keep the bar
-        // visible for that transition so its selected clip can be added with ⌘C.
-        suppressAutoHide = true
         pasteStackController?.show()
-        DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
     }
 
     func hidePasteStack() {
@@ -272,9 +271,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     func newPasteStack() {
         pasteSequence.newStack()
         showPasteStack()
+        let target = previousApp ?? lastActiveApp
+        DispatchQueue.main.async {
+            target?.activate(options: [])
+        }
     }
 
-    func addToPasteStack(_ item: ClipItem) {
+    func capturePasteStackItem(_ item: ClipItem) {
         _ = pasteSequence.addIfNeeded(item)
     }
 
@@ -359,18 +362,10 @@ final class AppController: NSObject, NSApplicationDelegate {
             QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
             return nil
         case kVK_Escape:
-            if pasteSequence.isBuilding {
-                cancelPasteSequence()
-                return nil
-            }
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
-            if pasteSequence.isBuilding {
-                pasteNextInSequence()
-                return nil
-            }
             pasteSelected(); return nil
         case kVK_ANSI_C:
             if cmd {

@@ -76,7 +76,7 @@ struct PasteStackView: View {
                 Image(systemName: "cursorarrow.rays")
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(Theme.selection)
-                Text("Select a clip in Pesty, then press ⌘C to add it here")
+                Text("Copy text, images, or files in any app to add them here")
                     .font(.system(size: 12, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -139,9 +139,14 @@ struct PasteStackView: View {
     }
 
     private var summary: String {
-        guard stack.hasEntries else { return "Collect clips from the bar" }
-        if stack.pastedCount == 0 { return "(stack.pendingCount) ready to paste" }
-        return "(stack.pendingCount) ready · (stack.pastedCount) pasted"
+        guard stack.hasEntries else {
+            return stack.isCollecting ? "Copy in any app to collect clips" : "Stack is empty"
+        }
+        if stack.isCollecting {
+            return "\(stack.pendingCount) collected · Copy more in any app"
+        }
+        if stack.pastedCount == 0 { return "\(stack.pendingCount) ready to paste" }
+        return "\(stack.pendingCount) ready · \(stack.pastedCount) pasted"
     }
 }
 

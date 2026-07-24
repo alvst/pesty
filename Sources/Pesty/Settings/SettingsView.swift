@@ -433,7 +433,7 @@ private struct ShortcutsSettings: View {
                             .font(.system(size: 14))
                             .toggleStyle(.switch)
                             .padding(.vertical, 10)
-                        Text("While Paste Stack is open, select a clip and press ⌘C to add it. Keep pasted items enabled to re-add completed clips later.")
+                        Text("Start a Paste Stack, then copy clips in any app to add them automatically. Keep pasted items enabled to re-add completed clips later.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 5)
