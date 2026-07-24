@@ -17,7 +17,12 @@ final class ClipboardStore {
 
     var source: BarSource = .history
     var searchText: String = ""
+    /// The primary selection used for keyboard navigation and previews.
     var selectedID: UUID?
+    /// All cards selected in the current source, including `selectedID` when
+    /// there is a primary selection.
+    private(set) var selectedIDs: Set<UUID> = []
+    private var selectionAnchorID: UUID?
     var inlinePreviewVisible = false
     /// Used by the strip to restore its opening position without animating from
     /// whichever card was selected the last time the bar was visible.
@@ -105,14 +110,14 @@ final class ClipboardStore {
             existing.createdAt = item.createdAt
             history.insert(existing, at: 0)
             applyHistoryPolicyNow()
-            if source == .history && searchText.isEmpty { selectedID = existing.id }
+            if source == .history && searchText.isEmpty { selectOnly(existing.id) }
             scheduleSave()
             return existing
         }
         history.insert(item, at: 0)
         applyHistoryPolicyNow()
         if source == .history && searchText.isEmpty {
-            selectedID = item.id
+            selectOnly(item.id)
         }
         scheduleSave()
         return item
@@ -146,20 +151,58 @@ final class ClipboardStore {
     }
 
     func delete(_ item: ClipItem) {
-        history.removeAll { $0.id == item.id }
-        for i in pinboards.indices { pinboards[i].items.removeAll { $0.id == item.id } }
+        delete([item])
+    }
+
+    func delete(_ items: [ClipItem]) {
+        let ids = Set(items.map(\.id))
+        guard !ids.isEmpty else { return }
+
+        let removed = history.filter { ids.contains($0.id) }
+            + pinboards.flatMap { board in board.items.filter { ids.contains($0.id) } }
+        history.removeAll { ids.contains($0.id) }
+        for i in pinboards.indices { pinboards[i].items.removeAll { ids.contains($0.id) } }
         if Settings.shared.pasteStacksFollowHistory {
-            PasteSequence.shared.removeHistoryItems([item.id])
+            PasteSequence.shared.removeHistoryItems(ids)
         }
-        deleteImageFile(item)
-        if selectedID == item.id { selectFirst() }
+        for item in removed { deleteImageFile(item) }
+
+        if let selectedID, ids.contains(selectedID) {
+            selectFirst()
+        } else {
+            selectedIDs.subtract(ids)
+            if let selectionAnchorID, ids.contains(selectionAnchorID) {
+                self.selectionAnchorID = selectedID
+            }
+        }
         scheduleSave()
+    }
+
+    func deleteSelected() {
+        let items = visibleItems.filter { selectedIDs.contains($0.id) }
+        if items.isEmpty, let selectedItem {
+            delete(selectedItem)
+        } else {
+            delete(items)
+        }
+    }
+
+    /// Contextual deletion follows Finder behavior: delete the whole current
+    /// selection when the clicked card is part of it, otherwise only that card.
+    func deleteSelection(containing item: ClipItem) {
+        if selectedIDs.contains(item.id) {
+            deleteSelected()
+        } else {
+            delete(item)
+        }
     }
 
     func clearHistory() {
         let old = history
         history.removeAll()
         selectedID = nil
+        selectedIDs = []
+        selectionAnchorID = nil
         if Settings.shared.pasteStacksFollowHistory {
             PasteSequence.shared.removeHistoryItems(Set(old.map(\.id)))
         }
@@ -215,22 +258,64 @@ final class ClipboardStore {
         scheduleSave()
     }
 
-    func selectFirst() { selectedID = visibleItems.first?.id }
+    func selectFirst() { selectOnly(visibleItems.first?.id) }
 
     func prepareForBarPresentation() {
         let firstID = visibleItems.first?.id
         initialScrollTargetID = firstID
-        selectedID = firstID
+        selectOnly(firstID)
     }
 
     func moveSelection(by delta: Int) {
         let items = visibleItems
         guard !items.isEmpty else { return }
         guard let id = selectedID, let idx = items.firstIndex(where: { $0.id == id }) else {
-            selectedID = items.first?.id; return
+            selectOnly(items.first?.id)
+            return
         }
         let next = max(0, min(items.count - 1, idx + delta))
-        selectedID = items[next].id
+        selectOnly(items[next].id)
+    }
+
+    /// Applies standard Finder-style mouse selection to a clip card.
+    func select(_ id: UUID, with modifiers: NSEvent.ModifierFlags) {
+        let items = visibleItems
+        guard let targetIndex = items.firstIndex(where: { $0.id == id }) else { return }
+
+        if modifiers.contains(.shift),
+           let anchorID = selectionAnchorID ?? selectedID,
+           let anchorIndex = items.firstIndex(where: { $0.id == anchorID }) {
+            let lower = min(anchorIndex, targetIndex)
+            let upper = max(anchorIndex, targetIndex)
+            selectedIDs = Set(items[lower...upper].map(\.id))
+            selectedID = id
+            return
+        }
+
+        if modifiers.contains(.command) {
+            if selectedIDs.contains(id) {
+                selectedIDs.remove(id)
+                if selectedID == id {
+                    selectedID = items.first(where: { selectedIDs.contains($0.id) })?.id
+                }
+                if selectionAnchorID == id {
+                    selectionAnchorID = selectedID
+                }
+            } else {
+                selectedIDs.insert(id)
+                selectedID = id
+                selectionAnchorID = id
+            }
+            return
+        }
+
+        selectOnly(id)
+    }
+
+    private func selectOnly(_ id: UUID?) {
+        selectedID = id
+        selectedIDs = id.map { [$0] } ?? []
+        selectionAnchorID = id
     }
 
     func imageURL(for item: ClipItem) -> URL? {
