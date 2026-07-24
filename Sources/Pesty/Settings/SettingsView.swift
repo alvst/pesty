@@ -81,6 +81,10 @@ private struct GeneralSettings: View {
                 Text("Start a Paste Stack from the strip, then copy clips in another app. Use this shortcut to paste each clip in order.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Remove saved stacks with clipboard history", isOn: $settings.pasteStacksFollowHistory)
+                Text("When enabled, deleting or retaining clipboard history also removes the matching saved stack clips.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Behavior") {

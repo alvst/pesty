@@ -218,7 +218,9 @@ private struct PasteStackEntryRow: View {
     }
 
     private var previewImage: NSImage? {
-        if entry.item.type == .image { return entry.imagePreview }
+        if entry.item.type == .image {
+            return entry.imagePreview ?? ClipboardStore.shared.loadImage(for: entry.item)
+        }
         guard entry.item.type == .file,
               entry.item.fileURLs.count == 1,
               let urlString = entry.item.fileURLs.first,
@@ -263,6 +265,22 @@ struct PasteStackContentView: View {
                 Text(summary)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
+            }
+            if savedStacks.count > 1 {
+                Menu {
+                    ForEach(savedStacks) { saved in
+                        Button(stackLabel(for: saved)) {
+                            stack.selectStack(saved.id)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help("Choose a saved Paste Stack")
             }
             Spacer()
 
@@ -351,5 +369,14 @@ struct PasteStackContentView: View {
         if stack.isCollecting { return "Collecting clips from other apps" }
         if stack.pendingCount > 0 { return "\(stack.pendingCount) clips ready to paste" }
         return stack.hasEntries ? "All clips pasted" : "Collection paused"
+    }
+
+    private var savedStacks: [SavedPasteStack] {
+        stack.savedStacks.filter(\.hasEntries)
+    }
+
+    private func stackLabel(for saved: SavedPasteStack) -> String {
+        let state = saved.pendingCount > 0 ? "\(saved.pendingCount) ready" : "completed"
+        return "\(saved.createdAt.clipRelativeLong) · \(state)"
     }
 }

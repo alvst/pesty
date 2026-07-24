@@ -120,6 +120,7 @@ final class Settings {
         static let historyLimit = "historyLimit"
         static let historyRetentionMode = "historyRetentionMode"
         static let historyRetention = "historyRetention"
+        static let pasteStacksFollowHistory = "pasteStacksFollowHistory"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
@@ -158,6 +159,12 @@ final class Settings {
                 ClipboardStore.shared.applyHistoryPolicy()
             }
         }
+    }
+
+    /// When enabled, removing clipboard history also removes those clips from
+    /// saved Paste Stacks. The default keeps stacks until the user deletes them.
+    var pasteStacksFollowHistory: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStacksFollowHistory, forKey: Keys.pasteStacksFollowHistory) }
     }
 
     var hotkeyKeyCode: Int {
@@ -219,6 +226,7 @@ final class Settings {
             Keys.historyLimit: 500,
             Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
             Keys.historyRetention: HistoryRetention.month.rawValue,
+            Keys.pasteStacksFollowHistory: false,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
@@ -234,6 +242,7 @@ final class Settings {
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.integer(forKey: Keys.historyRetentionMode)) ?? .itemCount
         historyRetention = HistoryRetention(rawValue: d.integer(forKey: Keys.historyRetention)) ?? .month
+        pasteStacksFollowHistory = d.bool(forKey: Keys.pasteStacksFollowHistory)
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)

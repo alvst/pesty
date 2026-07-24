@@ -195,10 +195,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteStackController?.hide()
     }
 
-    func showPasteStackTab() {
+    func showPasteStackTab(stackID: UUID? = nil) {
         store.searchText = ""
         store.source = .pasteStack
-        pasteSequence.selectFirst()
+        if let stackID {
+            pasteSequence.selectStack(stackID)
+        } else {
+            pasteSequence.selectFirst()
+        }
         pasteStackController?.hide()
         if barController?.window?.isVisible != true {
             showBar(source: .pasteStack)

@@ -6,7 +6,7 @@ struct BarView: View {
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
 
     private var showsStackDeck: Bool {
-        store.source == .history && store.searchText.isEmpty && sequence.hasEntries
+        store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
     }
 
     var body: some View {
@@ -98,7 +98,7 @@ struct BarView: View {
 
     private var pasteStackButton: some View {
         Button {
-            AppController.shared.beginPasteSequence()
+            AppController.shared.newPasteStack()
         } label: {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 15, weight: .medium))
@@ -114,8 +114,12 @@ struct BarView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Theme.cardSpacing) {
                     if showsStackDeck {
-                        PasteStackDeckCard()
-                            .id("pesty.paste-stack.deck")
+                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                            PasteStackDeckCard(stack: stack,
+                                               isActive: stack.id == sequence.activeStackID,
+                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+                                .id(stack.id)
+                        }
                     }
 
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in

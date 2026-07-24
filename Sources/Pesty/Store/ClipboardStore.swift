@@ -78,7 +78,13 @@ final class ClipboardStore {
             base = pinboards.first(where: { $0.id == id })?.items ?? []
         }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return base }
+        guard !q.isEmpty else {
+            // Each saved Paste Stack is represented by one deck card on
+            // Clipboard. Its clips remain in history for persistence, but do
+            // not also appear as individual Clipboard cards.
+            guard case .history = source, PasteSequence.shared.hasSavedStacks else { return base }
+            return base.filter { !PasteSequence.shared.containsHistoryItemID($0.id) }
+        }
         return base.filter { $0.searchableText.contains(q) }
     }
 
@@ -110,6 +116,10 @@ final class ClipboardStore {
 
     func applyHistoryPolicy() { _ = applyHistoryPolicyNow(); scheduleSave() }
 
+    func pasteStacksDidChange() {
+        scheduleSave()
+    }
+
     @discardableResult
     private func applyHistoryPolicyNow() -> Bool {
         let removed: [ClipItem]
@@ -124,6 +134,9 @@ final class ClipboardStore {
             guard !removed.isEmpty else { return false }
             history.removeAll { $0.createdAt < cutoff }
         }
+        if Settings.shared.pasteStacksFollowHistory {
+            PasteSequence.shared.removeHistoryItems(Set(removed.map(\.id)))
+        }
         for item in removed { deleteImageFile(item) }
         return true
     }
@@ -131,6 +144,9 @@ final class ClipboardStore {
     func delete(_ item: ClipItem) {
         history.removeAll { $0.id == item.id }
         for i in pinboards.indices { pinboards[i].items.removeAll { $0.id == item.id } }
+        if Settings.shared.pasteStacksFollowHistory {
+            PasteSequence.shared.removeHistoryItems([item.id])
+        }
         deleteImageFile(item)
         if selectedID == item.id { selectFirst() }
         scheduleSave()
@@ -140,6 +156,9 @@ final class ClipboardStore {
         let old = history
         history.removeAll()
         selectedID = nil
+        if Settings.shared.pasteStacksFollowHistory {
+            PasteSequence.shared.removeHistoryItems(Set(old.map(\.id)))
+        }
         for item in old { deleteImageFile(item) }
         scheduleSave()
     }
@@ -234,6 +253,9 @@ final class ClipboardStore {
         guard let name = item.imageFileName else { return }
         let stillUsed = history.contains { $0.imageFileName == name }
             || pinboards.contains { $0.items.contains { $0.imageFileName == name } }
+            || PasteSequence.shared.savedStacks.contains { stack in
+                stack.entries.contains { $0.item.imageFileName == name }
+            }
         if stillUsed { return }
         if let url = imageURL(for: item) { try? FileManager.default.removeItem(at: url) }
     }
@@ -241,6 +263,7 @@ final class ClipboardStore {
     private struct Snapshot: Codable {
         var history: [ClipItem]
         var pinboards: [Pinboard]
+        var pasteStacks: [SavedPasteStack]?
     }
 
     private func load() {
@@ -248,6 +271,7 @@ final class ClipboardStore {
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         history = snap.history
         pinboards = snap.pinboards
+        PasteSequence.shared.restoreSavedStacks(snap.pasteStacks ?? [])
         selectFirst()
     }
 
@@ -259,7 +283,9 @@ final class ClipboardStore {
     }
 
     func saveNow() {
-        let snap = Snapshot(history: history, pinboards: pinboards)
+        let snap = Snapshot(history: history,
+                            pinboards: pinboards,
+                            pasteStacks: PasteSequence.shared.savedStacks)
         guard let data = try? JSONEncoder().encode(snap) else { return }
         ignoreWatchUntil = Date().addingTimeInterval(1.5)
         try? data.write(to: storeURL, options: .atomic)
@@ -330,6 +356,20 @@ final class ClipboardStore {
         }
         pinboards = pinboards.map { byID[$0.id] ?? $0 }
             + byID.values.filter { b in !pinboards.contains(where: { $0.id == b.id }) }
+
+        var stacksByID: [UUID: SavedPasteStack] = Dictionary(
+            uniqueKeysWithValues: PasteSequence.shared.savedStacks.map { ($0.id, $0) }
+        )
+        for stack in snap.pasteStacks ?? [] {
+            if let local = stacksByID[stack.id] {
+                stacksByID[stack.id] = local.updatedAt >= stack.updatedAt ? local : stack
+            } else {
+                stacksByID[stack.id] = stack
+            }
+        }
+        PasteSequence.shared.restoreSavedStacks(
+            stacksByID.values.sorted { $0.createdAt > $1.createdAt }
+        )
 
         combined.removeAll()
         selectFirst()

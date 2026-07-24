@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// A compact representation of the active Paste Stack in the Clipboard strip.
-/// The card opens the focused stack tab rather than behaving like a history
-/// clip, which keeps collection and sequential paste actions unambiguous.
+/// A compact representation of one saved Paste Stack in the Clipboard strip.
+/// It opens that stack rather than exposing its clips as history cards.
 struct PasteStackDeckCard: View {
-    private var stack: PasteSequence { AppController.shared.pasteSequence }
+    let stack: SavedPasteStack
+    let isActive: Bool
+    let isCollecting: Bool
 
     private var nextEntry: PasteStackEntry? {
         stack.displayEntries.first(where: { !$0.isPasted })
     }
 
     var body: some View {
-        Button { AppController.shared.showPasteStackTab() } label: {
+        Button { AppController.shared.showPasteStackTab(stackID: stack.id) } label: {
             ZStack(alignment: .topLeading) {
                 if stack.pendingCount > 2 { deckLayer(offset: 12, opacity: 0.20) }
                 if stack.pendingCount > 1 { deckLayer(offset: 6, opacity: 0.34) }
@@ -44,7 +45,7 @@ struct PasteStackDeckCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Paste Stack")
                         .font(.system(size: 15, weight: .bold))
-                    Text(stack.isCollecting ? "Collecting clips" : "Ready to paste")
+                    Text(statusText)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.headerSubText)
                 }
@@ -108,8 +109,15 @@ struct PasteStackDeckCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-                .strokeBorder(Theme.selection.opacity(0.7), lineWidth: 2)
+                .strokeBorder(isActive ? Theme.selection.opacity(0.9) : Theme.selection.opacity(0.45),
+                              lineWidth: isActive ? 2 : 1)
         }
         .shadow(color: .black.opacity(0.16), radius: 5, y: 2)
+    }
+
+    private var statusText: String {
+        if isActive && isCollecting { return "Collecting clips" }
+        if stack.pendingCount > 0 { return "Ready to paste" }
+        return "Completed stack"
     }
 }
