@@ -149,7 +149,21 @@ final class AppController: NSObject, NSApplicationDelegate {
     func hideBar() {
         stopKeyMonitor()
         store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
         barController?.hide()
+    }
+
+    func toggleInlinePreview() {
+        guard Settings.shared.clipPreviewStyle == .inlinePesty,
+              store.selectedItem != nil else { return }
+        store.inlinePreviewVisible.toggle()
+        barController?.setInlinePreviewVisible(store.inlinePreviewVisible)
+    }
+
+    func hideInlinePreview() {
+        guard store.inlinePreviewVisible else { return }
+        store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
     }
 
     func pasteSelected() {
@@ -216,8 +230,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_Space where store.searchText.isEmpty:
             if Settings.shared.clipPreviewStyle == .nativeQuickLook {
                 QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
-            } else if store.selectedItem != nil {
-                store.inlinePreviewVisible.toggle()
+            } else {
+                toggleInlinePreview()
             }
             return nil
         case kVK_Escape:
