@@ -150,15 +150,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.hide()
     }
 
-    func pasteSelected() {
+    func pasteSelected(asPlainText: Bool = false) {
         guard let item = store.selectedItem else { return }
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
     }
 
-    func pasteItem(_ item: ClipItem) {
+    func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
         hideBar()
-        PasteService.paste(item, into: previousApp, monitor: monitor)
+        PasteService.paste(item, into: previousApp, monitor: monitor, asPlainText: asPlainText)
     }
 
     func copyItem(_ item: ClipItem) {
@@ -204,9 +204,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         let ctrl = flags.contains(.control)
         let opt = flags.contains(.option)
 
-        if cmd, let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...9).contains(n) {
+        if includes(Settings.shared.quickPasteModifier, in: flags),
+           let chars = event.charactersIgnoringModifiers,
+           let n = Int(chars), (1...9).contains(n) {
             let items = store.visibleItems
-            if n <= items.count { pasteItem(items[n - 1]) }
+            if n <= items.count {
+                pasteItem(items[n - 1], asPlainText: includes(Settings.shared.plainTextModifier, in: flags))
+            }
             return nil
         }
 
@@ -243,6 +247,16 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return event
+    }
+
+    private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
+        switch carbonModifier {
+        case cmdKey: return flags.contains(.command)
+        case optionKey: return flags.contains(.option)
+        case controlKey: return flags.contains(.control)
+        case shiftKey: return flags.contains(.shift)
+        default: return false
+        }
     }
 }
 
