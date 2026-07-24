@@ -270,6 +270,10 @@ struct ClipCardView: View {
                 }
             }
             Divider()
+            Button("Preview") {
+                store.selectedID = item.id
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: item.id)
+            }
             Button("Delete", role: .destructive) { store.delete(item) }
         }
     }
