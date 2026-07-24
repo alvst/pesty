@@ -2,14 +2,82 @@ import SwiftUI
 import AppKit
 
 struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AboutView()
-                .tabItem { Label("About", systemImage: "info.circle") }
+    private enum Section: String, CaseIterable, Identifiable {
+        case general
+        case about
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .general: "General"
+            case .about: "About"
+            }
         }
-        .frame(width: 520, height: 560)
+
+        var symbol: String {
+            switch self {
+            case .general: "gearshape"
+            case .about: "info.circle"
+            }
+        }
+    }
+
+    @State private var section: Section = .general
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
+                    Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                        .resizable()
+                        .frame(width: 30, height: 30)
+                    Text("Pesty")
+                        .font(.headline)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
+
+                ForEach(Section.allCases) { item in
+                    Button {
+                        section = item
+                    } label: {
+                        Label(item.title, systemImage: item.symbol)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(section == item ? .primary : .secondary)
+                    .background {
+                        if section == item {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(.quaternary)
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .frame(width: 180)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            Group {
+                switch section {
+                case .general:
+                    GeneralSettings()
+                case .about:
+                    AboutView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 680, height: 560)
     }
 }
 
