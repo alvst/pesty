@@ -162,6 +162,7 @@ private struct GeneralSettings: View {
                 Toggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
+                Toggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
                 VStack(alignment: .leading) {
                     LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                     Slider(value: $settings.barHeight, in: 300...720, step: 10)

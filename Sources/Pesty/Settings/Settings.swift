@@ -196,6 +196,7 @@ final class Settings {
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
     }
@@ -284,6 +285,14 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle) }
     }
 
+    var showMenuBarIcon: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon)
+            AppController.shared.setMenuBarIconVisible(showMenuBarIcon)
+        }
+    }
+
     var onboarded: Bool {
         didSet { guard isLoaded else { return }; d.set(onboarded, forKey: Keys.onboarded) }
     }
@@ -309,6 +318,7 @@ final class Settings {
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
@@ -327,6 +337,7 @@ final class Settings {
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         isLoaded = true
