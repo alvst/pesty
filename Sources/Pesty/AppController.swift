@@ -369,6 +369,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
+            if let sel = store.selectedItem { store.delete(sel) }
             return nil
         case kVK_ForwardDelete:
             if let sel = store.selectedItem { store.delete(sel) }
