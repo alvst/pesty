@@ -135,6 +135,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let front = NSWorkspace.shared.frontmostApplication
         if let front, !isPesty(front) {
             previousApp = front
+            lastActiveApp = front
         }
         store.searchText = ""
         store.source = .history
@@ -161,7 +162,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// `previousApp` is captured before the panel activates, while
     /// `lastActiveApp` covers menu-bar and reopen paths where it is unavailable.
     private var pasteTarget: NSRunningApplication? {
-        [previousApp, lastActiveApp, NSWorkspace.shared.frontmostApplication]
+        [lastActiveApp, previousApp, NSWorkspace.shared.frontmostApplication]
             .compactMap { $0 }
             .first { !$0.isTerminated && !isPesty($0) }
     }
@@ -300,6 +301,11 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        // Events belonging to a native context menu, editor, or Settings
+        // window must stay with their own responder chain. The bar monitor is
+        // only responsible for keys delivered to the Paste Bar panel itself.
+        guard event.window === barController?.window else { return event }
+
         let code = Int(event.keyCode)
         let flags = event.modifierFlags
         let cmd = flags.contains(.command)
