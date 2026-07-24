@@ -23,6 +23,17 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     var suppressAutoHide = false
 
+    /// Context-menu paste actions return to the app that was frontmost when
+    /// Pesty opened. Keep the wording contextual without implying an app will
+    /// be launched when that target is unavailable.
+    var pasteDestinationMenuTitle: String {
+        guard let previousApp,
+              !previousApp.isTerminated,
+              let name = previousApp.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty else { return "Paste" }
+        return "Paste to \(name)"
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
