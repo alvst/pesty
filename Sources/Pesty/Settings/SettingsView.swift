@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @State private var section: SettingsSection = .general
@@ -69,6 +70,7 @@ struct SettingsView: View {
     private var content: some View {
         switch section {
         case .general: GeneralSettings()
+        case .privacy: PrivacySettings()
         case .shortcuts: ShortcutsSettings()
         case .sync: SyncSettings()
         case .about: AboutView()
@@ -77,21 +79,22 @@ struct SettingsView: View {
 }
 
 private enum SettingsSection: CaseIterable, Identifiable {
-    case general, shortcuts, sync, about
+    case general, privacy, shortcuts, sync, about
     var id: Self { self }
     var title: String {
-        switch self { case .general: "General"; case .shortcuts: "Shortcuts"; case .sync: "Sync"; case .about: "About" }
+        switch self { case .general: "General"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .sync: "Sync"; case .about: "About" }
     }
     var subtitle: String {
         switch self {
         case .general: "History, behavior, and app preferences"
+        case .privacy: "Keep clips from selected apps out of Pesty"
         case .shortcuts: "Keyboard controls for Pesty and Paste Stack"
         case .sync: "Keep your clipboard history available on every Mac"
         case .about: "Pesty for macOS"
         }
     }
     var symbol: String {
-        switch self { case .general: "gearshape"; case .shortcuts: "keyboard"; case .sync: "icloud"; case .about: "info.circle" }
+        switch self { case .general: "gearshape"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .sync: "icloud"; case .about: "info.circle" }
     }
 }
 
@@ -155,8 +158,6 @@ private struct GeneralSettings: View {
                             settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
                             Divider()
                             #endif
-                            settingToggle("Ignore passwords", isOn: $settings.ignoreConcealed)
-                            Divider()
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
                             Divider()
                             settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
@@ -259,6 +260,111 @@ private struct GeneralSettings: View {
                     .strokeBorder(.primary.opacity(0.08))
             }
             .shadow(color: .black.opacity(0.045), radius: 5, y: 2)
+    }
+}
+
+private struct PrivacySettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                SettingsFormGroup("Excluded Apps") {
+                    SettingsSurface {
+                        Text("Pesty will not save anything copied while one of these apps is the source. This is useful for password managers such as 1Password.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.bottom, settings.ignoredSourceAppBundleIDs.isEmpty ? 12 : 8)
+
+                        if settings.ignoredSourceAppBundleIDs.isEmpty {
+                            ContentUnavailableView("No apps excluded",
+                                                   systemImage: "hand.raised",
+                                                   description: Text("Add an app to keep its copied content out of Pesty."))
+                            .font(.system(size: 12))
+                            .padding(.vertical, 14)
+                        } else {
+                            ForEach(settings.ignoredSourceAppBundleIDs, id: \.self) { bundleID in
+                                Divider()
+                                ignoredAppRow(bundleID)
+                            }
+                        }
+
+                        Divider()
+                        Button { chooseApps() } label: {
+                            Label("Add App…", systemImage: "plus")
+                        }
+                        .padding(.vertical, 10)
+                    }
+                }
+
+                SettingsFormGroup("Concealed Clips") {
+                    SettingsSurface {
+                        Toggle("Ignore concealed clipboard content", isOn: $settings.ignoreConcealed)
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Pesty also respects the standard macOS concealed-clipboard marker used by password managers.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
+                    }
+                }
+            }
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func ignoredAppRow(_ bundleID: String) -> some View {
+        HStack(spacing: 10) {
+            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(applicationName(for: bundleID))
+                    .font(.system(size: 13, weight: .medium))
+                Text(bundleID)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { settings.removeIgnoredSourceApp(bundleID) } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Allow clips from \(applicationName(for: bundleID))")
+        }
+        .padding(.vertical, 7)
+    }
+
+    private func chooseApps() {
+        let panel = NSOpenPanel()
+        panel.title = "Exclude Apps from Pesty"
+        panel.message = "Pesty will ignore copied content from the apps you choose."
+        panel.prompt = "Add Apps"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.applicationBundle]
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                  bundleID != Bundle.main.bundleIdentifier else { continue }
+            settings.addIgnoredSourceApp(bundleID)
+        }
+    }
+
+    private func applicationName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let bundle = Bundle(url: url) else { return bundleID }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? bundleID
     }
 }
 

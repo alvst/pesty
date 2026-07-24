@@ -99,6 +99,7 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
+        static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let onboarded = "onboarded"
@@ -189,6 +190,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
 
+    private(set) var ignoredSourceAppBundleIDs: [String] {
+        didSet { guard isLoaded else { return }; d.set(ignoredSourceAppBundleIDs, forKey: Keys.ignoredSourceAppBundleIDs) }
+    }
+
     var barHeight: Double {
         didSet {
             guard isLoaded else { return }
@@ -228,6 +233,7 @@ final class Settings {
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
+            Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.onboarded: false,
@@ -249,6 +255,8 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
+        ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
+            .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         onboarded = d.bool(forKey: Keys.onboarded)
@@ -266,5 +274,20 @@ final class Settings {
 
     var quickPasteModifierDisplay: String {
         ShortcutModifier(carbonValue: quickPasteModifier)?.symbol ?? "⌘"
+    }
+
+    func isIgnoringSourceApp(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return ignoredSourceAppBundleIDs.contains(bundleID)
+    }
+
+    func addIgnoredSourceApp(_ bundleID: String) {
+        guard !bundleID.isEmpty, !ignoredSourceAppBundleIDs.contains(bundleID) else { return }
+        ignoredSourceAppBundleIDs.append(bundleID)
+        ignoredSourceAppBundleIDs.sort()
+    }
+
+    func removeIgnoredSourceApp(_ bundleID: String) {
+        ignoredSourceAppBundleIDs.removeAll { $0 == bundleID }
     }
 }

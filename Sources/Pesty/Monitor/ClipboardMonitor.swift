@@ -62,6 +62,7 @@ final class ClipboardMonitor {
         // the clipboard manager itself and otherwise yields a generic icon.
         let bundleID = declaredSourceID ?? src?.bundleIdentifier
         let appName = declaredSourceID.flatMap { applicationName(forBundleID: $0) } ?? src?.localizedName
+        guard !Settings.shared.isIgnoringSourceApp(bundleID) else { return nil }
 
         func decorate(_ item: inout ClipItem) {
             item.sourceBundleID = bundleID
