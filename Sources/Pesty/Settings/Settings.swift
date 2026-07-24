@@ -153,6 +153,7 @@ final class Settings {
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
+        static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
     }
@@ -258,6 +259,14 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(showBarResizeHandle, forKey: Keys.showBarResizeHandle) }
     }
 
+    var showMenuBarIcon: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon)
+            AppController.shared.setMenuBarIconVisible(showMenuBarIcon)
+        }
+    }
+
     var onboarded: Bool {
         didSet { guard isLoaded else { return }; d.set(onboarded, forKey: Keys.onboarded) }
     }
@@ -287,6 +296,7 @@ final class Settings {
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
+            Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
@@ -310,6 +320,7 @@ final class Settings {
             .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
+        showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         isLoaded = true

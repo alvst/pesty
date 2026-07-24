@@ -36,7 +36,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
 
-        setupStatusItem()
+        setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
 
@@ -74,6 +74,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateStatusItemIcon(item)
         let menu = NSMenu()
@@ -99,6 +100,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         item.menu = menu
         statusItem = item
         updatePauseMenuItem()
+    }
+
+    func setMenuBarIconVisible(_ visible: Bool) {
+        if visible {
+            setupStatusItem()
+        } else if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+            pauseMenuItem = nil
+        }
     }
 
     @objc private func menuOpen() { showBar() }

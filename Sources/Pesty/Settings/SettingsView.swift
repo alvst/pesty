@@ -180,6 +180,8 @@ private struct GeneralSettings: View {
                             Divider()
                             settingToggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
                             Divider()
+                            settingToggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
+                            Divider()
                             VStack(alignment: .leading, spacing: 8) {
                                 LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                                     .font(.system(size: 14))
