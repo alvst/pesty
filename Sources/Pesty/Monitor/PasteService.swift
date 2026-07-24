@@ -78,8 +78,12 @@ enum PasteService {
         // Direct-download build: optionally paste straight into the active app by
         // synthesizing ⌘V. This requires the user's Accessibility grant.
         guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return }
+        // A Paste Stack shortcut normally includes Command and Option. Wait for
+        // those physical keys to be released before sending our own Command-V;
+        // otherwise macOS can interpret it as the still-held sequence shortcut
+        // and the queue advances without text ever reaching the target.
         target.activate()
-        waitForFrontmost(target, attempts: 20)
+        waitForFrontmost(target, attempts: 30)
         #endif
     }
 
@@ -87,12 +91,31 @@ enum PasteService {
     private static func waitForFrontmost(_ app: NSRunningApplication, attempts: Int) {
         guard attempts > 0, !app.isTerminated else { return }
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { sendCommandV() }
+            waitForShortcutModifiersToRelease(attempts: 30)
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
             waitForFrontmost(app, attempts: attempts - 1)
         }
+    }
+
+    private static func waitForShortcutModifiersToRelease(attempts: Int) {
+        let flags = CGEventSource.flagsState(.combinedSessionState)
+        let shortcutMask = CGEventFlags.maskCommand.rawValue
+            | CGEventFlags.maskAlternate.rawValue
+            | CGEventFlags.maskControl.rawValue
+            | CGEventFlags.maskShift.rawValue
+        let modifiersHeld = flags.rawValue & shortcutMask
+
+        guard modifiersHeld == 0 || attempts == 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                waitForShortcutModifiersToRelease(attempts: attempts - 1)
+            }
+            return
+        }
+
+        // Give AppKit one more turn through the run loop after activation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { sendCommandV() }
     }
 
     private static func sendCommandV() {
