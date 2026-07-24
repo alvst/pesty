@@ -180,9 +180,14 @@ private struct PasteStackEntryView: View {
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: entry.isPasted ? "arrow.uturn.backward.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(entry.isPasted ? Theme.selection : .secondary)
+                VStack(spacing: 4) {
+                    Image(systemName: entry.isPasted ? "arrow.uturn.backward.circle.fill" : "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(entry.isPasted ? Theme.selection : .secondary)
+                    Spacer(minLength: 0)
+                    sourceAppIcon
+                }
+                .frame(width: 20, alignment: .trailing)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -205,12 +210,12 @@ private struct PasteStackEntryView: View {
 
     @ViewBuilder
     private var preview: some View {
-        if entry.item.type == .image, let image = entry.imagePreview {
+        if let image = previewImage {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.medium)
                 .scaledToFill()
-                .frame(width: 38, height: 38)
+                .frame(width: 42, height: 42)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -222,5 +227,24 @@ private struct PasteStackEntryView: View {
                         .foregroundStyle(entry.item.type.accent)
                 }
         }
+    }
+
+    private var previewImage: NSImage? {
+        if entry.item.type == .image { return entry.imagePreview }
+        guard entry.item.type == .file,
+              entry.item.fileURLs.count == 1,
+              let urlString = entry.item.fileURLs.first,
+              let url = URL(string: urlString),
+              url.isFileURL else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    private var sourceAppIcon: some View {
+        Image(nsImage: AppIconProvider.icon(forBundleID: entry.item.sourceBundleID))
+            .resizable()
+            .interpolation(.high)
+            .frame(width: 19, height: 19)
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .help(entry.item.sourceAppName ?? "Source app")
     }
 }
