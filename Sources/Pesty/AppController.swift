@@ -137,6 +137,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.searchText = ""
         store.source = .history
         store.selectFirst()
+        store.inlinePreviewVisible = false
 
         if barController == nil {
             barController = BarWindowController()
@@ -147,6 +148,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func hideBar() {
         stopKeyMonitor()
+        store.inlinePreviewVisible = false
         barController?.hide()
     }
 
@@ -215,6 +217,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
 
         switch code {
+        case kVK_Space where store.searchText.isEmpty:
+            if Settings.shared.clipPreviewStyle == .nativeQuickLook {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            } else if store.selectedItem != nil {
+                store.inlinePreviewVisible.toggle()
+            }
+            return nil
         case kVK_Escape:
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
             else { hideBar() }
@@ -222,9 +231,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
-            store.moveSelection(by: -1); return nil
+            moveBarSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
-            store.moveSelection(by: 1); return nil
+            moveBarSelection(by: 1); return nil
         case kVK_Delete:
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
@@ -247,6 +256,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return event
+    }
+
+    private func moveBarSelection(by delta: Int) {
+        store.moveSelection(by: delta)
+        QuickLookService.shared.updateSelection(selectedID: store.selectedID)
     }
 }
 

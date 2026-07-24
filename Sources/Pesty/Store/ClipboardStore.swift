@@ -17,6 +17,7 @@ final class ClipboardStore {
     var source: BarSource = .history
     var searchText: String = ""
     var selectedID: UUID?
+    var inlinePreviewVisible = false
 
     var historyLimit: Int {
         get { Settings.shared.historyLimit }

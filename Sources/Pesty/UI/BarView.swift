@@ -14,7 +14,15 @@ struct BarView: View {
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                strip
+                HStack(spacing: 0) {
+                    if settings.clipPreviewStyle == .inlinePesty,
+                       store.inlinePreviewVisible,
+                       let item = store.selectedItem {
+                        SelectedClipPreviewView(item: item)
+                        Divider()
+                    }
+                    strip
+                }
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
@@ -51,10 +59,22 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if settings.clipPreviewStyle == .inlinePesty { previewButton }
             moreMenu
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
+    }
+
+    private var previewButton: some View {
+        Button { store.inlinePreviewVisible.toggle() } label: {
+            Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(store.inlinePreviewVisible ? "Hide clip preview" : "Show clip preview")
     }
 
     private var syncButton: some View {
