@@ -250,27 +250,28 @@ struct ClipCardView: View {
             Button("Paste") { AppController.shared.pasteItem(item) }
             Button("Copy") { AppController.shared.copyItem(item) }
             Divider()
-            if !store.pinboards.isEmpty {
-                Menu("Save to Pinboard") {
-                    ForEach(store.pinboards) { b in
-                        Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
-                    }
-                }
-            }
-            Button("Save to New Pinboard…") {
-                if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
-                    let b = store.addPinboard(name: name)
-                    store.saveToPinboard(item, boardID: b.id)
-                }
-            }
-            Button("Edit Title…") {
-                if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
+            Button("Rename") {
+                if let t = TextPrompt.run(title: "Rename", message: "Card title",
                                           defaultValue: item.customTitle ?? "") {
                     store.setTitle(t, for: item)
                 }
             }
-            Divider()
             Button("Delete", role: .destructive) { store.delete(item) }
+            Divider()
+            Menu("Pin") {
+                if !store.pinboards.isEmpty {
+                    ForEach(store.pinboards) { b in
+                        Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+                    }
+                    Divider()
+                }
+                Button("New Pinboard…") {
+                    if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
+                        let b = store.addPinboard(name: name)
+                        store.saveToPinboard(item, boardID: b.id)
+                    }
+                }
+            }
         }
     }
 
