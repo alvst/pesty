@@ -142,6 +142,12 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    func setPinboardColor(_ id: UUID, to colorHex: String) {
+        guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
+        pinboards[i].colorHex = colorHex
+        scheduleSave()
+    }
+
     func deletePinboard(_ id: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         if case .pinboard(let cur) = source, cur == id { source = .history }
