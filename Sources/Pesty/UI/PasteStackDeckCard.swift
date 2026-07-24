@@ -1,18 +1,24 @@
 import AppKit
 import SwiftUI
 
-/// A compact representation of the active queue that lives in Clipboard.
-/// It deliberately opens the full Paste Stack tab instead of behaving like an
-/// ordinary history clip, so collection and pasting remain unambiguous.
+/// A compact representation of one saved queue on Clipboard. It deliberately
+/// opens that stack in the full Paste Stack tab instead of exposing its clips
+/// as ordinary history cards.
 struct PasteStackDeckCard: View {
-    private var stack: PasteSequence { AppController.shared.pasteSequence }
+    let stack: SavedPasteStack
+    let isActive: Bool
+    let isCollecting: Bool
 
     private var nextEntry: PasteStackEntry? {
-        stack.displayEntries.first(where: { !$0.isPasted })
+        displayedEntries.first(where: { !$0.isPasted })
+    }
+
+    private var displayedEntries: [PasteStackEntry] {
+        stack.displayEntries(pasteInReverse: Settings.shared.stackPasteInReverse)
     }
 
     var body: some View {
-        Button { AppController.shared.showPasteStackTab() } label: {
+        Button { AppController.shared.showPasteStackTab(stackID: stack.id) } label: {
             ZStack(alignment: .topLeading) {
                 if stack.pendingCount > 2 { deckLayer(offset: 12, opacity: 0.20) }
                 if stack.pendingCount > 1 { deckLayer(offset: 6, opacity: 0.34) }
@@ -45,7 +51,7 @@ struct PasteStackDeckCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Paste Stack")
                         .font(.system(size: 15, weight: .bold))
-                    Text(stack.isCollecting ? "Collecting clips" : "Ready to paste")
+                    Text(statusText)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.headerSubText)
                 }
@@ -102,7 +108,8 @@ struct PasteStackDeckCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-                .strokeBorder(Theme.selection.opacity(0.7), lineWidth: 2)
+            .strokeBorder(isActive ? Theme.selection.opacity(0.9) : Theme.selection.opacity(0.45),
+                          lineWidth: isActive ? 2 : 1)
         }
         .shadow(color: .black.opacity(0.16), radius: 5, y: 2)
     }
@@ -134,12 +141,20 @@ struct PasteStackDeckCard: View {
     }
 
     private func previewImage(for entry: PasteStackEntry) -> NSImage? {
-        if entry.item.type == .image { return entry.imagePreview }
+        if entry.item.type == .image {
+            return entry.imagePreview ?? ClipboardStore.shared.loadImage(for: entry.item)
+        }
         guard entry.item.type == .file,
               entry.item.fileURLs.count == 1,
               let urlString = entry.item.fileURLs.first,
               let url = URL(string: urlString),
               url.isFileURL else { return nil }
         return NSImage(contentsOf: url)
+    }
+
+    private var statusText: String {
+        if isActive && isCollecting { return "Collecting clips" }
+        if stack.pendingCount > 0 { return "Ready to paste" }
+        return "Completed stack"
     }
 }

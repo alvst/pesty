@@ -261,10 +261,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
     }
 
-    func showPasteStackTab() {
+    func showPasteStackTab(stackID: UUID? = nil) {
         store.searchText = ""
         store.source = .pasteStack
-        pasteSequence.selectFirst()
+        if let stackID {
+            pasteSequence.selectStack(stackID)
+        } else {
+            pasteSequence.selectFirst()
+        }
         if barController?.window?.isVisible != true {
             showBar(source: .pasteStack)
         }
