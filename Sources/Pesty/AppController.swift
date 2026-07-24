@@ -188,7 +188,16 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
         suppressAutoHide = true
-        defer { suppressAutoHide = false }
+        // The bar's local monitor normally consumes typeable keys for search
+        // and navigation. Suspend it while the native editor owns first
+        // responder so typing, Delete, Return, and Writing Tools all reach
+        // the NSTextView instead.
+        let resumeBarKeys = barController?.window?.isVisible == true
+        if resumeBarKeys { stopKeyMonitor() }
+        defer {
+            suppressAutoHide = false
+            if resumeBarKeys { startKeyMonitor() }
+        }
 
         guard let edit = ClipEditor.run(for: item, launchWritingTools: launchWritingTools) else { return }
 

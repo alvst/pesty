@@ -226,8 +226,8 @@ struct ClipCardView: View {
                         Label {
                             Text(b.name)
                         } icon: {
-                            Image(systemName: "circle.fill")
-                                .foregroundStyle(b.color)
+                            Image(nsImage: Self.pinboardMenuIcon(color: NSColor(b.color)))
+                                .renderingMode(.original)
                         }
                     }
                 }
@@ -270,5 +270,19 @@ struct ClipCardView: View {
         guard [.text, .richText, .link].contains(item.type) else { return false }
         guard #available(macOS 15.2, *) else { return false }
         return NSWritingToolsCoordinator.isWritingToolsAvailable
+    }
+
+    /// SwiftUI's symbol tint is converted to a template image when rendered in
+    /// an NSMenu. Draw the pinboard color into a non-template image instead so
+    /// the native submenu keeps the colored dots shown throughout Pesty.
+    private static func pinboardMenuIcon(color: NSColor) -> NSImage {
+        let size = NSSize(width: 12, height: 12)
+        let image = NSImage(size: size, flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
