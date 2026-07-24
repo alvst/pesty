@@ -136,6 +136,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         store.searchText = ""
         store.source = .history
+        store.applyHistoryPolicy()
         store.selectFirst()
 
         if barController == nil {

@@ -26,8 +26,47 @@ private struct GeneralSettings: View {
         Form {
             Section("Activation") {
                 LabeledContent("Show Pesty") { HotkeyRecorderView() }
-                Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
-                    LabeledContent("History limit", value: "\(settings.historyLimit) items")
+            }
+
+            Section("History") {
+                Picker("Keep history by", selection: $settings.historyRetentionMode) {
+                    ForEach(HistoryRetentionMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if settings.historyRetentionMode == .itemCount {
+                    Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
+                        LabeledContent("Number of clips", value: "\(settings.historyLimit) items")
+                    }
+                    Text("Pesty keeps the most recent \(settings.historyLimit) clips.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack {
+                            Text("Keep clips for")
+                            Spacer()
+                            Text(settings.historyRetention.title)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        Slider(value: retentionSliderValue,
+                               in: 0...Double(HistoryRetention.allCases.count - 1),
+                               step: 1)
+                        HStack(spacing: 0) {
+                            ForEach(HistoryRetention.allCases) { retention in
+                                Text(retention.shortSliderTitle)
+                                    .font(.caption2.weight(retention == settings.historyRetention ? .bold : .medium))
+                                    .foregroundStyle(retention == settings.historyRetention ? Color.accentColor : .secondary)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                    Text(settings.historyRetention.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -111,6 +150,13 @@ private struct GeneralSettings: View {
         }
     }
     #endif
+
+    private var retentionSliderValue: Binding<Double> {
+        Binding(
+            get: { settings.historyRetention.sliderIndex },
+            set: { settings.historyRetention = HistoryRetention(sliderIndex: $0) }
+        )
+    }
 }
 
 private struct AboutView: View {

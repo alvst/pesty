@@ -18,11 +18,6 @@ final class ClipboardStore {
     var searchText: String = ""
     var selectedID: UUID?
 
-    var historyLimit: Int {
-        get { Settings.shared.historyLimit }
-        set { Settings.shared.historyLimit = newValue; trimHistory() }
-    }
-
     private var storeURL: URL
     private var imagesDir: URL
     private var baseDir: URL
@@ -57,6 +52,7 @@ final class ClipboardStore {
         storeURL = base.appendingPathComponent("store.json")
         prepareDirectories()
         load()
+        if applyHistoryPolicyNow() { saveNow() }
         if Settings.shared.iCloudSync { startWatching() }
     }
 
@@ -91,25 +87,37 @@ final class ClipboardStore {
             var existing = history.remove(at: idx)
             existing.createdAt = item.createdAt
             history.insert(existing, at: 0)
+            applyHistoryPolicyNow()
             if source == .history && searchText.isEmpty { selectedID = existing.id }
             scheduleSave()
             return
         }
         history.insert(item, at: 0)
-        trimHistory()
+        applyHistoryPolicyNow()
         if source == .history && searchText.isEmpty {
             selectedID = item.id
         }
         scheduleSave()
     }
 
-    func applyHistoryLimit() { trimHistory(); scheduleSave() }
+    func applyHistoryPolicy() { _ = applyHistoryPolicyNow(); scheduleSave() }
 
-    private func trimHistory() {
-        guard history.count > historyLimit else { return }
-        let removed = Array(history[historyLimit...])
-        history.removeLast(history.count - historyLimit)
+    @discardableResult
+    private func applyHistoryPolicyNow() -> Bool {
+        let removed: [ClipItem]
+        switch Settings.shared.historyRetentionMode {
+        case .itemCount:
+            guard history.count > Settings.shared.historyLimit else { return false }
+            removed = Array(history[Settings.shared.historyLimit...])
+            history.removeLast(history.count - Settings.shared.historyLimit)
+        case .timePeriod:
+            guard let cutoff = Settings.shared.historyRetention.cutoffDate else { return false }
+            removed = history.filter { $0.createdAt < cutoff }
+            guard !removed.isEmpty else { return false }
+            history.removeAll { $0.createdAt < cutoff }
+        }
         for item in removed { deleteImageFile(item) }
+        return true
     }
 
     func delete(_ item: ClipItem) {
@@ -298,7 +306,8 @@ final class ClipboardStore {
         var seen = Set<String>()
         var merged: [ClipItem] = []
         for it in combined where seen.insert(contentKey(it)).inserted { merged.append(it) }
-        history = Array(merged.prefix(historyLimit))
+        history = merged
+        applyHistoryPolicyNow()
 
         var byID: [UUID: Pinboard] = Dictionary(uniqueKeysWithValues: pinboards.map { ($0.id, $0) })
         for b in snap.pinboards {
