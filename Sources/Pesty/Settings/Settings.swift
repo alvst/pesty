@@ -19,6 +19,7 @@ final class Settings {
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
         static let barHeight = "barHeight"
+        static let showBarResizeHandle = "showBarResizeHandle"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
     }
@@ -65,7 +66,12 @@ final class Settings {
             let clamped = min(720, max(240, barHeight))
             if clamped != barHeight { barHeight = clamped; return }
             d.set(barHeight, forKey: Keys.barHeight)
+            AppController.shared.resizeVisibleBar(to: barHeight)
         }
+    }
+
+    var showBarResizeHandle: Bool {
+        didSet { guard isLoaded else { return }; d.set(showBarResizeHandle, forKey: Keys.showBarResizeHandle) }
     }
 
     var onboarded: Bool {
@@ -86,6 +92,7 @@ final class Settings {
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
             Keys.barHeight: 430.0,
+            Keys.showBarResizeHandle: false,
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
@@ -97,6 +104,7 @@ final class Settings {
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         barHeight = d.double(forKey: Keys.barHeight)
+        showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         isLoaded = true
