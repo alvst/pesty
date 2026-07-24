@@ -181,13 +181,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         toggleBar()
     }
 
-    func showBar() {
+    func showBar(source requestedSource: BarSource? = nil) {
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
         }
         store.searchText = ""
-        store.source = .history
+        store.source = requestedSource ?? .history
         store.applyHistoryPolicy()
         store.prepareForBarPresentation()
 
@@ -249,20 +249,25 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteSequence.begin()
         showPasteStack()
         hideBar()
-
-        // Capture happens in the app where the user is working. Return focus
-        // there after showing the tray, which stays floating above that app.
-        let target = previousApp ?? lastActiveApp
-        DispatchQueue.main.async {
-            target?.activate(options: [])
-        }
+        returnToPreviousAppForStackCapture()
     }
 
     func showPasteStack() {
         if pasteStackController == nil {
             pasteStackController = PasteStackWindowController()
         }
+        suppressAutoHide = true
         pasteStackController?.show()
+        DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
+    }
+
+    func showPasteStackTab() {
+        store.searchText = ""
+        store.source = .pasteStack
+        pasteSequence.selectFirst()
+        if barController?.window?.isVisible != true {
+            showBar(source: .pasteStack)
+        }
     }
 
     func hidePasteStack() {
@@ -275,10 +280,16 @@ final class AppController: NSObject, NSApplicationDelegate {
     func newPasteStack() {
         pasteSequence.newStack()
         showPasteStack()
-        let target = previousApp ?? lastActiveApp
-        DispatchQueue.main.async {
-            target?.activate(options: [])
-        }
+        hideBar()
+        returnToPreviousAppForStackCapture()
+    }
+
+    func pausePasteSequence() {
+        pasteSequence.pause()
+    }
+
+    func clearPasteStack() {
+        pasteSequence.cancel()
     }
 
     func capturePasteStackItem(_ item: ClipItem) {
@@ -307,11 +318,33 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func pasteNextInSequence() {
         guard let entry = pasteSequence.next() else { return }
+        performPasteStackEntry(entry)
+    }
+
+    func pasteStackEntry(_ entry: PasteStackEntry) {
+        guard let entry = pasteSequence.next(entryID: entry.id) else { return }
+        performPasteStackEntry(entry)
+    }
+
+    func pasteSelectedStackEntry() {
+        guard let entry = pasteSequence.selectedEntry else { return }
+        pasteStackEntry(entry)
+    }
+
+    private func performPasteStackEntry(_ entry: PasteStackEntry) {
         hideBar()
         PasteService.paste(entry.item,
                            into: previousApp,
                            monitor: monitor,
                            imageOverride: entry.imagePreview)
+    }
+
+    private func returnToPreviousAppForStackCapture() {
+        // Capture happens in the app where the user is working, not in Pesty.
+        let target = previousApp ?? lastActiveApp
+        DispatchQueue.main.async {
+            target?.activate(options: [])
+        }
     }
 
     func showSettings() {
@@ -351,7 +384,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         let ctrl = flags.contains(.control)
         let opt = flags.contains(.option)
 
-        if includes(Settings.shared.quickPasteModifier, in: flags),
+        if store.source != .pasteStack,
+           includes(Settings.shared.quickPasteModifier, in: flags),
            let chars = event.charactersIgnoringModifiers,
            let n = Int(chars), (1...9).contains(n) {
             let items = store.visibleItems
@@ -363,6 +397,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         switch code {
         case kVK_Space:
+            guard store.source != .pasteStack else { return nil }
             QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
             return nil
         case kVK_Escape:
@@ -370,6 +405,10 @@ final class AppController: NSObject, NSApplicationDelegate {
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
+            if store.source == .pasteStack {
+                pasteSelectedStackEntry()
+                return nil
+            }
             pasteSelected(); return nil
         case kVK_ANSI_C:
             if cmd {
@@ -381,6 +420,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_RightArrow, kVK_DownArrow:
             moveBarSelection(by: 1); return nil
         case kVK_Delete:
+            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+                removePasteStackEntry(entry)
+                return nil
+            }
             if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
@@ -388,6 +431,10 @@ final class AppController: NSObject, NSApplicationDelegate {
             if let sel = store.selectedItem { store.delete(sel) }
             return nil
         case kVK_ForwardDelete:
+            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+                removePasteStackEntry(entry)
+                return nil
+            }
             if let sel = store.selectedItem { store.delete(sel) }
             return nil
         default:
@@ -406,6 +453,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func moveBarSelection(by delta: Int) {
+        if store.source == .pasteStack {
+            pasteSequence.moveSelection(by: delta)
+            return
+        }
         store.moveSelection(by: delta)
         QuickLookService.shared.updateSelection(selectedID: store.selectedID)
     }

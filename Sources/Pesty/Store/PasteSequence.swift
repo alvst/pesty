@@ -24,12 +24,25 @@ final class PasteSequence {
 
     private(set) var entries: [PasteStackEntry] = []
     private(set) var isCollecting = false
+    private(set) var selectedEntryID: UUID?
 
     var count: Int { pendingCount }
     var pendingCount: Int { entries.count(where: { !$0.isPasted }) }
     var pastedCount: Int { entries.count - pendingCount }
     var hasEntries: Bool { !entries.isEmpty }
     var isRunning: Bool { !isCollecting && pendingCount > 0 }
+    /// Pending clips come first; clips already pasted stay at the bottom of
+    /// the stack so the next clip is always visually on top.
+    var displayEntries: [PasteStackEntry] {
+        let pending = entries.filter { !$0.isPasted }
+        let queued = Settings.shared.stackPasteInReverse ? Array(pending.reversed()) : pending
+        return queued + entries.filter(\.isPasted)
+    }
+    var displayItems: [ClipItem] { displayEntries.map(\.item) }
+    var selectedEntry: PasteStackEntry? {
+        guard let selectedEntryID else { return nil }
+        return entries.first(where: { $0.id == selectedEntryID })
+    }
 
     // Kept as an alias while the main bar transitions from the old queue mode.
     var isBuilding: Bool { isCollecting }
@@ -39,11 +52,17 @@ final class PasteSequence {
     /// Opens the stack for collection without discarding its pasted history.
     func begin() {
         isCollecting = true
+        if selectedEntryID == nil { selectFirst() }
+    }
+
+    func pause() {
+        isCollecting = false
     }
 
     func newStack() {
         entries.removeAll()
         isCollecting = true
+        selectedEntryID = nil
     }
 
     @discardableResult
@@ -52,16 +71,32 @@ final class PasteSequence {
               !entries.contains(where: { $0.item.id == item.id }) else { return false }
         let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
         entries.append(PasteStackEntry(item: item, imagePreview: preview))
+        if selectedEntryID == nil { selectFirst() }
         return true
     }
 
-    func position(of item: ClipItem) -> Int? {
-        let pending = pendingEntries
-        return pending.firstIndex(where: { $0.item.id == item.id }).map { $0 + 1 }
+    func selectFirst() {
+        selectedEntryID = displayEntries.first?.id
     }
 
-    /// Starts (if necessary) and returns the next pending entry without removing
-    /// it from the stack, preserving a visible paste history in the floating tray.
+    func select(_ entry: PasteStackEntry) {
+        selectedEntryID = entry.id
+    }
+
+    func moveSelection(by delta: Int) {
+        let displayed = displayEntries
+        guard !displayed.isEmpty else { selectedEntryID = nil; return }
+        guard let selectedEntryID,
+              let index = displayed.firstIndex(where: { $0.id == selectedEntryID }) else {
+            self.selectedEntryID = displayed.first?.id
+            return
+        }
+        let next = max(0, min(displayed.count - 1, index + delta))
+        self.selectedEntryID = displayed[next].id
+    }
+
+    /// Returns the next pending entry and moves it to the bottom of the stack.
+    /// The full stack therefore reads like a physical queue as clips are pasted.
     func next() -> PasteStackEntry? {
         let pendingIndexes = entries.indices.filter { !entries[$0].isPasted }
         guard let index = Settings.shared.stackPasteInReverse
@@ -70,21 +105,49 @@ final class PasteSequence {
             isCollecting = false
             return nil
         }
+        return takeEntry(at: index)
+    }
+
+    func next(itemID: UUID) -> PasteStackEntry? {
+        guard let index = entries.firstIndex(where: { $0.item.id == itemID && !$0.isPasted }) else {
+            return nil
+        }
+        return takeEntry(at: index)
+    }
+
+    func next(entryID: UUID) -> PasteStackEntry? {
+        guard let index = entries.firstIndex(where: { $0.id == entryID && !$0.isPasted }) else {
+            return nil
+        }
+        return takeEntry(at: index)
+    }
+
+    func isPasted(_ item: ClipItem) -> Bool {
+        entries.first(where: { $0.item.id == item.id })?.isPasted ?? false
+    }
+
+    private func takeEntry(at index: Int) -> PasteStackEntry {
+        var result = entries.remove(at: index)
+        result.isPasted = true
+        entries.append(result)
         isCollecting = false
-        entries[index].isPasted = true
-        let result = entries[index]
         if pendingCount == 0, !Settings.shared.keepPastedStackItems {
             entries.removeAll()
+            selectedEntryID = nil
+        } else {
+            selectFirst()
         }
         return result
     }
 
     func reAdd(_ entry: PasteStackEntry) {
         entries.append(PasteStackEntry(item: entry.item, imagePreview: entry.imagePreview))
+        selectFirst()
     }
 
     func remove(_ entry: PasteStackEntry) {
         entries.removeAll { $0.id == entry.id }
+        if selectedEntryID == entry.id { selectFirst() }
     }
 
     func resetProgress() {
@@ -92,6 +155,7 @@ final class PasteSequence {
             entries[index].isPasted = false
         }
         isCollecting = false
+        selectFirst()
     }
 
     func finishCollecting() {
@@ -101,10 +165,6 @@ final class PasteSequence {
     func cancel() {
         entries.removeAll()
         isCollecting = false
-    }
-
-    private var pendingEntries: [PasteStackEntry] {
-        let pending = entries.filter { !$0.isPasted }
-        return Settings.shared.stackPasteInReverse ? Array(pending.reversed()) : pending
+        selectedEntryID = nil
     }
 }

@@ -8,9 +8,7 @@ struct ClipCardView: View {
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
-    private var sequence: PasteSequence { AppController.shared.pasteSequence }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
-    private var sequencePosition: Int? { sequence.position(of: item) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -184,16 +182,7 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                if let sequencePosition {
-                    HStack(spacing: 3) {
-                        Image(systemName: "list.number")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text("\(sequencePosition)")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(Theme.selection)
-                }
-                if index < 9 {
+                if store.source != .pasteStack, index < 9 {
                     HStack(spacing: 3) {
                         Text(settings.quickPasteModifierDisplay)
                             .font(.system(size: 11, weight: .semibold))

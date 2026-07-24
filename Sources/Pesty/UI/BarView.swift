@@ -18,12 +18,16 @@ struct BarView: View {
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                HStack(spacing: 0) {
-                    if previewVisible, let item = store.selectedItem {
-                        SelectedClipPreviewView(item: item)
-                        Divider()
+                if store.source == .pasteStack {
+                    PasteStackContentView()
+                } else {
+                    HStack(spacing: 0) {
+                        if previewVisible, let item = store.selectedItem {
+                            SelectedClipPreviewView(item: item)
+                            Divider()
+                        }
+                        strip
                     }
-                    strip
                 }
             }
         }
@@ -44,13 +48,15 @@ struct BarView: View {
     private var topBar: some View {
         HStack(spacing: 14) {
             syncButton
-            searchIndicator
+            if store.source != .pasteStack { searchIndicator }
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            if sequence.hasEntries { sequenceStatus }
-            previewButton
-            sequenceButton
+            if store.source == .pasteStack {
+                pasteStackControls
+            } else {
+                previewButton
+            }
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -155,24 +161,36 @@ struct BarView: View {
         .fixedSize()
     }
 
-    private var sequenceButton: some View {
-        Button {
-            AppController.shared.beginPasteSequence()
-        } label: {
-            Image(systemName: sequence.hasEntries ? "rectangle.stack.fill" : "rectangle.stack.badge.plus")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(sequence.hasEntries ? Theme.selection : Theme.textSecondary)
-                .frame(width: 30, height: 30)
-        }
-        .buttonStyle(.plain)
-        .help(sequence.hasEntries ? "Show Paste Stack" : "Open Paste Stack")
-    }
+    private var pasteStackControls: some View {
+        HStack(spacing: 6) {
+            Button {
+                if sequence.isCollecting {
+                    AppController.shared.pausePasteSequence()
+                } else {
+                    AppController.shared.beginPasteSequence()
+                }
+            } label: {
+                Image(systemName: sequence.isCollecting ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(sequence.isCollecting ? .orange : Theme.selection)
+            .help(sequence.isCollecting ? "Pause collecting clips" : "Resume collecting clips")
 
-    private var sequenceStatus: some View {
-        Text(sequence.isBuilding ? "Collecting external copies" : "\(sequence.pendingCount) ready")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(Theme.selection)
-            .lineLimit(1)
+            if sequence.pendingCount > 0 {
+                Button {
+                    AppController.shared.pasteNextInSequence()
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.selection)
+                .help("Paste next stack clip")
+            }
+        }
     }
 
     private var strip: some View {
@@ -185,6 +203,13 @@ struct BarView: View {
                     Color.clear
                         .frame(width: 1, height: 1)
                         .id(Self.stripStartID)
+
+                    if store.source == .history,
+                       store.searchText.isEmpty,
+                       sequence.hasEntries {
+                        PasteStackDeckCard()
+                            .id("pesty.paste-stack.deck")
+                    }
 
                     ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                         ClipCardView(item: item,
