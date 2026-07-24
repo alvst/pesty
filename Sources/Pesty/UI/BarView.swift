@@ -5,7 +5,7 @@ struct BarView: View {
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
-    @State private var previewVisible = true
+    @State private var previewVisible = false
     @State private var resizeStartHeight: Double?
 
     var body: some View {

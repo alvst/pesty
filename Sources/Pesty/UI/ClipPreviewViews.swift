@@ -137,17 +137,25 @@ struct SelectedClipPreviewView: View {
                 Spacer()
             }
         case .file:
-            VStack(spacing: 12) {
-                Image(systemName: "doc.fill")
-                    .font(.system(size: 46, weight: .light))
-                    .foregroundStyle(item.type.accent)
-                Text(item.displayTitle)
-                    .font(.system(size: 14, weight: .medium))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer()
+            if let image = filePreviewImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 46, weight: .light))
+                        .foregroundStyle(item.type.accent)
+                    Text(item.displayTitle)
+                        .font(.system(size: 14, weight: .medium))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
         case .color:
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(hex: item.colorHex ?? "#000") ?? .black)
@@ -173,5 +181,13 @@ struct SelectedClipPreviewView: View {
             .font(.system(size: 38, weight: .light))
             .foregroundStyle(Theme.textTertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var filePreviewImage: NSImage? {
+        guard item.fileURLs.count == 1,
+              let value = item.fileURLs.first,
+              let url = URL(string: value),
+              url.isFileURL else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
