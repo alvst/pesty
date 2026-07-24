@@ -15,10 +15,21 @@ final class ClipboardStore {
     private(set) var history: [ClipItem] = []
     private(set) var pinboards: [Pinboard] = []
 
-    var source: BarSource = .history
+    var source: BarSource = .history {
+        didSet {
+            // A selection belongs to the visible strip, not to a clip UUID
+            // globally. Pinboard copies intentionally share their source
+            // item IDs, so carrying selection across sources is misleading.
+            if source != oldValue { selectFirst() }
+        }
+    }
     var searchText: String = ""
     var selectedID: UUID?
     var inlinePreviewVisible = false
+    /// Every selected clip in the current strip. `selectedID` remains the
+    /// primary selection used by keyboard navigation and Return-to-paste.
+    private(set) var selectedIDs: Set<UUID> = []
+    private var selectionAnchorID: UUID?
 
     private var storeURL: URL
     private var imagesDir: URL
@@ -102,14 +113,14 @@ final class ClipboardStore {
             existing.createdAt = item.createdAt
             history.insert(existing, at: 0)
             applyHistoryPolicyNow()
-            if source == .history && searchText.isEmpty { selectedID = existing.id }
+            if source == .history && searchText.isEmpty { selectOnly(existing.id) }
             scheduleSave()
             return existing
         }
         history.insert(item, at: 0)
         applyHistoryPolicyNow()
         if source == .history && searchText.isEmpty {
-            selectedID = item.id
+            selectOnly(item.id)
         }
         scheduleSave()
         return item
@@ -139,26 +150,71 @@ final class ClipboardStore {
             PasteSequence.shared.removeHistoryItems(Set(removed.map(\.id)))
         }
         for item in removed { deleteImageFile(item) }
+        reconcileSelection()
         return true
     }
 
     func delete(_ item: ClipItem) {
-        history.removeAll { $0.id == item.id }
-        for i in pinboards.indices { pinboards[i].items.removeAll { $0.id == item.id } }
-        if Settings.shared.pasteStacksFollowHistory {
-            PasteSequence.shared.removeHistoryItems([item.id])
+        delete([item])
+    }
+
+    func deleteSelected() {
+        let items = visibleItems.filter { selectedIDs.contains($0.id) }
+        if items.isEmpty, let selectedItem {
+            delete(selectedItem)
+        } else {
+            delete(items)
         }
-        deleteImageFile(item)
-        if selectedID == item.id { selectFirst() }
+    }
+
+    /// Deleting from a selected card follows Finder behavior: delete the
+    /// entire current selection. A context menu opened on an unselected card
+    /// only deletes that card.
+    func deleteSelection(containing item: ClipItem) {
+        if selectedIDs.contains(item.id) {
+            deleteSelected()
+        } else {
+            delete(item)
+        }
+    }
+
+    private func delete(_ items: [ClipItem]) {
+        let ids = Set(items.map(\.id))
+        guard !ids.isEmpty else { return }
+
+        // A Pinboard is an independently saved collection. Deleting from the
+        // current strip must not erase same-ID copies in other pinboards (or
+        // from history), even though copies retain their source clip ID.
+        let removed: [ClipItem]
+        switch source {
+        case .history:
+            removed = history.filter { ids.contains($0.id) }
+            history.removeAll { ids.contains($0.id) }
+            if Settings.shared.pasteStacksFollowHistory {
+                PasteSequence.shared.removeHistoryItems(ids)
+            }
+        case .pasteStack:
+            return
+        case .pinboard(let boardID):
+            guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
+            removed = pinboards[boardIndex].items.filter { ids.contains($0.id) }
+            pinboards[boardIndex].items.removeAll { ids.contains($0.id) }
+        }
+        for item in removed { deleteImageFile(item) }
+        reconcileSelection()
         scheduleSave()
     }
 
     func clearHistory() {
         let old = history
         history.removeAll()
-        selectedID = nil
         if Settings.shared.pasteStacksFollowHistory {
             PasteSequence.shared.removeHistoryItems(Set(old.map(\.id)))
+        }
+        if source == .history {
+            selectOnly(nil)
+        } else {
+            reconcileSelection()
         }
         for item in old { deleteImageFile(item) }
         scheduleSave()
@@ -206,16 +262,89 @@ final class ClipboardStore {
         scheduleSave()
     }
 
-    func selectFirst() { selectedID = visibleItems.first?.id }
+    func selectFirst() { selectOnly(visibleItems.first?.id) }
+
+    /// Removes selections that are no longer in the current source or filter.
+    /// This is called after structural changes so selection count, highlights,
+    /// and bulk-delete always refer to the same visible cards.
+    private func reconcileSelection() {
+        let visibleIDs = Set(visibleItems.map(\.id))
+        selectedIDs.formIntersection(visibleIDs)
+
+        guard let selectedID, visibleIDs.contains(selectedID) else {
+            if let first = visibleItems.first?.id {
+                selectOnly(first)
+            } else {
+                selectOnly(nil)
+            }
+            return
+        }
+
+        selectedIDs.insert(selectedID)
+        if let selectionAnchorID, !visibleIDs.contains(selectionAnchorID) {
+            self.selectionAnchorID = selectedID
+        }
+    }
 
     func moveSelection(by delta: Int) {
         let items = visibleItems
         guard !items.isEmpty else { return }
         guard let id = selectedID, let idx = items.firstIndex(where: { $0.id == id }) else {
-            selectedID = items.first?.id; return
+            selectOnly(items.first?.id); return
         }
         let next = max(0, min(items.count - 1, idx + delta))
-        selectedID = items[next].id
+        selectOnly(items[next].id)
+    }
+
+    /// Applies Finder-style selection to a card click:
+    /// - a normal click selects only that clip;
+    /// - Command-click toggles that clip without disturbing the other clips;
+    /// - Shift-click selects the contiguous range from the selection anchor.
+    /// Command-Shift-click adds that range to an existing selection.
+    func select(_ id: UUID, with modifiers: NSEvent.ModifierFlags) {
+        let items = visibleItems
+        guard let targetIndex = items.firstIndex(where: { $0.id == id }) else { return }
+
+        let flags = modifiers.intersection(.deviceIndependentFlagsMask)
+        let command = flags.contains(.command)
+
+        if flags.contains(.shift),
+           let anchorID = selectionAnchorID ?? selectedID,
+           let anchorIndex = items.firstIndex(where: { $0.id == anchorID }) {
+            let range = Set(items[min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)].map(\.id))
+            if command {
+                selectedIDs.formUnion(range)
+            } else {
+                selectedIDs = range
+            }
+            selectedID = id
+            return
+        }
+
+        if command {
+            if selectedIDs.contains(id) {
+                selectedIDs.remove(id)
+                if selectedID == id {
+                    selectedID = items.first(where: { selectedIDs.contains($0.id) })?.id
+                }
+                if selectionAnchorID == id {
+                    selectionAnchorID = selectedID
+                }
+            } else {
+                selectedIDs.insert(id)
+                selectedID = id
+                if selectionAnchorID == nil { selectionAnchorID = id }
+            }
+            return
+        }
+
+        selectOnly(id)
+    }
+
+    private func selectOnly(_ id: UUID?) {
+        selectedID = id
+        selectedIDs = id.map { [$0] } ?? []
+        selectionAnchorID = id
     }
 
     func imageURL(for item: ClipItem) -> URL? {

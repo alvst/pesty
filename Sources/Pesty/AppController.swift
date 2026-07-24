@@ -422,7 +422,7 @@ final class AppController: NSObject, NSApplicationDelegate {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
+            if cmd { store.deleteSelected(); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
@@ -432,7 +432,7 @@ final class AppController: NSObject, NSApplicationDelegate {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if let sel = store.selectedItem { store.delete(sel) }
+            store.deleteSelected()
             return nil
         default:
             break

@@ -79,6 +79,9 @@ struct BarView: View {
                 PinboardTabs()
                     .layoutPriority(1)
                 Spacer(minLength: 8)
+                if store.source != .pasteStack, store.selectedIDs.count > 1 {
+                    bulkDeleteButton
+                }
                 if settings.clipPreviewStyle == .inlinePesty, store.source != .pasteStack {
                     previewButton
                 }
@@ -170,6 +173,21 @@ struct BarView: View {
         .fixedSize()
     }
 
+    private var bulkDeleteButton: some View {
+        let count = store.selectedIDs.count
+        return Button(role: .destructive) {
+            store.deleteSelected()
+        } label: {
+            Label("Delete \(count)", systemImage: "trash")
+                .font(.system(size: 12.5, weight: .medium))
+                .lineLimit(1)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help("Delete \(count) selected clips (⌘⌫)")
+        .accessibilityLabel("Delete \(count) selected clips")
+    }
+
     private var pasteStackButton: some View {
         Button {
             AppController.shared.newPasteStack()
@@ -205,7 +223,7 @@ struct BarView: View {
                         ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
                             ClipCardView(item: item,
                                          index: index,
-                                         selected: item.id == store.selectedID)
+                                         selected: store.selectedIDs.contains(item.id))
                                 .frame(height: cardHeight)
                                 .id(item.id)
                                 .transition(.asymmetric(

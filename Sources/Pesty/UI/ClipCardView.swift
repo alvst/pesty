@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ClipCardView: View {
@@ -30,7 +31,7 @@ struct ClipCardView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { AppController.shared.pasteItem(item) }
-        .onTapGesture { store.selectedID = item.id }
+        .onTapGesture { store.select(item.id, with: NSEvent.modifierFlags) }
         .contextMenu { menu }
     }
 
@@ -208,7 +209,7 @@ struct ClipCardView: View {
             }
         }
         Divider()
-        Button("Delete", role: .destructive) { store.delete(item) }
+        Button("Delete", role: .destructive) { store.deleteSelection(containing: item) }
     }
 
     private var isInPasteStack: Bool {
