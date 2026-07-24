@@ -1,10 +1,13 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The compact floating collector. It stays available while the user copies
 /// clips in another app; the full, browsable queue lives in PasteStackContentView.
 struct PasteStackView: View {
     private var stack: PasteSequence { AppController.shared.pasteSequence }
+    @State private var draggedEntryID: UUID?
+    @State private var dropTargetEntryID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -98,6 +101,11 @@ struct PasteStackView: View {
                                            index: index + 1,
                                            selected: stack.selectedEntryID == entry.id,
                                            showsPasteAction: false)
+                            .modifier(PasteStackEntryReorderModifier(
+                                entry: entry,
+                                draggedEntryID: $draggedEntryID,
+                                dropTargetEntryID: $dropTargetEntryID
+                            ))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -384,6 +392,12 @@ private struct PasteStackEntryRow: View {
                     }
                 }
                 HStack(spacing: 7) {
+                    if !entry.isPasted {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.textTertiary)
+                            .help("Drag to reorder Paste Stack")
+                    }
                     sourceAppIcon
                     Button { AppController.shared.removePasteStackEntry(entry) } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -451,5 +465,76 @@ private struct PasteStackEntryRow: View {
             .frame(width: 19, height: 19)
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             .help(entry.item.sourceAppName ?? "Source app")
+    }
+}
+
+private enum PasteStackEntryDrag {
+    static let entryType = UTType(exportedAs: "com.greycorelabs.pesty.paste-stack-entry")
+
+    static func provider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(
+            forTypeIdentifier: entryType.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            completion(id.uuidString.data(using: .utf8), nil)
+            return nil
+        }
+        return provider
+    }
+}
+
+private struct PasteStackEntryReorderModifier: ViewModifier {
+    let entry: PasteStackEntry
+    @Binding var draggedEntryID: UUID?
+    @Binding var dropTargetEntryID: UUID?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if entry.isPasted {
+            content
+        } else {
+            content
+                .onDrag {
+                    draggedEntryID = entry.id
+                    return PasteStackEntryDrag.provider(for: entry.id)
+                }
+                .onDrop(of: [PasteStackEntryDrag.entryType], isTargeted: isDropTarget) { _ in
+                    guard let draggedEntryID, draggedEntryID != entry.id else {
+                        clearDragState()
+                        return false
+                    }
+                    PasteSequence.shared.movePendingEntry(draggedEntryID, before: entry.id)
+                    clearDragState()
+                    return true
+                }
+                .overlay(alignment: .top) {
+                    if dropTargetEntryID == entry.id, draggedEntryID != entry.id {
+                        Capsule()
+                            .fill(Theme.selection)
+                            .frame(height: 3)
+                            .padding(.horizontal, 10)
+                            .offset(y: -3)
+                    }
+                }
+        }
+    }
+
+    private var isDropTarget: Binding<Bool> {
+        Binding(
+            get: { dropTargetEntryID == entry.id },
+            set: { isTargeted in
+                if isTargeted {
+                    dropTargetEntryID = entry.id
+                } else if dropTargetEntryID == entry.id {
+                    dropTargetEntryID = nil
+                }
+            }
+        )
+    }
+
+    private func clearDragState() {
+        draggedEntryID = nil
+        dropTargetEntryID = nil
     }
 }
