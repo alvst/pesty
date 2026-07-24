@@ -27,7 +27,6 @@ struct ClipCardView: View {
                 )
                 .fill(Theme.selection)
                 .padding(-Theme.selectedCardRing)
-                .shadow(color: Theme.selection.opacity(0.62), radius: 12, y: 4)
             }
         }
         .overlay(
@@ -35,9 +34,8 @@ struct ClipCardView: View {
                 .strokeBorder(selected ? .white.opacity(0.72) : Theme.cardBorder,
                               lineWidth: selected ? 1.5 : 1)
         )
-        .shadow(color: .black.opacity(selected ? 0.28 : 0.18),
-                radius: selected ? 14 : 5, y: selected ? 7 : 2)
-        .scaleEffect(selected ? 1.015 : (hovering ? 1.015 : 1.0))
+        .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+        .scaleEffect(hovering && !selected ? 1.015 : 1.0)
         .zIndex(selected ? 1 : 0)
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
