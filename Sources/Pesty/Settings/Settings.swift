@@ -23,6 +23,27 @@ enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
     }
 }
 
+enum SelectedClipPosition: Int, CaseIterable, Identifiable {
+    case center
+    case rightEdge
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .center: "Center"
+        case .rightEdge: "Right edge"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .center: "Keep the selected clip centered with surrounding context visible."
+        case .rightEdge: "Place the selected clip at the far right, like Paste."
+        }
+    }
+}
+
 enum HistoryRetention: Int, CaseIterable, Identifiable {
     case day
     case week
@@ -197,6 +218,7 @@ final class Settings {
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let selectedClipPosition = "selectedClipPosition"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -293,6 +315,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle) }
     }
 
+    var selectedClipPosition: SelectedClipPosition {
+        didSet { guard isLoaded else { return }; d.set(selectedClipPosition.rawValue, forKey: Keys.selectedClipPosition) }
+    }
+
     var showMenuBarIcon: Bool {
         didSet {
             guard isLoaded else { return }
@@ -327,6 +353,7 @@ final class Settings {
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.selectedClipPosition: SelectedClipPosition.center.rawValue,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
@@ -348,6 +375,7 @@ final class Settings {
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        selectedClipPosition = SelectedClipPosition(rawValue: d.integer(forKey: Keys.selectedClipPosition)) ?? .center
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)

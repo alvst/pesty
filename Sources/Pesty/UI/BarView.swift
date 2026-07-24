@@ -153,12 +153,22 @@ struct BarView: View {
             .onChange(of: store.selectedID) { _, id in
                 guard let id else { return }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
+                    proxy.scrollTo(id, anchor: selectedClipAnchor)
+                }
+            }
+            .onChange(of: settings.selectedClipPosition) { _, _ in
+                guard let id = store.selectedID else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                    proxy.scrollTo(id, anchor: selectedClipAnchor)
                 }
             }
             .overlay { if store.visibleItems.isEmpty { emptyState } }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private var selectedClipAnchor: UnitPoint {
+        settings.selectedClipPosition == .rightEdge ? .trailing : .center
     }
 
     private var emptyState: some View {

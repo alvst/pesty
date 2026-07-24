@@ -245,6 +245,26 @@ private struct GeneralSettings: View {
                     }
                 }
 
+                SettingsFormGroup("Clip Navigation") {
+                    SettingsSurface {
+                        Picker("Selected clip position", selection: $settings.selectedClipPosition) {
+                            ForEach(SelectedClipPosition.allCases) { position in
+                                Text(position.title).tag(position)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .padding(.vertical, 9)
+
+                        Divider()
+
+                        Text(settings.selectedClipPosition.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 9)
+                    }
+                }
+
                 SettingsFormGroup("Clip Previews") {
                     SettingsSurface {
                         Picker("Preview style", selection: $settings.clipPreviewStyle) {
