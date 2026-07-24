@@ -136,7 +136,7 @@ struct ClipCardView: View {
         case .file:
             fileContent
         case .link:
-            LinkPreviewContent(text: item.text ?? item.displayTitle, compact: true)
+            LinkCardPreview(text: item.text ?? item.displayTitle)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         case .richText:
             RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", lineLimit: 10)

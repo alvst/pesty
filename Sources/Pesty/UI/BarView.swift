@@ -11,30 +11,38 @@ struct BarView: View {
         store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
     }
     @State private var resizeStartHeight: Double?
+    @State private var cardFrames: [UUID: CGRect] = [:]
 
     var body: some View {
         ZStack {
             panelBackground
-        }
-        .overlay(alignment: .top) {
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
                 if store.source == .pasteStack {
                     PasteStackContentView()
                 } else {
-                    HStack(spacing: 0) {
-                        if settings.clipPreviewStyle == .inlinePesty,
-                           store.inlinePreviewVisible,
-                           let item = store.selectedItem {
-                            SelectedClipPreviewView(item: item)
-                            Divider()
-                        }
+                    if settings.clipPreviewStyle == .inlinePesty,
+                       store.inlinePreviewVisible {
+                        Spacer(minLength: 0)
+                        strip.frame(height: 280)
+                    } else {
                         strip
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if settings.clipPreviewStyle == .inlinePesty,
+               store.source != .pasteStack,
+               store.inlinePreviewVisible,
+               let item = store.selectedItem {
+                PestyPreviewPopover(
+                    item: item,
+                    pointer: cardFrames[item.id].map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero)
+            }
         }
+        .coordinateSpace(name: "PestyBar")
+        .onPreferenceChange(ClipCardFramePreferenceKey.self) { cardFrames = $0 }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
     }
@@ -69,7 +77,7 @@ struct BarView: View {
     }
 
     private var previewButton: some View {
-        Button { store.inlinePreviewVisible.toggle() } label: {
+        Button { AppController.shared.toggleInlinePreview() } label: {
             Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.textSecondary)
@@ -202,6 +210,13 @@ struct BarView: View {
                                      index: index,
                                      selected: item.id == store.selectedID)
                             .id(item.id)
+                            .background {
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: ClipCardFramePreferenceKey.self,
+                                        value: [item.id: proxy.frame(in: .named("PestyBar"))])
+                                }
+                            }
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.92).combined(with: .opacity),
                                 removal: .opacity))
@@ -248,6 +263,14 @@ struct BarView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textSecondary)
         }
+    }
+}
+
+private struct ClipCardFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
     }
 }
 

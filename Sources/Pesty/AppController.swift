@@ -202,7 +202,22 @@ final class AppController: NSObject, NSApplicationDelegate {
     func hideBar() {
         stopKeyMonitor()
         store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
         barController?.hide()
+    }
+
+    func toggleInlinePreview() {
+        guard Settings.shared.clipPreviewStyle == .inlinePesty,
+              store.source != .pasteStack,
+              store.selectedItem != nil else { return }
+        store.inlinePreviewVisible.toggle()
+        barController?.setInlinePreviewVisible(store.inlinePreviewVisible)
+    }
+
+    func hideInlinePreview() {
+        guard store.inlinePreviewVisible else { return }
+        store.inlinePreviewVisible = false
+        barController?.setInlinePreviewVisible(false)
     }
 
     func resizeVisibleBar(to height: Double) {
@@ -462,7 +477,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             if Settings.shared.clipPreviewStyle == .inlinePesty,
                store.source != .pasteStack,
                store.selectedItem != nil {
-                store.inlinePreviewVisible.toggle()
+                toggleInlinePreview()
             } else if store.source == .pasteStack {
                 QuickLookService.shared.toggle(items: pasteSequence.displayEntries.map(\.item),
                                                selectedID: pasteSequence.selectedEntry?.item.id)
