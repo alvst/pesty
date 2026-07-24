@@ -205,7 +205,7 @@ struct ClipCardView: View {
         }
 
         Button { renameItem() } label: {
-            Label("Rename…", systemImage: "pencil")
+            Label("Rename…", systemImage: "pencil.line")
         }
         .keyboardShortcut("r", modifiers: .command)
 
