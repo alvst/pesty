@@ -237,40 +237,65 @@ struct ClipCardView: View {
     private var menu: some View {
         if let entry = pasteStackEntry {
             if entry.isPasted {
-                Button("Re-add to Stack") { AppController.shared.reAddPasteStackEntry(entry) }
+                Button { AppController.shared.reAddPasteStackEntry(entry) } label: {
+                    Label("Re-add to Stack", systemImage: "arrow.uturn.left")
+                }
             } else {
-                Button("Paste") { AppController.shared.pasteStackEntry(entry) }
+                Button { AppController.shared.pasteStackEntry(entry) } label: {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
             }
-            Button("Copy") { AppController.shared.copyItem(item) }
+            Button { AppController.shared.copyItem(item) } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
             Divider()
-            Button("Remove from Paste Stack", role: .destructive) {
+            Button(role: .destructive) {
                 AppController.shared.removePasteStackEntry(entry)
+            } label: {
+                Label("Remove from Paste Stack", systemImage: "trash")
             }
         } else {
-            Button("Paste") { AppController.shared.pasteItem(item) }
-            Button("Copy") { AppController.shared.copyItem(item) }
+            Button { AppController.shared.pasteItem(item) } label: {
+                Label("Paste", systemImage: "doc.on.clipboard")
+            }
+            Button { AppController.shared.copyItem(item) } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
             Divider()
-            if !store.pinboards.isEmpty {
-                Menu("Save to Pinboard") {
-                    ForEach(store.pinboards) { b in
-                        Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
-                    }
-                }
-            }
-            Button("Save to New Pinboard…") {
-                if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
-                    let b = store.addPinboard(name: name)
-                    store.saveToPinboard(item, boardID: b.id)
-                }
-            }
-            Button("Edit Title…") {
-                if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
+            Button {
+                if let t = TextPrompt.run(title: "Rename", message: "Card title",
                                           defaultValue: item.customTitle ?? "") {
                     store.setTitle(t, for: item)
                 }
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                store.delete(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
             Divider()
-            Button("Delete", role: .destructive) { store.delete(item) }
+            Menu {
+                if !store.pinboards.isEmpty {
+                    ForEach(store.pinboards) { b in
+                        Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                            PinboardMenuItemLabel(pinboard: b)
+                        }
+                    }
+                    Divider()
+                }
+                Button {
+                    if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
+                        let b = store.addPinboard(name: name)
+                        store.saveToPinboard(item, boardID: b.id)
+                    }
+                } label: {
+                    Text("Create Pinboard…")
+                }
+            } label: {
+                Label("Pin", systemImage: "pin")
+            }
         }
     }
 
@@ -291,6 +316,22 @@ struct ClipCardView: View {
             }
         } else {
             AppController.shared.pasteItem(item)
+        }
+    }
+}
+
+private struct PinboardMenuItemLabel: View {
+    let pinboard: Pinboard
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(pinboard.color)
+                .overlay {
+                    Circle().stroke(.black.opacity(0.16), lineWidth: 0.5)
+                }
+                .frame(width: 18, height: 18)
+            Text(pinboard.name)
         }
     }
 }
