@@ -2,7 +2,9 @@ import SwiftUI
 
 enum Theme {
     static let cardWidth: CGFloat = 215
-    static let cardSpacing: CGFloat = 12
+    // Leave room for the selected card's focus ring and shadow so adjacent
+    // clips never visually run into it.
+    static let cardSpacing: CGFloat = 28
     static let cornerRadius: CGFloat = 16
     // A softer card shape lets the selected blue outline read as an intentional
     // focus ring instead of a tight rectangle around the current clip.

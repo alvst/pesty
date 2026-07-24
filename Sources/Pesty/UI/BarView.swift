@@ -187,11 +187,12 @@ struct BarView: View {
                                 removal: .opacity))
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 18)
+                .padding(.horizontal, 28)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
             }
+            .scrollClipDisabled()
             .onChange(of: store.selectedID) { _, id in
                 guard let id else { return }
                 if store.initialScrollTargetID == id {
