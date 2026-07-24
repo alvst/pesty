@@ -19,6 +19,7 @@ final class Settings {
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
         static let barHeight = "barHeight"
+        static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
     }
@@ -68,6 +69,14 @@ final class Settings {
         }
     }
 
+    var showMenuBarIcon: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon)
+            AppController.shared.setMenuBarIconVisible(showMenuBarIcon)
+        }
+    }
+
     var onboarded: Bool {
         didSet { guard isLoaded else { return }; d.set(onboarded, forKey: Keys.onboarded) }
     }
@@ -86,6 +95,7 @@ final class Settings {
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
             Keys.barHeight: 430.0,
+            Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
@@ -97,6 +107,7 @@ final class Settings {
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         barHeight = d.double(forKey: Keys.barHeight)
+        showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         isLoaded = true

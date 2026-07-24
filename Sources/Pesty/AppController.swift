@@ -31,7 +31,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
         HotKeyCenter.shared.start()
 
-        setupStatusItem()
+        setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
 
@@ -63,6 +63,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pesty")
@@ -80,6 +81,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q").target = self
         item.menu = menu
         statusItem = item
+    }
+
+    func setMenuBarIconVisible(_ visible: Bool) {
+        if visible {
+            setupStatusItem()
+        } else if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
     }
 
     @objc private func menuOpen() { showBar() }
