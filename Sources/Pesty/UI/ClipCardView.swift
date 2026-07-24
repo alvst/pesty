@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ClipCardView: View {
@@ -246,6 +247,13 @@ struct ClipCardView: View {
             Button { AppController.shared.editItem(item) } label: {
                 Label("Edit", systemImage: "pencil")
             }
+            if writingToolsAvailable {
+                Button {
+                    AppController.shared.editItem(item, launchWritingTools: true)
+                } label: {
+                    Label("Writing Tools", systemImage: "pencil.and.scribble")
+                }
+            }
             Divider()
             Button("Remove from Paste Stack", role: .destructive) {
                 AppController.shared.removePasteStackEntry(entry)
@@ -256,6 +264,13 @@ struct ClipCardView: View {
             Divider()
             Button { AppController.shared.editItem(item) } label: {
                 Label("Edit", systemImage: "pencil")
+            }
+            if writingToolsAvailable {
+                Button {
+                    AppController.shared.editItem(item, launchWritingTools: true)
+                } label: {
+                    Label("Writing Tools", systemImage: "pencil.and.scribble")
+                }
             }
             Divider()
             if !store.pinboards.isEmpty {
@@ -280,6 +295,12 @@ struct ClipCardView: View {
             Divider()
             Button("Delete", role: .destructive) { store.delete(item) }
         }
+    }
+
+    private var writingToolsAvailable: Bool {
+        guard [.text, .richText, .link].contains(item.type) else { return false }
+        guard #available(macOS 15.2, *) else { return false }
+        return NSWritingToolsCoordinator.isWritingToolsAvailable
     }
 
     private func selectCard() {
