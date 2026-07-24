@@ -15,6 +15,7 @@ final class Settings {
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let launchAtLogin = "launchAtLogin"
+        static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
@@ -45,6 +46,10 @@ final class Settings {
     var launchAtLogin: Bool {
         didSet { guard isLoaded else { return }
             d.set(launchAtLogin, forKey: Keys.launchAtLogin); LaunchAtLogin.set(enabled: launchAtLogin) }
+    }
+
+    var hideOnClickOutside: Bool {
+        didSet { guard isLoaded else { return }; d.set(hideOnClickOutside, forKey: Keys.hideOnClickOutside) }
     }
 
     var pasteDirectly: Bool {
@@ -82,6 +87,7 @@ final class Settings {
             Keys.hotkeyKeyCode: kVK_ANSI_V,
             Keys.hotkeyModifiers: cmdKey | shiftKey,
             Keys.launchAtLogin: false,
+            Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
@@ -93,6 +99,7 @@ final class Settings {
         hotkeyKeyCode = d.integer(forKey: Keys.hotkeyKeyCode)
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
+        hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
