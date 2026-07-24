@@ -87,7 +87,7 @@ struct PasteStackView: View {
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 7) {
-                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
                                            selected: stack.selectedEntryID == entry.id,
@@ -105,6 +105,12 @@ struct PasteStackView: View {
                             dropTargetEntryID: $dropTargetEntryID,
                             isDropTargeted: $isDropTargetAtEnd
                         )
+                    }
+                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: stack.pendingCount + index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: false)
                     }
                 }
                 .padding(12)
@@ -379,7 +385,7 @@ struct PasteStackContentView: View {
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 8) {
-                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
                                            selected: stack.selectedEntryID == entry.id,
@@ -397,6 +403,12 @@ struct PasteStackContentView: View {
                             dropTargetEntryID: $dropTargetEntryID,
                             isDropTargeted: $isDropTargetAtEnd
                         )
+                    }
+                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: stack.pendingCount + index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: true)
                     }
                 }
                 .padding(.horizontal, 24)
