@@ -137,6 +137,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.searchText = ""
         store.source = .history
         store.selectFirst()
+        store.inlinePreviewVisible = false
 
         if barController == nil {
             barController = BarWindowController()
@@ -147,6 +148,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func hideBar() {
         stopKeyMonitor()
+        store.inlinePreviewVisible = false
         barController?.hide()
     }
 
@@ -212,7 +214,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         switch code {
         case kVK_Space where store.searchText.isEmpty:
-            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            if Settings.shared.clipPreviewStyle == .nativeQuickLook {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            } else if store.selectedItem != nil {
+                store.inlinePreviewVisible.toggle()
+            }
             return nil
         case kVK_Escape:
             if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }

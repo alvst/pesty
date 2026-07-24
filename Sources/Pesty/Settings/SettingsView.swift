@@ -48,6 +48,18 @@ private struct GeneralSettings: View {
                 #endif
             }
 
+            Section("Clip previews") {
+                Picker("Preview style", selection: $settings.clipPreviewStyle) {
+                    ForEach(ClipPreviewStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(settings.clipPreviewStyle.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Sync") {
                 Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
                     get: { settings.iCloudSync },

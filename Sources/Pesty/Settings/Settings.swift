@@ -2,6 +2,27 @@ import AppKit
 import Carbon.HIToolbox
 import Observation
 
+enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
+    case nativeQuickLook
+    case inlinePesty
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .nativeQuickLook: "Native Quick Look"
+        case .inlinePesty: "Inline Pesty preview"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .nativeQuickLook: "Open a macOS Quick Look panel with Space."
+        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty."
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class Settings {
@@ -19,6 +40,7 @@ final class Settings {
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
         static let barHeight = "barHeight"
+        static let clipPreviewStyle = "clipPreviewStyle"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
     }
@@ -68,6 +90,10 @@ final class Settings {
         }
     }
 
+    var clipPreviewStyle: ClipPreviewStyle {
+        didSet { guard isLoaded else { return }; d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle) }
+    }
+
     var onboarded: Bool {
         didSet { guard isLoaded else { return }; d.set(onboarded, forKey: Keys.onboarded) }
     }
@@ -86,6 +112,7 @@ final class Settings {
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
             Keys.barHeight: 430.0,
+            Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
             Keys.onboarded: false,
             Keys.iCloudSync: false
         ])
@@ -97,6 +124,7 @@ final class Settings {
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         barHeight = d.double(forKey: Keys.barHeight)
+        clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         isLoaded = true
