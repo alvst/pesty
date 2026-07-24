@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct BarView: View {
+    /// Keeps a substantial portion of a phrase visible while searching without
+    /// forcing the pinboard tabs out of a narrow bar.
+    private static let preferredSearchWidth: CGFloat = 700
+    private static let collapsedSearchWidth: CGFloat = 22
+    private static let minimumNonSearchChromeWidth: CGFloat = 230
+
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
 
@@ -20,16 +26,25 @@ struct BarView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 14) {
-            syncButton
-            searchIndicator
-            PinboardTabs()
-                .layoutPriority(1)
-            Spacer(minLength: 8)
-            moreMenu
+        GeometryReader { geometry in
+            HStack(spacing: 14) {
+                syncButton
+                searchIndicator(width: searchWidth(in: geometry.size.width))
+                PinboardTabs()
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                moreMenu
+            }
+            .padding(.horizontal, 18)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .padding(.horizontal, 18)
         .frame(height: 56)
+    }
+
+    private func searchWidth(in barWidth: CGFloat) -> CGFloat {
+        guard !store.searchText.isEmpty else { return Self.collapsedSearchWidth }
+        let available = barWidth - (2 * 18) - Self.minimumNonSearchChromeWidth
+        return min(Self.preferredSearchWidth, max(Self.collapsedSearchWidth, available))
     }
 
     private var syncButton: some View {
@@ -44,7 +59,7 @@ struct BarView: View {
         .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
     }
 
-    private var searchIndicator: some View {
+    private func searchIndicator(width: CGFloat) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
@@ -54,17 +69,25 @@ struct BarView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
+                    // Match a native search field's behavior: once a query is
+                    // longer than the field, keep the newest typed text visible.
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button { store.searchText = ""; store.selectFirst() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, store.searchText.isEmpty ? 0 : 10)
-        .frame(height: 30)
+        .frame(width: width, height: 30, alignment: .leading)
         .background(store.searchText.isEmpty ? Color.clear : Theme.fieldBG, in: Capsule())
-        .animation(.easeOut(duration: 0.15), value: store.searchText.isEmpty)
+        .clipped()
+        .layoutPriority(store.searchText.isEmpty ? 0 : 2)
+        .animation(.spring(response: 0.30, dampingFraction: 0.84), value: store.searchText.isEmpty)
+        .accessibilityLabel(store.searchText.isEmpty ? "Search clipboard history" : "Clipboard history search")
     }
 
     private var moreMenu: some View {
