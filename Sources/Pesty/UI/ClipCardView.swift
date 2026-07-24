@@ -270,6 +270,9 @@ struct ClipCardView: View {
                 }
             }
             Divider()
+            Button { AppController.shared.shareItem(item) } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
             Button("Delete", role: .destructive) { store.delete(item) }
         }
     }

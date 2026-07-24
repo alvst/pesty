@@ -16,6 +16,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
     private var keyMonitor: Any?
+    private var sharingPicker: NSSharingServicePicker?
     private let copyToast = CopyToastController()
 
     private(set) var previousApp: NSRunningApplication?
@@ -248,6 +249,25 @@ final class AppController: NSObject, NSApplicationDelegate {
         monitor.suppressUntilChangeCount = change
         hideBar()
         copyToast.show()
+    }
+
+    func shareItem(_ item: ClipItem) {
+        let picker = NSSharingServicePicker(items: sharingItems(for: item))
+        sharingPicker = picker
+        guard let view = barController?.window?.contentView ?? NSApp.keyWindow?.contentView else { return }
+        let anchor = NSRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        picker.show(relativeTo: anchor, of: view, preferredEdge: .maxY)
+    }
+
+    private func sharingItems(for item: ClipItem) -> [Any] {
+        if item.type == .image, let image = store.loadImage(for: item) {
+            return [image]
+        }
+        if item.type == .file {
+            let urls = item.fileURLs.compactMap(URL.init(string:)).filter(\.isFileURL)
+            if !urls.isEmpty { return urls }
+        }
+        return [item.text ?? item.colorHex ?? item.displayTitle]
     }
 
     func commandCopy() {
