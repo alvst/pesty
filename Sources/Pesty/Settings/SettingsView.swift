@@ -38,6 +38,7 @@ private struct GeneralSettings: View {
                 Toggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
                 Toggle("Play sound on paste", isOn: $settings.playSound)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                Toggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
                 VStack(alignment: .leading) {
                     LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                     Slider(value: $settings.barHeight, in: 300...720, step: 10)

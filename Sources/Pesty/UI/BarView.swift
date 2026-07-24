@@ -3,6 +3,7 @@ import SwiftUI
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @State private var resizeStartHeight: Double?
 
     var body: some View {
         ZStack {
@@ -11,12 +12,34 @@ struct BarView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
+                if settings.showBarResizeHandle { resizeHandle }
                 topBar
                 strip
             }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+    }
+
+    private var resizeHandle: some View {
+        HStack {
+            Capsule(style: .continuous)
+                .fill(Theme.textTertiary.opacity(0.7))
+                .frame(width: 42, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 14)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
+                    guard let start = resizeStartHeight else { return }
+                    settings.barHeight = min(720, max(300, start - value.translation.height))
+                }
+                .onEnded { _ in resizeStartHeight = nil }
+        )
+        .help("Drag to resize the Pesty bar")
     }
 
     private var topBar: some View {
