@@ -64,7 +64,7 @@ struct SettingsView: View {
         .padding(16)
         .frame(width: 174)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     @ViewBuilder
