@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct PinboardTabs: View {
@@ -5,6 +6,9 @@ struct PinboardTabs: View {
     @State private var editingBoardID: UUID?
     @State private var draftName = ""
     @FocusState private var focusedBoardID: UUID?
+
+    private let activePillFill = Color.white.opacity(0.25)
+    private let inactiveTabText = Color.white.opacity(0.84)
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -25,13 +29,12 @@ struct PinboardTabs: View {
                         Menu {
                             ForEach(PinboardColorOption.all) { color in
                                 Button { store.setPinboardColor(board.id, to: color.hex) } label: {
-                                    HStack {
-                                        Circle().fill(Color(hex: color.hex) ?? .accentColor)
-                                            .frame(width: 12, height: 12)
-                                        Text(color.name)
-                                        if board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame {
-                                            Image(systemName: "checkmark")
-                                        }
+                                    Label {
+                                        Text(board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame
+                                             ? "✓  \(color.name)"
+                                             : color.name)
+                                    } icon: {
+                                        Image(nsImage: color.menuSwatch)
                                     }
                                 }
                             }
@@ -77,7 +80,8 @@ struct PinboardTabs: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 29)
-            .background(Theme.pillSelected, in: Capsule())
+            .background(activePillFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
             .fixedSize()
         } else {
             pill(title: board.name,
@@ -103,10 +107,13 @@ struct PinboardTabs: View {
                     .font(.system(size: 12.5, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+            .foregroundStyle(selected ? Theme.textPrimary : inactiveTabText)
             .padding(.horizontal, 12)
             .frame(height: 29)
-            .background(selected ? Theme.pillSelected : Theme.pillBG, in: Capsule())
+            .background(selected ? activePillFill : .clear, in: Capsule())
+            .overlay(
+                Capsule().strokeBorder(Color.white.opacity(selected ? 0.12 : 0), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
         .fixedSize()
@@ -146,6 +153,27 @@ private struct PinboardColorOption: Identifiable {
     let hex: String
 
     var id: String { hex }
+
+    /// AppKit's native menus retain `NSImage` icons but discard SwiftUI shapes,
+    /// so use a small non-template image for a reliably colored menu swatch.
+    var menuSwatch: NSImage {
+        let size = NSSize(width: 13, height: 13)
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        let inset: CGFloat = 1
+        let circle = NSRect(x: inset, y: inset,
+                            width: size.width - inset * 2,
+                            height: size.height - inset * 2)
+        (NSColor(hex: hex) ?? .controlAccentColor).setFill()
+        NSBezierPath(ovalIn: circle).fill()
+        NSColor.black.withAlphaComponent(0.18).setStroke()
+        NSBezierPath(ovalIn: circle).stroke()
+
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
 
     static let all = [
         Self(name: "Red", hex: "#FF3B5C"),

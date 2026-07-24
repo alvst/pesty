@@ -7,7 +7,12 @@ struct ClipCardView: View {
 
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
-    private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var activePinboardColor: Color? {
+        guard case .pinboard(let id) = store.source else { return nil }
+        return store.pinboards.first(where: { $0.id == id })?.color
+    }
+    private var headerColor: Color { activePinboardColor ?? SourceColor.color(for: item.sourceBundleID) }
+    private var selectionColor: Color { activePinboardColor ?? Theme.selection }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,7 +23,7 @@ struct ClipCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-                .strokeBorder(selected ? Theme.selection : Theme.cardBorder,
+                .strokeBorder(selected ? selectionColor : Theme.cardBorder,
                               lineWidth: selected ? 2.5 : 1)
         )
         .shadow(color: .black.opacity(selected ? 0.35 : 0.18),
