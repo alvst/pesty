@@ -229,6 +229,27 @@ final class PasteSequence {
         persistActiveStack()
     }
 
+    /// Moves a ready-to-paste entry before another ready entry using the order
+    /// currently shown to the user. The stored order remains canonical so the
+    /// `Paste newest stack item first` preference still reverses it correctly.
+    func movePendingEntry(_ entryID: UUID, before destinationID: UUID) {
+        guard entryID != destinationID,
+              let entry = entries.first(where: { $0.id == entryID && !$0.isPasted }),
+              entries.contains(where: { $0.id == destinationID && !$0.isPasted }) else { return }
+
+        var displayedPending = displayEntries.filter { !$0.isPasted }
+        displayedPending.removeAll { $0.id == entryID }
+        guard let destinationIndex = displayedPending.firstIndex(where: { $0.id == destinationID }) else { return }
+        displayedPending.insert(entry, at: destinationIndex)
+
+        let canonicalPending = Settings.shared.stackPasteInReverse
+            ? Array(displayedPending.reversed())
+            : displayedPending
+        entries = canonicalPending + entries.filter(\.isPasted)
+        selectedEntryID = entryID
+        persistActiveStack()
+    }
+
     func resetProgress() {
         for index in entries.indices { entries[index].isPasted = false }
         isCollecting = false
