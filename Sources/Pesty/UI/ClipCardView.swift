@@ -280,18 +280,18 @@ struct ClipCardView: View {
                 if !store.pinboards.isEmpty {
                     ForEach(store.pinboards) { b in
                         Button { store.saveToPinboard(item, boardID: b.id) } label: {
-                            Label(b.name, systemImage: "pin")
+                            PinboardMenuItemLabel(pinboard: b)
                         }
                     }
                     Divider()
                 }
                 Button {
-                    if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
+                    if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
                         let b = store.addPinboard(name: name)
                         store.saveToPinboard(item, boardID: b.id)
                     }
                 } label: {
-                    Label("New Pinboard…", systemImage: "plus")
+                    Text("Create Pinboard…")
                 }
             } label: {
                 Label("Pin", systemImage: "pin")
@@ -316,6 +316,22 @@ struct ClipCardView: View {
             }
         } else {
             AppController.shared.pasteItem(item)
+        }
+    }
+}
+
+private struct PinboardMenuItemLabel: View {
+    let pinboard: Pinboard
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(pinboard.color)
+                .overlay {
+                    Circle().stroke(.black.opacity(0.16), lineWidth: 0.5)
+                }
+                .frame(width: 18, height: 18)
+            Text(pinboard.name)
         }
     }
 }
