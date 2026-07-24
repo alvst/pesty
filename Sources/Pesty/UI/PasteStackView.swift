@@ -173,14 +173,16 @@ struct PasteStackView: View {
     }
 }
 
-/// The dedicated Paste Stack tab in the Pesty bar. It is intentionally larger
-/// and more inspectable than the collector, while sharing the same queue.
+/// The dedicated Paste Stack tab deliberately uses the same card strip as
+/// Clipboard. It is a focused view of the most recent stack—not another list.
 struct PasteStackContentView: View {
+    private static let stripStartID = "pesty.paste-stack.strip.start"
     private var stack: PasteSequence { AppController.shared.pasteSequence }
+    private var settings: Settings { Settings.shared }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Paste Stack")
                         .font(.system(size: 16, weight: .bold))
@@ -189,6 +191,16 @@ struct PasteStackContentView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
+                Button {
+                    settings.stackPasteInReverse.toggle()
+                } label: {
+                    Image(systemName: settings.stackPasteInReverse
+                          ? "arrow.down.to.line.compact"
+                          : "arrow.up.to.line.compact")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(settings.stackPasteInReverse ? "Paste last clip first" : "Paste first clip first")
                 Button {
                     if stack.isCollecting {
                         AppController.shared.pausePasteSequence()
@@ -236,21 +248,54 @@ struct PasteStackContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
-                            PasteStackEntryRow(entry: entry,
-                                               index: index + 1,
-                                               selected: stack.selectedEntryID == entry.id,
-                                               showsPasteAction: true)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                }
+                cardStrip
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var cardStrip: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: Theme.cardSpacing) {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(Self.stripStartID)
+
+                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                        ClipCardView(item: entry.item,
+                                     index: index,
+                                     selected: stack.selectedEntryID == entry.id,
+                                     pasteStackEntry: entry)
+                            .id(entry.id)
+                            .opacity(entry.isPasted ? 0.58 : 1)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                removal: .opacity))
+                    }
+                }
+                .padding(.trailing, 28)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
+                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: stack.displayEntries.map(\.id))
+            }
+            .scrollClipDisabled()
+            .onAppear {
+                guard let id = stack.selectedEntryID else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    proxy.scrollTo(id, anchor: .leading)
+                }
+            }
+            .onChange(of: stack.selectedEntryID) { _, id in
+                guard let id else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 
     private var summary: String {

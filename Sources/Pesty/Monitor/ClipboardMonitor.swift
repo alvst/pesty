@@ -37,8 +37,11 @@ final class ClipboardMonitor {
         guard !isPaused else { return }
         if current == suppressUntilChangeCount { return }
         guard let item = makeItem() else { return }
-        ClipboardStore.shared.addCaptured(item)
-        AppController.shared.capturePasteStackItem(item)
+        // Stack entries must point at the canonical history item. A duplicate
+        // capture can reuse an existing item (and discard a temporary image),
+        // so stacking the raw capture would leave an invalid preview behind.
+        let storedItem = ClipboardStore.shared.addCaptured(item)
+        AppController.shared.capturePasteStackItem(storedItem)
     }
 
     private func makeItem() -> ClipItem? {

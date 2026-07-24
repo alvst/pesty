@@ -4,6 +4,19 @@ struct ClipCardView: View {
     let item: ClipItem
     let index: Int
     let selected: Bool
+    /// Supplying a stack entry preserves the normal card appearance while the
+    /// Paste Stack owns selection and paste behavior.
+    let pasteStackEntry: PasteStackEntry?
+
+    init(item: ClipItem,
+         index: Int,
+         selected: Bool,
+         pasteStackEntry: PasteStackEntry? = nil) {
+        self.item = item
+        self.index = index
+        self.selected = selected
+        self.pasteStackEntry = pasteStackEntry
+    }
 
     @State private var hovering = false
     private var store: ClipboardStore { ClipboardStore.shared }
@@ -40,10 +53,10 @@ struct ClipCardView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) {
-            AppController.shared.pasteItem(item)
+            pasteCard()
         }
         .onTapGesture {
-            store.selectedID = item.id
+            selectCard()
         }
         .onDrag {
             AppController.shared.beginDragOut()
@@ -107,7 +120,7 @@ struct ClipCardView: View {
     private var content: some View {
         switch item.type {
         case .image:
-            if let img = store.loadImage(for: item) {
+            if let img = cardImage {
                 Image(nsImage: img)
                     .resizable().interpolation(.medium).scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -169,6 +182,10 @@ struct ClipCardView: View {
         return NSImage(contentsOf: url)
     }
 
+    private var cardImage: NSImage? {
+        pasteStackEntry?.imagePreview ?? store.loadImage(for: item)
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
             if item.type == .link {
@@ -182,7 +199,11 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                if store.source != .pasteStack, index < 9 {
+                if let entry = pasteStackEntry {
+                    Text(entry.isPasted ? "Pasted" : "Ready")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(entry.isPasted ? Theme.textTertiary : Theme.selection)
+                } else if store.source != .pasteStack, index < 9 {
                     HStack(spacing: 3) {
                         Text(settings.quickPasteModifierDisplay)
                             .font(.system(size: 11, weight: .semibold))
@@ -214,29 +235,62 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private var menu: some View {
-        Button("Paste") { AppController.shared.pasteItem(item) }
-        Button("Copy") { AppController.shared.copyItem(item) }
-        Divider()
-        if !store.pinboards.isEmpty {
-            Menu("Save to Pinboard") {
-                ForEach(store.pinboards) { b in
-                    Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+        if let entry = pasteStackEntry {
+            if entry.isPasted {
+                Button("Re-add to Stack") { AppController.shared.reAddPasteStackEntry(entry) }
+            } else {
+                Button("Paste") { AppController.shared.pasteStackEntry(entry) }
+            }
+            Button("Copy") { AppController.shared.copyItem(item) }
+            Divider()
+            Button("Remove from Paste Stack", role: .destructive) {
+                AppController.shared.removePasteStackEntry(entry)
+            }
+        } else {
+            Button("Paste") { AppController.shared.pasteItem(item) }
+            Button("Copy") { AppController.shared.copyItem(item) }
+            Divider()
+            if !store.pinboards.isEmpty {
+                Menu("Save to Pinboard") {
+                    ForEach(store.pinboards) { b in
+                        Button(b.name) { store.saveToPinboard(item, boardID: b.id) }
+                    }
                 }
             }
-        }
-        Button("Save to New Pinboard…") {
-            if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
-                let b = store.addPinboard(name: name)
-                store.saveToPinboard(item, boardID: b.id)
+            Button("Save to New Pinboard…") {
+                if let name = TextPrompt.run(title: "New Pinboard", message: "Name") {
+                    let b = store.addPinboard(name: name)
+                    store.saveToPinboard(item, boardID: b.id)
+                }
             }
-        }
-        Button("Edit Title…") {
-            if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
-                                      defaultValue: item.customTitle ?? "") {
-                store.setTitle(t, for: item)
+            Button("Edit Title…") {
+                if let t = TextPrompt.run(title: "Edit Title", message: "Card title",
+                                          defaultValue: item.customTitle ?? "") {
+                    store.setTitle(t, for: item)
+                }
             }
+            Divider()
+            Button("Delete", role: .destructive) { store.delete(item) }
         }
-        Divider()
-        Button("Delete", role: .destructive) { store.delete(item) }
+    }
+
+    private func selectCard() {
+        if let entry = pasteStackEntry {
+            AppController.shared.pasteSequence.select(entry)
+        } else {
+            store.selectedID = item.id
+        }
+    }
+
+    private func pasteCard() {
+        if let entry = pasteStackEntry {
+            if entry.isPasted {
+                AppController.shared.reAddPasteStackEntry(entry)
+            } else {
+                AppController.shared.pasteStackEntry(entry)
+            }
+        } else {
+            AppController.shared.pasteItem(item)
+        }
     }
 }
