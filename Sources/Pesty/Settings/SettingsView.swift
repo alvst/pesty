@@ -26,9 +26,10 @@ struct SettingsView: View {
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(width: 760, height: 680)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var settingsSidebar: some View {
@@ -63,7 +64,7 @@ struct SettingsView: View {
         .padding(16)
         .frame(width: 174)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(.thinMaterial)
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 
     @ViewBuilder
@@ -245,11 +246,16 @@ private struct GeneralSettings: View {
     #endif
 
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
-        Toggle(title, isOn: isOn)
-            .font(.system(size: 14))
-            .toggleStyle(.switch)
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 14))
+            Spacer(minLength: 16)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
             .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
     }
 
     private var retentionSliderValue: Binding<Double> {
@@ -278,12 +284,11 @@ private struct GeneralSettings: View {
         VStack(alignment: .leading, spacing: 0) { content() }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.10))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.08))
             }
-            .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
     }
 }
 
@@ -527,12 +532,11 @@ private struct SettingsSurface<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) { content }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
-            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.10))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.08))
             }
-            .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
     }
 }
 
