@@ -245,6 +245,59 @@ private struct GeneralSettings: View {
                     }
                 }
 
+                SettingsFormGroup("Clip Colors") {
+                    SettingsSurface {
+                        Picker("Color theme", selection: $settings.clipColorTheme) {
+                            ForEach(ClipColorTheme.allCases) { theme in
+                                Text(theme.title).tag(theme)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .padding(.vertical, 9)
+
+                        Divider()
+
+                        Text(settings.clipColorTheme.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 9)
+
+                        if settings.clipColorTheme == .accentShades {
+                            Divider()
+
+                            HStack(spacing: 12) {
+                                ColorPicker(
+                                    "Base color",
+                                    selection: clipColorAccent,
+                                    supportsOpacity: false
+                                )
+                                .font(.system(size: 14))
+
+                                Spacer(minLength: 8)
+
+                                HStack(spacing: 4) {
+                                    ForEach(
+                                        Array(SourceColor.accentShades(for: settings.clipColorAccentHex).enumerated()),
+                                        id: \.offset
+                                    ) { _, color in
+                                        Circle()
+                                            .fill(color)
+                                            .frame(width: 13, height: 13)
+                                    }
+                                }
+                                .accessibilityLabel("Ten stable shades of the selected base color")
+                            }
+                            .padding(.vertical, 10)
+
+                            Text("Each source app keeps one of ten deterministic shades, so its cards stay recognizable without drifting too far from your chosen color.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 9)
+                        }
+                    }
+                }
+
                 SettingsFormGroup("Clip Previews") {
                     SettingsSurface {
                         Picker("Preview style", selection: $settings.clipPreviewStyle) {
@@ -337,6 +390,13 @@ private struct GeneralSettings: View {
         Binding(
             get: { settings.historyRetention.sliderIndex },
             set: { settings.historyRetention = HistoryRetention(sliderIndex: $0) }
+        )
+    }
+
+    private var clipColorAccent: Binding<Color> {
+        Binding(
+            get: { Color(hex: settings.clipColorAccentHex) ?? .pink },
+            set: { settings.clipColorAccentHex = $0.hexString }
         )
     }
 }

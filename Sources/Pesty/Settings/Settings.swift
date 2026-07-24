@@ -23,6 +23,33 @@ enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
     }
 }
 
+enum ClipColorTheme: Int, CaseIterable, Identifiable {
+    case `default`
+    case vibrant
+    case accentShades
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .default: "Default"
+        case .vibrant: "Vibrant"
+        case .accentShades: "Accent shades"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .default:
+            "Use Pesty’s familiar, deterministic mix of card colors."
+        case .vibrant:
+            "Match each clip to the dominant color in its source app’s icon."
+        case .accentShades:
+            "Give each source app a stable lighter or darker shade of one color."
+        }
+    }
+}
+
 enum HistoryRetention: Int, CaseIterable, Identifiable {
     case day
     case week
@@ -197,6 +224,8 @@ final class Settings {
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let clipColorTheme = "clipColorTheme"
+        static let clipColorAccentHex = "clipColorAccentHex"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -293,6 +322,14 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle) }
     }
 
+    var clipColorTheme: ClipColorTheme {
+        didSet { guard isLoaded else { return }; d.set(clipColorTheme.rawValue, forKey: Keys.clipColorTheme) }
+    }
+
+    var clipColorAccentHex: String {
+        didSet { guard isLoaded else { return }; d.set(clipColorAccentHex, forKey: Keys.clipColorAccentHex) }
+    }
+
     var showMenuBarIcon: Bool {
         didSet {
             guard isLoaded else { return }
@@ -327,6 +364,8 @@ final class Settings {
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.clipColorTheme: ClipColorTheme.default.rawValue,
+            Keys.clipColorAccentHex: "#FF5A9F",
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
@@ -348,6 +387,8 @@ final class Settings {
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        clipColorTheme = ClipColorTheme(rawValue: d.integer(forKey: Keys.clipColorTheme)) ?? .default
+        clipColorAccentHex = d.string(forKey: Keys.clipColorAccentHex) ?? "#FF5A9F"
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
