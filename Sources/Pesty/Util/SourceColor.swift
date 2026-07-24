@@ -19,9 +19,17 @@ enum SourceColor {
     ]
     private static let defaultMapKey = "appColorMap"
     private static let vibrantFallback = Color(red: 0.02, green: 0.48, blue: 1.0)
-    private static let shadeOffsets: [Double] = [
-        -0.18, -0.14, -0.10, -0.06, -0.02,
-         0.02,  0.06,  0.10,  0.14,  0.18
+    private static let accentVariants: [AccentVariant] = [
+        AccentVariant(hueOffset: -0.055, saturationOffset:  0.08, brightnessOffset: -0.34),
+        AccentVariant(hueOffset:  0.040, saturationOffset: -0.08, brightnessOffset: -0.27),
+        AccentVariant(hueOffset: -0.025, saturationOffset:  0.10, brightnessOffset: -0.19),
+        AccentVariant(hueOffset:  0.020, saturationOffset: -0.10, brightnessOffset: -0.11),
+        AccentVariant(hueOffset: -0.010, saturationOffset:  0.06, brightnessOffset: -0.03),
+        AccentVariant(hueOffset:  0.010, saturationOffset: -0.05, brightnessOffset:  0.05),
+        AccentVariant(hueOffset: -0.020, saturationOffset:  0.10, brightnessOffset:  0.13),
+        AccentVariant(hueOffset:  0.025, saturationOffset: -0.10, brightnessOffset:  0.21),
+        AccentVariant(hueOffset: -0.040, saturationOffset:  0.04, brightnessOffset:  0.29),
+        AccentVariant(hueOffset:  0.055, saturationOffset: -0.14, brightnessOffset:  0.35)
     ]
 
     private static var defaultMap: [String: Int] = {
@@ -43,7 +51,7 @@ enum SourceColor {
     }
 
     static func accentShades(for accentHex: String) -> [Color] {
-        shadeOffsets.map { accentShade(offset: $0, accentHex: accentHex) }
+        accentVariants.map { accentShade(variant: $0, accentHex: accentHex) }
     }
 
     private static func defaultColor(for bundleID: String) -> Color {
@@ -65,11 +73,11 @@ enum SourceColor {
     }
 
     private static func accentShade(for bundleID: String, accentHex: String) -> Color {
-        let index = stableIndex(for: bundleID, count: shadeOffsets.count)
-        return accentShade(offset: shadeOffsets[index], accentHex: accentHex)
+        let index = stableIndex(for: bundleID, count: accentVariants.count)
+        return accentShade(variant: accentVariants[index], accentHex: accentHex)
     }
 
-    private static func accentShade(offset: Double, accentHex: String) -> Color {
+    private static func accentShade(variant: AccentVariant, accentHex: String) -> Color {
         let nsColor = NSColor(hex: accentHex)?.usingColorSpace(.sRGB)
             ?? NSColor.systemPink.usingColorSpace(.sRGB)!
         var hue: CGFloat = 0
@@ -77,10 +85,15 @@ enum SourceColor {
         var brightness: CGFloat = 0
         nsColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
 
+        // Normalizing the middle brightness prevents very light or very dark
+        // user selections from collapsing several variants into the same color.
+        let middleBrightness = min(0.76, max(0.66, Double(brightness)))
+        let adjustedHue = (Double(hue) + variant.hueOffset + 1).truncatingRemainder(dividingBy: 1)
+
         return Color(
-            hue: Double(hue),
-            saturation: min(0.95, max(0.58, Double(saturation))),
-            brightness: min(0.98, max(0.52, Double(brightness) + offset))
+            hue: adjustedHue,
+            saturation: min(0.98, max(0.60, Double(saturation) + variant.saturationOffset)),
+            brightness: min(0.98, max(0.32, middleBrightness + variant.brightnessOffset))
         )
     }
 
@@ -91,6 +104,12 @@ enum SourceColor {
             hash &*= 1_099_511_628_211
         }
         return Int(hash % UInt64(count))
+    }
+
+    private struct AccentVariant {
+        let hueOffset: Double
+        let saturationOffset: Double
+        let brightnessOffset: Double
     }
 
     private static func dominantColor(in icon: NSImage) -> Color? {
