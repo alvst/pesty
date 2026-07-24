@@ -2,6 +2,8 @@ import SwiftUI
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
+    private static let stripTopInset: CGFloat = 16
+    private static let stripBottomInset: CGFloat = 26
 
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
@@ -186,67 +188,77 @@ struct BarView: View {
     }
 
     private var strip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
-                    // This is a real scroll target, rather than an ID applied
-                    // to the HStack. Scrolling it to the leading edge leaves
-                    // one card-spacing of room before the first card.
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(Self.stripStartID)
+        GeometryReader { geometry in
+            // A horizontal ScrollView measures its content at intrinsic height.
+            // Link cards now include a richer preview, so without an explicit
+            // height those cards make the LazyHStack center shorter cards around
+            // them. Size every card from the available strip height instead.
+            let cardHeight = max(1, geometry.size.height - Self.stripTopInset - Self.stripBottomInset)
 
-                    if showsStackDeck {
-                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
-                            PasteStackDeckCard(stack: stack,
-                                               isActive: stack.id == sequence.activeStackID,
-                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
-                                .id(stack.id)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+                        // This is a real scroll target, rather than an ID applied
+                        // to the HStack. Scrolling it to the leading edge leaves
+                        // one card-spacing of room before the first card.
+                        Color.clear
+                            .frame(width: 1, height: 1)
+                            .id(Self.stripStartID)
+
+                        if showsStackDeck {
+                            ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                                PasteStackDeckCard(stack: stack,
+                                                   isActive: stack.id == sequence.activeStackID,
+                                                   isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+                                    .frame(height: cardHeight)
+                                    .id(stack.id)
+                            }
+                        }
+
+                        ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
+                            ClipCardView(item: item,
+                                         index: index,
+                                         selected: item.id == store.selectedID)
+                                .frame(height: cardHeight)
+                                .id(item.id)
+                                .background {
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: ClipCardFramePreferenceKey.self,
+                                            value: [item.id: proxy.frame(in: .named("PestyBar"))])
+                                    }
+                                }
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                    removal: .opacity))
                         }
                     }
-
-                    ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
-                        ClipCardView(item: item,
-                                     index: index,
-                                     selected: item.id == store.selectedID)
-                            .id(item.id)
-                            .background {
-                                GeometryReader { proxy in
-                                    Color.clear.preference(
-                                        key: ClipCardFramePreferenceKey.self,
-                                        value: [item.id: proxy.frame(in: .named("PestyBar"))])
-                                }
-                            }
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                removal: .opacity))
+                    .padding(.trailing, 28)
+                    .padding(.top, Self.stripTopInset)
+                    .padding(.bottom, Self.stripBottomInset)
+                    .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
+                }
+                .scrollClipDisabled()
+                .onChange(of: store.selectedID) { _, id in
+                    guard let id else { return }
+                    if store.initialScrollTargetID == id {
+                        store.initialScrollTargetID = nil
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            // The leading spacer preserves room for the first
+                            // card's focus ring when reopening Pesty.
+                            proxy.scrollTo(Self.stripStartID, anchor: .leading)
+                        }
+                        return
+                    }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        proxy.scrollTo(id, anchor: .center)
                     }
                 }
-                .padding(.trailing, 28)
-                .padding(.top, 16)
-                .padding(.bottom, 26)
-                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
-            }
-            .scrollClipDisabled()
-            .onChange(of: store.selectedID) { _, id in
-                guard let id else { return }
-                if store.initialScrollTargetID == id {
-                    store.initialScrollTargetID = nil
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        // The leading spacer preserves room for the first
-                        // card's focus ring when reopening Pesty.
-                        proxy.scrollTo(Self.stripStartID, anchor: .leading)
-                    }
-                    return
+                .overlay {
+                    if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
                 }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
-                }
-            }
-            .overlay {
-                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
             }
         }
         .frame(maxHeight: .infinity)
