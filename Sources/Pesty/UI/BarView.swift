@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct BarView: View {
+    private static let stripTopInset: CGFloat = 4
+    private static let stripBottomInset: CGFloat = 18
+
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
 
@@ -87,31 +90,36 @@ struct BarView: View {
     }
 
     private var strip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
-                    ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
-                        ClipCardView(item: item,
-                                     index: index,
-                                     selected: item.id == store.selectedID)
-                            .id(item.id)
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                removal: .opacity))
+        GeometryReader { geometry in
+            let cardHeight = max(1, geometry.size.height - Self.stripTopInset - Self.stripBottomInset)
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+                        ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
+                            ClipCardView(item: item,
+                                         index: index,
+                                         selected: item.id == store.selectedID)
+                                .frame(height: cardHeight)
+                                .id(item.id)
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                    removal: .opacity))
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, Self.stripTopInset)
+                    .padding(.bottom, Self.stripBottomInset)
+                    .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
+                }
+                .onChange(of: store.selectedID) { _, id in
+                    guard let id else { return }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        proxy.scrollTo(id, anchor: .center)
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 18)
-                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
+                .overlay { if store.visibleItems.isEmpty { emptyState } }
             }
-            .onChange(of: store.selectedID) { _, id in
-                guard let id else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
-                }
-            }
-            .overlay { if store.visibleItems.isEmpty { emptyState } }
         }
         .frame(maxHeight: .infinity)
     }
