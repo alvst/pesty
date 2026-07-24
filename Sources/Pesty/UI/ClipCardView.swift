@@ -270,6 +270,7 @@ struct ClipCardView: View {
                 }
             }
             Divider()
+            Button("Share") { AppController.shared.shareItem(item) }
             Button("Delete", role: .destructive) { store.delete(item) }
         }
     }
