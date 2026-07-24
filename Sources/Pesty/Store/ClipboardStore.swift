@@ -3,6 +3,7 @@ import Observation
 
 enum BarSource: Equatable {
     case history
+    case pasteStack
     case pinboard(UUID)
 }
 
@@ -71,6 +72,11 @@ final class ClipboardStore {
         switch source {
         case .history:
             base = history
+        case .pasteStack:
+            // Paste Stack has its own entry IDs and selection state. Its full
+            // view is rendered separately by BarView rather than being folded
+            // into clipboard history items.
+            base = []
         case .pinboard(let id):
             base = pinboards.first(where: { $0.id == id })?.items ?? []
         }
