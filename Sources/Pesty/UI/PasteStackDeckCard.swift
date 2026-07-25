@@ -23,6 +23,13 @@ struct PasteStackDeckCard: View {
         }
         .buttonStyle(.plain)
         .help("Open Paste Stack")
+        .contextMenu {
+            Button(role: .destructive) {
+                AppController.shared.pasteSequence.deleteStack(stack.id)
+            } label: {
+                Label("Delete Paste Stack", systemImage: "trash")
+            }
+        }
     }
 
     private func deckLayer(offset: CGFloat, opacity: Double) -> some View {
