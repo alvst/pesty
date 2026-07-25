@@ -171,8 +171,8 @@ struct PestyPreviewPopover: View {
                 Text(item.presentationType.label)
                     .font(.system(size: 17, weight: .bold))
                 Spacer()
-                if let url {
-                    Button("Open in Safari") { NSWorkspace.shared.open(url) }
+                if let externalActionTitle = InlinePreviewExternalOpener.actionTitle(for: item) {
+                    Button(externalActionTitle) { InlinePreviewExternalOpener.open(item) }
                         .buttonStyle(.bordered)
                 }
             }
