@@ -57,14 +57,14 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         switch clip.type {
         case .file:
             let files = clip.fileURLs.compactMap(URL.init(string:)).filter(\.isFileURL)
-            if !files.isEmpty { return files.map { PreviewItem(url: $0, title: clip.type.label) } }
+            if !files.isEmpty { return files.map { PreviewItem(url: $0, title: clip.presentationType.label) } }
         case .image:
             if let url = ClipboardStore.shared.imageURL(for: clip) {
-                return [PreviewItem(url: url, title: clip.type.label)]
+                return [PreviewItem(url: url, title: clip.presentationType.label)]
             }
         case .richText:
             if let data = clip.rtfData, let url = write(data, named: clip.displayTitle, extension: "rtf") {
-                return [PreviewItem(url: url, title: clip.type.label)]
+                return [PreviewItem(url: url, title: clip.presentationType.label)]
             }
         case .color:
             let hex = clip.colorHex ?? "#000000"
@@ -75,18 +75,18 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         case .text:
             let text = clip.text ?? clip.displayTitle
             if let url = write(Data(textPreviewHTML(for: text).utf8), named: "Text", extension: "html") {
-                return [PreviewItem(url: url, title: clip.type.label)]
+                return [PreviewItem(url: url, title: clip.presentationType.label)]
             }
         case .link:
             let text = clip.text ?? clip.displayTitle
             if let url = write(Data(textPreviewHTML(for: text, isLink: true).utf8), named: "Link", extension: "html") {
-                return [PreviewItem(url: url, title: clip.type.label)]
+                return [PreviewItem(url: url, title: clip.presentationType.label)]
             }
         }
 
         let text = clip.text ?? clip.displayTitle
         guard let url = write(Data(text.utf8), named: clip.displayTitle, extension: "txt") else { return [] }
-        return [PreviewItem(url: url, title: clip.type.label)]
+        return [PreviewItem(url: url, title: clip.presentationType.label)]
     }
 
     private func prepareTemporaryDirectory() {

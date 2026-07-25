@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 struct RichTextContent: View {
     let rtfData: Data?
@@ -78,34 +79,180 @@ struct LinkPreviewContent: View {
     }
 }
 
+struct LinkCardPreview: View {
+    let text: String
+    private let previews = LinkPreviewStore.shared
+
+    private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    private var preview: LinkPreview? { previews.preview(for: url) }
+    private var host: String { url?.host ?? text }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Group {
+                if let image = preview?.image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.16))
+                        .overlay {
+                            Image(systemName: "link")
+                                .font(.system(size: 26, weight: .medium))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 104)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            HStack(spacing: 7) {
+                if let icon = preview?.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                } else {
+                    Image(systemName: "link")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 16, height: 16)
+                }
+                Text(preview?.title ?? host)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+            }
+        }
+        .onAppear { previews.load(for: url) }
+    }
+}
+
+struct PestyPreviewPopover: View {
+    let item: ClipItem
+    let pointerOffset: CGFloat
+
+    private var url: URL? {
+        guard item.type == .link else { return nil }
+        return URL(string: (item.text ?? item.displayTitle).trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            previewPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(.white.opacity(0.22))
+                }
+            PreviewPointer()
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .frame(width: 22, height: 11)
+                .offset(x: pointerOffset)
+        }
+        .padding(8)
+        .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
+        .allowsHitTesting(true)
+    }
+
+    private var previewPanel: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button { AppController.shared.hideInlinePreview() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                Text(item.presentationType.label)
+                    .font(.system(size: 17, weight: .bold))
+                Spacer()
+                if let url {
+                    Button("Open in Safari") { NSWorkspace.shared.open(url) }
+                        .buttonStyle(.bordered)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+
+            Divider()
+
+            Group {
+                if let url {
+                    WebLinkPreview(url: url)
+                } else {
+                    SelectedClipPreviewView(item: item)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .padding(12)
+        }
+    }
+}
+
+private struct WebLinkPreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard webView.url != url else { return }
+        webView.load(URLRequest(url: url))
+    }
+}
+
+private struct PreviewPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct SelectedClipPreviewView: View {
     let item: ClipItem
     private var store: ClipboardStore { ClipboardStore.shared }
+    private var primaryText: Color { Color(nsColor: .labelColor) }
+    private var secondaryText: Color { Color(nsColor: .secondaryLabelColor) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: item.type.symbol)
-                    .foregroundStyle(item.type.accent)
-                Text(item.type.label)
+                Image(systemName: item.presentationType.symbol)
+                    .foregroundStyle(item.presentationType.accent)
+                Text(item.presentationType.label)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(secondaryText)
                 Spacer()
                 Text(item.createdAt.clipRelativeLong)
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(secondaryText)
             }
             previewContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             Text(item.displayTitle)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(secondaryText)
                 .lineLimit(2)
         }
         .padding(16)
-        .frame(width: 340)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white.opacity(0.58))
+        .background(Color(nsColor: .textBackgroundColor))
     }
 
     @ViewBuilder
@@ -122,7 +269,7 @@ struct SelectedClipPreviewView: View {
         case .richText:
             ScrollView {
                 RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(primaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -131,7 +278,7 @@ struct SelectedClipPreviewView: View {
                 LinkPreviewContent(text: item.text ?? item.displayTitle, compact: false)
                 Text(item.text ?? "")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(secondaryText)
                     .textSelection(.enabled)
                     .lineLimit(3)
                 Spacer()
@@ -151,7 +298,7 @@ struct SelectedClipPreviewView: View {
                     Text(item.displayTitle)
                         .font(.system(size: 14, weight: .medium))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(primaryText)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -169,7 +316,7 @@ struct SelectedClipPreviewView: View {
             ScrollView {
                 Text(item.text ?? "")
                     .font(.system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(primaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -184,10 +331,7 @@ struct SelectedClipPreviewView: View {
     }
 
     private var filePreviewImage: NSImage? {
-        guard item.fileURLs.count == 1,
-              let value = item.fileURLs.first,
-              let url = URL(string: value),
-              url.isFileURL else { return nil }
+        guard let url = item.imageFileURL else { return nil }
         return NSImage(contentsOf: url)
     }
 }

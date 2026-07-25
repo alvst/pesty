@@ -16,6 +16,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
     private var previewWindow: NSWindow?
+    private var inlinePreviewController: InlinePreviewWindowController?
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
     private var isReopenPresentationPending = false
@@ -209,6 +210,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.applyHistoryPolicy()
         if store.source != .pasteStack { store.selectFirst() }
         store.inlinePreviewVisible = false
+        inlinePreviewController?.hide()
 
         if barController == nil {
             barController = BarWindowController()
@@ -220,7 +222,34 @@ final class AppController: NSObject, NSApplicationDelegate {
     func hideBar() {
         stopKeyMonitor()
         store.inlinePreviewVisible = false
+        inlinePreviewController?.hide()
         barController?.hide()
+    }
+
+    func toggleInlinePreview() {
+        guard Settings.shared.clipPreviewStyle == .inlinePesty,
+              store.source != .pasteStack,
+              store.selectedItem != nil else { return }
+        if store.inlinePreviewVisible {
+            hideInlinePreview()
+        } else {
+            store.inlinePreviewVisible = true
+        }
+    }
+
+    func hideInlinePreview() {
+        store.inlinePreviewVisible = false
+        inlinePreviewController?.hide()
+    }
+
+    func updateInlinePreview(item: ClipItem, cardFrame: CGRect) {
+        guard store.inlinePreviewVisible,
+              let barWindow = barController?.window,
+              barWindow.isVisible else { return }
+        if inlinePreviewController == nil {
+            inlinePreviewController = InlinePreviewWindowController()
+        }
+        inlinePreviewController?.show(item: item, anchoredTo: cardFrame, in: barWindow)
     }
 
     func resizeVisibleBar(to height: Double) {
@@ -574,8 +603,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_Space where store.searchText.isEmpty:
             if Settings.shared.clipPreviewStyle == .nativeQuickLook {
                 QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
-            } else if store.selectedItem != nil {
-                store.inlinePreviewVisible.toggle()
+            } else {
+                toggleInlinePreview()
             }
             return nil
         case kVK_Escape:

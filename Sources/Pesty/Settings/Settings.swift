@@ -358,7 +358,13 @@ final class Settings {
     }
 
     var clipPreviewStyle: ClipPreviewStyle {
-        didSet { guard isLoaded else { return }; d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle) }
+        didSet {
+            guard isLoaded else { return }
+            d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle)
+            if clipPreviewStyle != .inlinePesty {
+                ClipboardStore.shared.inlinePreviewVisible = false
+            }
+        }
     }
 
     var selectedClipPosition: SelectedClipPosition {

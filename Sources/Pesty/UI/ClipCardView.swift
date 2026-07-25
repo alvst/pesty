@@ -10,6 +10,11 @@ struct ClipCardView: View {
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var presentationType: ClipType { item.presentationType }
+    private var imageFile: NSImage? {
+        guard let url = item.imageFileURL else { return nil }
+        return NSImage(contentsOf: url)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,7 +45,7 @@ struct ClipCardView: View {
             headerColor
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.type.label)
+                    Text(presentationType.label)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     Text(item.createdAt.clipRelativeLong)
@@ -99,22 +104,29 @@ struct ClipCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .file:
-            VStack(spacing: 9) {
-                Image(systemName: "doc.fill").font(.system(size: 32))
-                    .foregroundStyle(headerColor)
-                Text(item.displayTitle).font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary).lineLimit(2)
-                    .multilineTextAlignment(.center)
+            Group {
+                if let imageFile {
+                    VStack(spacing: 8) {
+                        Image(nsImage: imageFile)
+                            .resizable().interpolation(.high).scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Text(item.displayTitle).font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondary).lineLimit(1)
+                    }
+                } else {
+                    VStack(spacing: 9) {
+                        Image(systemName: "doc.fill").font(.system(size: 32))
+                            .foregroundStyle(headerColor)
+                        Text(item.displayTitle).font(.system(size: 12))
+                            .foregroundStyle(Theme.textSecondary).lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .link:
-            VStack(spacing: 10) {
-                Spacer(minLength: 0)
-                Image(systemName: "safari").font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Theme.textTertiary)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity)
+            LinkCardPreview(text: item.text ?? item.displayTitle)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         default:
             Text(item.text ?? "")
                 .font(.system(size: 12.5))
@@ -165,7 +177,7 @@ struct ClipCardView: View {
             return (item.text ?? "").replacingOccurrences(of: "https://", with: "")
                                     .replacingOccurrences(of: "http://", with: "")
         case .file:
-            return "\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")"
+            return item.isImageFile ? "Image" : "\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")"
         case .image:
             return "Image"
         case .color:

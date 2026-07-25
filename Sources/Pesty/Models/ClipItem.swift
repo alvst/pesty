@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 struct ClipItem: Identifiable, Codable, Equatable {
     let id: UUID
@@ -43,6 +44,25 @@ struct ClipItem: Identifiable, Codable, Equatable {
     }
 
     var charCount: Int { text?.count ?? 0 }
+
+    /// Finder image files remain file clips for copy/paste purposes, but are
+    /// presented as images throughout Pesty so their thumbnail is useful.
+    var imageFileURL: URL? {
+        guard type == .file,
+              fileURLs.count == 1,
+              let value = fileURLs.first,
+              let url = URL(string: value),
+              url.isFileURL,
+              let fileType = UTType(filenameExtension: url.pathExtension),
+              fileType.conforms(to: .image) else { return nil }
+        return url
+    }
+
+    var isImageFile: Bool { imageFileURL != nil }
+
+    /// UI-only classification. Keep `type == .file` so pasting and dragging a
+    /// Finder image preserves its file representation.
+    var presentationType: ClipType { isImageFile ? .image : type }
 
     /// The representation used when a clip is explicitly pasted as plain text.
     /// Images intentionally do not have one: converting an image to an

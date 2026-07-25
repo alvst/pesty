@@ -10,15 +10,15 @@ struct ClipPreviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Image(systemName: item.type.symbol)
+                Image(systemName: item.presentationType.symbol)
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(item.type.accent)
+                    .foregroundStyle(item.presentationType.accent)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.displayTitle)
                         .font(.headline)
                         .lineLimit(2)
-                    Text(item.type.label)
+                    Text(item.presentationType.label)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -59,14 +59,22 @@ struct ClipPreviewView: View {
                     .textSelection(.enabled)
             }
         case .file:
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(item.fileURLs, id: \.self) { value in
-                    let url = URL(string: value)
-                    HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: "doc")
-                            .foregroundStyle(.secondary)
-                        Text(url?.path ?? value)
-                            .textSelection(.enabled)
+            if let url = item.imageFileURL, let image = NSImage(contentsOf: url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(item.fileURLs, id: \.self) { value in
+                        let url = URL(string: value)
+                        HStack(alignment: .top, spacing: 9) {
+                            Image(systemName: "doc")
+                                .foregroundStyle(.secondary)
+                            Text(url?.path ?? value)
+                                .textSelection(.enabled)
+                        }
                     }
                 }
             }
