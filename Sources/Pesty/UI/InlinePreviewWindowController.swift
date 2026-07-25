@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 private final class InlinePreviewPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    // Keep keyboard focus in the Paste Bar. The preview remains clickable, but
+    // Left/Right and other bar shortcuts continue to work while it is visible.
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
@@ -63,7 +65,11 @@ final class InlinePreviewWindowController: NSWindowController {
         }
 
         panel.setFrame(presentation.frame, display: true)
-        panel.makeKeyAndOrderFront(nil)
+        // A non-key panel otherwise can remain behind the key Paste Bar.
+        // Ordering it regardless keeps the preview visible without stealing
+        // the arrows and other keyboard controls.
+        panel.orderFrontRegardless()
+        barWindow.makeKey()
     }
 
     func hide() {

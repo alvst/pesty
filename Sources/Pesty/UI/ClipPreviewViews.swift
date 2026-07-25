@@ -156,7 +156,6 @@ struct PestyPreviewPopover: View {
                 .offset(x: pointerOffset)
         }
         .padding(8)
-        .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
         .allowsHitTesting(true)
     }
 
