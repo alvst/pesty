@@ -10,6 +10,8 @@ final class BarPanel: NSPanel {
 final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     private var isPresenting = false
+    private var isDismissing = false
+    private var transitionID = 0
 
     init() {
         let panel = BarPanel(
@@ -34,6 +36,8 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         guard let panel = window else { return }
+        transitionID &+= 1
+        isDismissing = false
         isPresenting = true
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
             ?? NSScreen.main ?? NSScreen.screens.first else { isPresenting = false; return }
@@ -56,15 +60,22 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func hide() {
-        guard let panel = window, panel.isVisible else { return }
+        guard let panel = window, panel.isVisible, !isDismissing else { return }
+        isDismissing = true
+        transitionID &+= 1
+        let hideTransitionID = transitionID
         let off = NSRect(x: panel.frame.minX, y: panel.frame.minY - panel.frame.height,
                          width: panel.frame.width, height: panel.frame.height)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.16
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrame(off, display: true)
-        }, completionHandler: {
-            panel.orderOut(nil)
+        }, completionHandler: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.transitionID == hideTransitionID else { return }
+                panel.orderOut(nil)
+                self.isDismissing = false
+            }
         })
     }
 

@@ -19,6 +19,12 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     var suppressAutoHide = false
 
+    func applicationWillResignActive(_ notification: Notification) {
+        // Begin the slide-down before the next app becomes active. Starting
+        // after that handoff can prevent the panel animation from rendering.
+        hideBar()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
