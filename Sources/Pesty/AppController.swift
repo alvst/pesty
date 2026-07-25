@@ -44,11 +44,13 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Pesty's primary interface should be immediately discoverable after
+        // every normal launch, including the first launch after quitting.
         if !Settings.shared.onboarded {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                self?.showSettings()
-            }
             Settings.shared.onboarded = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.showBar()
         }
     }
 
@@ -58,7 +60,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         // invokes an app that is already running. The clipboard bar is an
         // NSPanel, so AppKit's `hasVisibleWindows` value does not reliably
         // describe whether Pesty already has a surface on screen.
-        guard !hasVisiblePestySurface else { return true }
+        // Settings and previews are secondary surfaces. Only an already
+        // visible Paste Bar should suppress a new presentation.
+        guard !isBarVisible else { return true }
         guard !isReopenPresentationPending else { return false }
 
         isReopenPresentationPending = true
@@ -66,17 +70,16 @@ final class AppController: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.isReopenPresentationPending = false
 
-            // A window can appear while AppKit finishes the reopen event
-            // (for example, during onboarding). Avoid presenting a second
-            // Pesty surface in that case.
-            guard !self.hasVisiblePestySurface else { return }
+            // A duplicate reopen event can arrive while AppKit finishes the
+            // first one. Avoid presenting the Paste Bar twice.
+            guard !self.isBarVisible else { return }
             self.showBar()
         }
         return false
     }
 
-    private var hasVisiblePestySurface: Bool {
-        NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
+    private var isBarVisible: Bool {
+        barController?.window?.isVisible == true
     }
 
     @objc private func appActivated(_ note: Notification) {
