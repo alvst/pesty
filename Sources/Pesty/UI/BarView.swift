@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct BarView: View {
-    private static let stripTopInset: CGFloat = 4
-    private static let stripBottomInset: CGFloat = 18
+    private static let stripTopInset: CGFloat = 16
+    private static let stripBottomInset: CGFloat = 26
 
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
