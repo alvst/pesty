@@ -91,7 +91,7 @@ final class PasteSequence {
         savedStacks.contains { stack in stack.entries.contains { $0.item.id == id } }
     }
 
-    private init() {}
+    init() {}
 
     func restoreSavedStacks(_ stacks: [SavedPasteStack]) {
         savedStacks = stacks.sorted { $0.createdAt > $1.createdAt }
