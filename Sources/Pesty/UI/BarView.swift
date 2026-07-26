@@ -261,7 +261,14 @@ struct BarView: View {
                 .onChange(of: store.selectedID) { _, id in
                     guard let id else { return }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                        proxy.scrollTo(id, anchor: selectedClipAnchor)
+                        if settings.selectedClipPosition == .rightEdge {
+                            proxy.scrollTo(id, anchor: .trailing)
+                        } else {
+                            // Do not re-center a card that is already visible.
+                            // This keeps arrow-key navigation visually stable
+                            // while still revealing the next off-screen card.
+                            proxy.scrollTo(id)
+                        }
                     }
                 }
                 .onChange(of: settings.selectedClipPosition) { _, _ in
