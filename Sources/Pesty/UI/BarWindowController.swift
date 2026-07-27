@@ -83,14 +83,19 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard Settings.shared.hideOnClickOutside,
+        guard let panel = notification.object as? NSWindow,
+              Settings.shared.hideOnClickOutside,
               !isPresenting,
               !AppController.shared.suppressAutoHide else { return }
         // A preview panel becomes key immediately after the strip hands it a
         // clip. Defer until that transition is visible before deciding whether
         // focus actually left Pesty.
-        DispatchQueue.main.async {
-            guard !QuickLookService.shared.isVisible,
+        DispatchQueue.main.async { [weak self, weak panel] in
+            guard let self, let panel,
+                  panel.isVisible,
+                  !panel.isKeyWindow,
+                  !self.isPresenting,
+                  !QuickLookService.shared.isVisible,
                   !ClipboardStore.shared.inlinePreviewVisible else { return }
             AppController.shared.hideBar()
         }

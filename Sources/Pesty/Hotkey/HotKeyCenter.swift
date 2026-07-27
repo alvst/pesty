@@ -33,11 +33,27 @@ final class HotKeyCenter {
                               MemoryLayout<EventHotKeyID>.size,
                               nil,
                               &id)
-            DispatchQueue.main.async {
-                if id.id == 2 {
-                    HotKeyCenter.shared.onSequenceTrigger?()
-                } else {
-                    HotKeyCenter.shared.onTrigger?()
+            // Carbon delivers application hot-key events from the main event
+            // loop. Handle that path synchronously so the panel is key and
+            // its local key monitor is installed before the next key event
+            // (for example, an immediately following Right Arrow) arrives.
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    if id.id == 2 {
+                        HotKeyCenter.shared.onSequenceTrigger?()
+                    } else {
+                        HotKeyCenter.shared.onTrigger?()
+                    }
+                }
+            } else {
+                // Keep a safe fallback if Carbon ever invokes this handler
+                // from a non-main thread.
+                DispatchQueue.main.async {
+                    if id.id == 2 {
+                        HotKeyCenter.shared.onSequenceTrigger?()
+                    } else {
+                        HotKeyCenter.shared.onTrigger?()
+                    }
                 }
             }
             return noErr

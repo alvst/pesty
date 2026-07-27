@@ -26,6 +26,10 @@ final class ClipboardStore {
     var searchText: String = ""
     var selectedID: UUID?
     var inlinePreviewVisible = false
+    /// Advances whenever the Paste Bar is presented so the strip can apply
+    /// the user's initial-position preference once per presentation, rather
+    /// than again on every arrow-key selection.
+    private(set) var barPresentationID = 0
     /// Every selected clip in the current strip. `selectedID` remains the
     /// primary selection used by keyboard navigation and Return-to-paste.
     private(set) var selectedIDs: Set<UUID> = []
@@ -126,7 +130,18 @@ final class ClipboardStore {
         return item
     }
 
-    func applyHistoryPolicy() { _ = applyHistoryPolicyNow(); scheduleSave() }
+    func applyHistoryPolicy() {
+        // Opening the bar runs the retention check. Do not schedule a full
+        // JSON encode and disk write unless that check actually changed the
+        // persisted history.
+        if applyHistoryPolicyNow() {
+            scheduleSave()
+        }
+    }
+
+    func noteBarPresented() {
+        barPresentationID &+= 1
+    }
 
     func pasteStacksDidChange() {
         scheduleSave()

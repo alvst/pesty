@@ -216,6 +216,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             barController = BarWindowController()
         }
         barController?.show()
+        store.noteBarPresented()
         startKeyMonitor()
     }
 

@@ -260,20 +260,25 @@ struct BarView: View {
                 }
                 .onChange(of: store.selectedID) { _, id in
                     guard let id else { return }
-                    // Apply keyboard navigation in the same event turn. The
-                    // previous spring made a rapid ⌘⇧V, Right sequence feel
-                    // as though selection had fallen behind the key press.
+                    // Avoid animating or re-anchoring ordinary keyboard
+                    // navigation. `scrollTo` without an anchor leaves a
+                    // visible card in place and only reveals an off-screen
+                    // selection.
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        if settings.selectedClipPosition == .rightEdge {
-                            proxy.scrollTo(id, anchor: .trailing)
-                        } else {
-                            // Do not re-center a card that is already visible.
-                            // This keeps arrow-key navigation visually stable
-                            // while still revealing the next off-screen card.
-                            proxy.scrollTo(id)
-                        }
+                        proxy.scrollTo(id)
+                    }
+                }
+                .onChange(of: store.barPresentationID) { _, _ in
+                    guard let id = store.selectedID else { return }
+                    // Position the initial card once when the bar opens. This
+                    // retains the selected-clip preference without making
+                    // every Right/Left press shift the whole strip.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: selectedClipAnchor)
                     }
                 }
                 .onChange(of: settings.selectedClipPosition) { _, _ in
