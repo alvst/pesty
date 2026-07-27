@@ -21,7 +21,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     init() {
         let panel = BarPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 360),
-            styleMask: [.borderless],
+            // Preserve the front app's first responder (for example, a
+            // focused Safari field) while Pesty receives navigation keys.
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
         panel.isFloatingPanel = true
@@ -47,19 +49,12 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         let vf = screen.visibleFrame
         let height = CGFloat(Settings.shared.barHeight)
         let onScreen = NSRect(x: vf.minX, y: vf.minY, width: vf.width, height: height)
-        let offScreen = NSRect(x: vf.minX, y: vf.minY - height, width: vf.width, height: height)
 
-        panel.setFrame(offScreen, display: false)
-        NSApp.activate(ignoringOtherApps: true)
+        // A keyboard shortcut should make the next arrow key effective
+        // immediately; do not wait for an entrance animation.
+        panel.setFrame(onScreen, display: false)
         panel.makeKeyAndOrderFront(nil)
-
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(onScreen, display: true)
-        }, completionHandler: { [weak self] in
-            DispatchQueue.main.async { self?.isPresenting = false }
-        })
+        isPresenting = false
     }
 
     func hide() {

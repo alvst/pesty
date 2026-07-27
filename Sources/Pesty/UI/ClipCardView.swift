@@ -31,7 +31,6 @@ struct ClipCardView: View {
         .shadow(color: .black.opacity(selected ? 0.35 : 0.18),
                 radius: selected ? 12 : 5, y: selected ? 5 : 2)
         .scaleEffect(hovering && !selected ? 1.015 : 1.0)
-        .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }

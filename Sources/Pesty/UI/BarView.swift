@@ -260,7 +260,12 @@ struct BarView: View {
                 }
                 .onChange(of: store.selectedID) { _, id in
                     guard let id else { return }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                    // Apply keyboard navigation in the same event turn. The
+                    // previous spring made a rapid ⌘⇧V, Right sequence feel
+                    // as though selection had fallen behind the key press.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
                         if settings.selectedClipPosition == .rightEdge {
                             proxy.scrollTo(id, anchor: .trailing)
                         } else {
