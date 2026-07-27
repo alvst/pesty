@@ -220,11 +220,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         startKeyMonitor()
     }
 
-    func hideBar() {
+    func hideBar(immediately: Bool = false) {
         stopKeyMonitor()
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
-        barController?.hide()
+        barController?.hide(immediately: immediately)
     }
 
     func toggleInlinePreview() {
@@ -281,7 +281,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
         let target = pasteTarget
-        hideBar()
+        // Return must not leave the non-activating panel key while the
+        // synthetic Command-V is handed back to the previous app. Dismiss it
+        // before requesting target activation; Escape/click dismissal keeps
+        // the normal slide-out animation.
+        hideBar(immediately: true)
         PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
     }
 
@@ -418,7 +422,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func performPasteStackEntry(_ entry: PasteStackEntry) {
         let target = pasteTargetApp()
-        hideBar()
+        hideBar(immediately: true)
         PasteService.paste(entry.item,
                            into: target,
                            monitor: monitor,

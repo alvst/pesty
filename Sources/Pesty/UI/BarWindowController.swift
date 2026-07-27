@@ -57,8 +57,12 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         isPresenting = false
     }
 
-    func hide() {
+    func hide(immediately: Bool = false) {
         guard let panel = window, panel.isVisible else { return }
+        if immediately {
+            panel.orderOut(nil)
+            return
+        }
         let off = NSRect(x: panel.frame.minX, y: panel.frame.minY - panel.frame.height,
                          width: panel.frame.width, height: panel.frame.height)
         NSAnimationContext.runAnimationGroup({ ctx in
