@@ -139,6 +139,16 @@ final class ClipboardStore {
         }
     }
 
+    /// A Copy from the Paste Bar is an intentional use of an existing clip.
+    /// Promote it explicitly because ClipboardMonitor ignores Pesty's own
+    /// pasteboard writes to avoid capturing duplicate history entries.
+    @discardableResult
+    func promoteCopiedItem(_ item: ClipItem, at date: Date = .now) -> ClipItem {
+        var copied = item
+        copied.createdAt = date
+        return addCaptured(copied)
+    }
+
     func noteBarPresented() {
         barPresentationID &+= 1
     }

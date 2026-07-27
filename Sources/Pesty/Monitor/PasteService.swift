@@ -65,55 +65,84 @@ enum PasteService {
         // Direct-download build: optionally paste straight into the active app by
         // synthesizing ⌘V. This requires the user's Accessibility grant.
         guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return }
-        // The user can still be releasing the shortcut that opened Pesty when
-        // they press Return. Wait for those physical modifiers to clear so the
-        // target receives a plain Command-V rather than the original shortcut.
-        target.activate()
-        waitForFrontmost(target, attempts: 30)
+        beginDirectPaste(into: target)
         #endif
     }
 
     #if !MAS
-    private static func waitForFrontmost(_ app: NSRunningApplication, attempts: Int) {
-        guard attempts > 0, !app.isTerminated else { return }
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
-            waitForShortcutModifiersToRelease(attempts: 30)
+    private static func beginDirectPaste(into target: NSRunningApplication) {
+        guard !target.isTerminated else { return }
+
+        // The ordinary path is a non-activating Paste Bar, so the target is
+        // still active and its first responder is still intact. Avoid a second
+        // activation request in that path; it only introduces a focus race.
+        if target.isActive {
+            waitForPasteTriggerToRelease(for: target)
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
-            waitForFrontmost(app, attempts: attempts - 1)
+
+        // A menu-bar/reopen path can genuinely leave Pesty frontmost. Request
+        // cooperative activation only when Pesty is active; otherwise use the
+        // normal activation request for the selected target.
+        if NSApp.isActive {
+            NSApp.yieldActivation(to: target)
+            guard target.activate(from: .current, options: []) else { return }
+        } else {
+            target.activate(options: [])
+        }
+        waitForTargetActivation(target, attempts: 30)
+    }
+
+    private static func waitForTargetActivation(_ target: NSRunningApplication, attempts: Int) {
+        guard !target.isTerminated else { return }
+        if target.isActive {
+            waitForPasteTriggerToRelease(for: target)
+            return
+        }
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+            waitForTargetActivation(target, attempts: attempts - 1)
         }
     }
 
-    private static func waitForShortcutModifiersToRelease(attempts: Int) {
-        let flags = CGEventSource.flagsState(.combinedSessionState)
+    private static func waitForPasteTriggerToRelease(for target: NSRunningApplication) {
+        guard !target.isTerminated else { return }
+
+        // `.hidSystemState` observes the keys that are physically down; the
+        // combined session state can include our synthetic event source.
+        let flags = CGEventSource.flagsState(.hidSystemState)
         let shortcutMask = CGEventFlags.maskCommand.rawValue
             | CGEventFlags.maskAlternate.rawValue
             | CGEventFlags.maskControl.rawValue
             | CGEventFlags.maskShift.rawValue
         let modifiersHeld = flags.rawValue & shortcutMask
+        let returnHeld = CGEventSource.keyState(.hidSystemState, key: CGKeyCode(kVK_Return))
+            || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(kVK_ANSI_KeypadEnter))
 
-        guard modifiersHeld == 0 || attempts == 0 else {
+        guard modifiersHeld == 0, !returnHeld else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                waitForShortcutModifiersToRelease(attempts: attempts - 1)
+                waitForPasteTriggerToRelease(for: target)
             }
             return
         }
 
-        // Give the reactivated app one turn through its responder chain after
-        // the Paste Bar has been ordered out.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { sendCommandV() }
+        // Return's handler completes before the direct app-targeted paste is
+        // injected. There is no arbitrary handoff delay or global focus race.
+        DispatchQueue.main.async {
+            guard !target.isTerminated, target.isActive else { return }
+            sendCommandV(to: target.processIdentifier)
+        }
     }
 
-    private static func sendCommandV() {
+    private static func sendCommandV(to processIdentifier: pid_t) {
         let src = CGEventSource(stateID: .combinedSessionState)
         let v = CGKeyCode(kVK_ANSI_V)
         guard let down = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: true),
               let up = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false) else { return }
         down.flags = .maskCommand
         up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        down.postToPid(processIdentifier)
+        up.postToPid(processIdentifier)
     }
 
     @discardableResult

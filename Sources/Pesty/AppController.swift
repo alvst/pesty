@@ -280,7 +280,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
-        let target = pasteTarget
+        // The non-activating bar normally leaves the source app active. Resolve
+        // that app at the moment Return is pressed instead of relying on the
+        // app that happened to open the bar.
+        let target = pasteTargetApp()
         // Return must not leave the non-activating panel key while the
         // synthetic Command-V is handed back to the previous app. Dismiss it
         // before requesting target activation; Escape/click dismissal keeps
@@ -290,9 +293,26 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func copyItem(_ item: ClipItem) {
+        let previousChange = NSPasteboard.general.changeCount
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
+        // ClipboardMonitor deliberately ignores Pesty's own write, so make an
+        // explicit copy use count as the most recent history item ourselves.
+        if change != previousChange {
+            store.promoteCopiedItem(item)
+        }
         hideBar()
+    }
+
+    /// Copies the primary Paste Bar selection rather than whichever SwiftUI
+    /// card menu happened to register the Command-C key equivalent.
+    func commandCopy() {
+        if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+            copyItem(entry.item)
+            return
+        }
+        guard let item = store.selectedItem else { return }
+        copyItem(item)
     }
 
     func beginPasteSequence() {
@@ -551,9 +571,16 @@ final class AppController: NSObject, NSApplicationDelegate {
     func handleBarCommandShortcut(_ event: NSEvent) -> Bool {
         guard barController?.window?.isKeyWindow == true else { return false }
 
-        let flags = event.modifierFlags
-        guard flags.contains(.command), flags.contains(.shift),
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.command),
               !flags.contains(.control), !flags.contains(.option) else { return false }
+
+        if Int(event.keyCode) == kVK_ANSI_C, !flags.contains(.shift) {
+            commandCopy()
+            return true
+        }
+
+        guard flags.contains(.shift) else { return false }
 
         switch Int(event.keyCode) {
         case kVK_ANSI_S:

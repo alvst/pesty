@@ -200,7 +200,6 @@ struct ClipCardView: View {
         Button { AppController.shared.copyItem(item) } label: {
             Label("Copy", systemImage: "doc.on.doc")
         }
-        .keyboardShortcut("c", modifiers: .command)
 
         if store.source == .history {
             Button {
