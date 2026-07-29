@@ -78,9 +78,7 @@ struct BarView: View {
                 if settings.iCloudSync {
                     syncButton
                 }
-                if store.source != .pasteStack {
-                    searchIndicator(width: searchWidth(in: geometry.size.width))
-                }
+                searchIndicator(width: searchWidth(in: geometry.size.width))
                 PinboardTabs()
                     .layoutPriority(1)
                 Spacer(minLength: 8)

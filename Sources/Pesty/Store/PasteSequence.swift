@@ -58,6 +58,7 @@ struct SavedPasteStack: Identifiable, Codable {
     var displayEntries: [PasteStackEntry] {
         entries.filter { !$0.isPasted } + entries.filter(\.isPasted)
     }
+
 }
 
 @Observable
@@ -82,6 +83,15 @@ final class PasteSequence {
     var displayEntries: [PasteStackEntry] {
         entries.filter { !$0.isPasted } + entries.filter(\.isPasted)
     }
+
+    /// Filters only the presented stack. The persisted queue and its paste
+    /// order are intentionally left unchanged.
+    func visibleEntries(matching searchText: String) -> [PasteStackEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return displayEntries }
+        return displayEntries.filter { $0.item.searchableText.contains(query) }
+    }
+
     var selectedEntry: PasteStackEntry? {
         guard let selectedEntryID else { return nil }
         return entries.first(where: { $0.id == selectedEntryID })
@@ -161,7 +171,26 @@ final class PasteSequence {
     }
 
     func selectFirst() {
-        selectedEntryID = displayEntries.first?.id
+        selectFirst(matching: "")
+    }
+
+    func selectFirst(matching searchText: String) {
+        selectedEntryID = visibleEntries(matching: searchText).first?.id
+    }
+
+    /// Retains the current selection when it remains visible, otherwise moves
+    /// to the first matching entry (or clears selection for an empty result).
+    func reconcileSelection(matching searchText: String) {
+        let displayed = visibleEntries(matching: searchText)
+        guard !displayed.isEmpty else {
+            selectedEntryID = nil
+            return
+        }
+        guard let selectedEntryID,
+              displayed.contains(where: { $0.id == selectedEntryID }) else {
+            self.selectedEntryID = displayed.first?.id
+            return
+        }
     }
 
     func select(_ entry: PasteStackEntry) {
@@ -169,7 +198,11 @@ final class PasteSequence {
     }
 
     func moveSelection(by delta: Int) {
-        let displayed = displayEntries
+        moveSelection(by: delta, matching: "")
+    }
+
+    func moveSelection(by delta: Int, matching searchText: String) {
+        let displayed = visibleEntries(matching: searchText)
         guard !displayed.isEmpty else {
             selectedEntryID = nil
             return

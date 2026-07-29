@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct PasteStackView: View {
     @Bindable private var stack = PasteSequence.shared
+    @Bindable private var store = ClipboardStore.shared
     @State private var draggedEntryID: UUID?
     @State private var dropTargetEntryID: UUID?
     @State private var isDropTargetAtEnd = false
@@ -84,10 +85,12 @@ struct PasteStackView: View {
                     .frame(maxWidth: 210)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if visibleEntries.isEmpty {
+            noSearchResults
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 7) {
-                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(pendingEntries.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
                                            selected: stack.selectedEntryID == entry.id,
@@ -99,16 +102,16 @@ struct PasteStackView: View {
                                 isDropTargetAtEnd: $isDropTargetAtEnd
                             ))
                     }
-                    if stack.pendingCount > 1 {
+                    if pendingEntries.count > 1 {
                         PasteStackEntryEndDropTarget(
                             draggedEntryID: $draggedEntryID,
                             dropTargetEntryID: $dropTargetEntryID,
                             isDropTargeted: $isDropTargetAtEnd
                         )
                     }
-                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(pastedEntries.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
-                                           index: stack.pendingCount + index + 1,
+                                           index: pendingEntries.count + index + 1,
                                            selected: stack.selectedEntryID == entry.id,
                                            showsPasteAction: false)
                     }
@@ -116,6 +119,32 @@ struct PasteStackView: View {
                 .padding(12)
             }
         }
+    }
+
+    private var visibleEntries: [PasteStackEntry] {
+        stack.visibleEntries(matching: store.searchText)
+    }
+
+    private var pendingEntries: [PasteStackEntry] {
+        visibleEntries.filter { !$0.isPasted }
+    }
+
+    private var pastedEntries: [PasteStackEntry] {
+        visibleEntries.filter(\.isPasted)
+    }
+
+    private var noSearchResults: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(Theme.selection)
+            Text("No matching stack clips")
+                .font(.system(size: 13, weight: .medium))
+            Text("Try a different search.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var footer: some View {
@@ -277,6 +306,7 @@ private struct PasteStackEntryRow: View {
 /// turning its entries into ordinary clipboard-history cards.
 struct PasteStackContentView: View {
     private var stack: PasteSequence { AppController.shared.pasteSequence }
+    @Bindable private var store = ClipboardStore.shared
     @State private var draggedEntryID: UUID?
     @State private var dropTargetEntryID: UUID?
     @State private var isDropTargetAtEnd = false
@@ -382,10 +412,12 @@ struct PasteStackContentView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if visibleEntries.isEmpty {
+            noSearchResults
         } else {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 8) {
-                    ForEach(Array(stack.displayEntries.filter { !$0.isPasted }.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(pendingEntries.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
                                            index: index + 1,
                                            selected: stack.selectedEntryID == entry.id,
@@ -397,16 +429,16 @@ struct PasteStackContentView: View {
                                 isDropTargetAtEnd: $isDropTargetAtEnd
                             ))
                     }
-                    if stack.pendingCount > 1 {
+                    if pendingEntries.count > 1 {
                         PasteStackEntryEndDropTarget(
                             draggedEntryID: $draggedEntryID,
                             dropTargetEntryID: $dropTargetEntryID,
                             isDropTargeted: $isDropTargetAtEnd
                         )
                     }
-                    ForEach(Array(stack.displayEntries.filter(\.isPasted).enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(pastedEntries.enumerated()), id: \.element.id) { index, entry in
                         PasteStackEntryRow(entry: entry,
-                                           index: stack.pendingCount + index + 1,
+                                           index: pendingEntries.count + index + 1,
                                            selected: stack.selectedEntryID == entry.id,
                                            showsPasteAction: true)
                     }
@@ -415,6 +447,32 @@ struct PasteStackContentView: View {
                 .padding(.vertical, 16)
             }
         }
+    }
+
+    private var visibleEntries: [PasteStackEntry] {
+        stack.visibleEntries(matching: store.searchText)
+    }
+
+    private var pendingEntries: [PasteStackEntry] {
+        visibleEntries.filter { !$0.isPasted }
+    }
+
+    private var pastedEntries: [PasteStackEntry] {
+        visibleEntries.filter(\.isPasted)
+    }
+
+    private var noSearchResults: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(Theme.selection)
+            Text("No matching stack clips")
+                .font(.system(size: 14, weight: .medium))
+            Text("Try a different search.")
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var summary: String {

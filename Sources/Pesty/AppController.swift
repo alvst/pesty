@@ -208,7 +208,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.searchText = ""
         store.source = requestedSource ?? .history
         store.applyHistoryPolicy()
-        if store.source != .pasteStack { store.selectFirst() }
+        if store.source == .pasteStack {
+            pasteSequence.selectFirst(matching: store.searchText)
+        } else {
+            store.selectFirst()
+        }
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
 
@@ -397,14 +401,17 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func removePasteStackEntry(_ entry: PasteStackEntry) {
         pasteSequence.remove(entry)
+        pasteSequence.reconcileSelection(matching: store.searchText)
     }
 
     func reAddPasteStackEntry(_ entry: PasteStackEntry) {
         pasteSequence.reAdd(entry)
+        pasteSequence.reconcileSelection(matching: store.searchText)
     }
 
     func resetPasteStackProgress() {
         pasteSequence.resetProgress()
+        pasteSequence.reconcileSelection(matching: store.searchText)
     }
 
     /// Saves the deck in its displayed paste order so a temporary Paste Stack
@@ -427,16 +434,18 @@ final class AppController: NSObject, NSApplicationDelegate {
         #endif
 
         guard let entry = pasteSequence.next() else { return }
+        pasteSequence.reconcileSelection(matching: store.searchText)
         performPasteStackEntry(entry)
     }
 
     func pasteStackEntry(_ entry: PasteStackEntry) {
         guard let entry = pasteSequence.next(entryID: entry.id) else { return }
+        pasteSequence.reconcileSelection(matching: store.searchText)
         performPasteStackEntry(entry)
     }
 
     func pasteSelectedStackEntry() {
-        guard let entry = pasteSequence.selectedEntry else { return }
+        guard let entry = selectedVisiblePasteStackEntry else { return }
         pasteStackEntry(entry)
     }
 
@@ -632,15 +641,22 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
 
         switch code {
-        case kVK_Space where store.searchText.isEmpty:
-            if Settings.shared.clipPreviewStyle == .nativeQuickLook {
+        case kVK_Space:
+            if store.source == .pasteStack {
+                let entries = pasteSequence.visibleEntries(matching: store.searchText)
+                QuickLookService.shared.toggle(items: entries.map(\.item),
+                                               selectedID: selectedVisiblePasteStackEntry?.item.id)
+            } else if Settings.shared.clipPreviewStyle == .nativeQuickLook {
                 QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
             } else {
                 toggleInlinePreview()
             }
             return nil
         case kVK_Escape:
-            if !store.searchText.isEmpty { store.searchText = ""; store.selectFirst() }
+            if !store.searchText.isEmpty {
+                store.searchText = ""
+                resetBarSelectionForSearch()
+            }
             else { hideBar() }
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
@@ -650,29 +666,23 @@ final class AppController: NSObject, NSApplicationDelegate {
             }
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
-            if store.source == .pasteStack {
-                pasteSequence.moveSelection(by: -1)
-                return nil
-            }
             moveBarSelection(by: -1); return nil
         case kVK_RightArrow, kVK_DownArrow:
-            if store.source == .pasteStack {
-                pasteSequence.moveSelection(by: 1)
-                return nil
-            }
             moveBarSelection(by: 1); return nil
         case kVK_Delete:
-            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+            if !cmd, !store.searchText.isEmpty {
+                store.searchText.removeLast()
+                resetBarSelectionForSearch()
+                return nil
+            }
+            if store.source == .pasteStack, let entry = selectedVisiblePasteStackEntry {
                 removePasteStackEntry(entry)
                 return nil
             }
             if cmd { store.deleteSelected(); return nil }
-            if !store.searchText.isEmpty {
-                store.searchText.removeLast(); store.selectFirst(); return nil
-            }
             return nil
         case kVK_ForwardDelete:
-            if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+            if store.source == .pasteStack, let entry = selectedVisiblePasteStackEntry {
                 removePasteStackEntry(entry)
                 return nil
             }
@@ -682,21 +692,40 @@ final class AppController: NSObject, NSApplicationDelegate {
             break
         }
 
-        if store.source != .pasteStack,
-           !cmd && !ctrl && !opt,
+        if !cmd && !ctrl && !opt,
            let chars = event.characters, chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 32, scalar.value != 127 {
             store.searchText.append(chars)
-            store.selectFirst()
+            resetBarSelectionForSearch()
             return nil
         }
         return event
     }
 
     private func moveBarSelection(by delta: Int) {
+        if store.source == .pasteStack {
+            pasteSequence.moveSelection(by: delta, matching: store.searchText)
+            QuickLookService.shared.updateSelection(selectedID: selectedVisiblePasteStackEntry?.item.id)
+            return
+        }
         store.moveSelection(by: delta)
         QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+    }
+
+    private var selectedVisiblePasteStackEntry: PasteStackEntry? {
+        guard store.source == .pasteStack,
+              let selectedID = pasteSequence.selectedEntryID else { return nil }
+        return pasteSequence.visibleEntries(matching: store.searchText)
+            .first(where: { $0.id == selectedID })
+    }
+
+    private func resetBarSelectionForSearch() {
+        if store.source == .pasteStack {
+            pasteSequence.selectFirst(matching: store.searchText)
+        } else {
+            store.selectFirst()
+        }
     }
 
     private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
