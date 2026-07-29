@@ -23,6 +23,30 @@ enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
     }
 }
 
+enum PreviewOpenTarget: CaseIterable, Identifiable {
+    case text
+    case image
+    case link
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .text: "Text & rich text"
+        case .image: "Images"
+        case .link: "Links"
+        }
+    }
+
+    var defaultApplicationBundleID: String {
+        switch self {
+        case .text: "com.apple.TextEdit"
+        case .image: "com.apple.Preview"
+        case .link: "com.apple.Safari"
+        }
+    }
+}
+
 enum SelectedClipPosition: Int, CaseIterable, Identifiable {
     case center
     case rightEdge
@@ -246,6 +270,9 @@ final class Settings {
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
+        static let previewImageApplicationBundleID = "previewImageApplicationBundleID"
+        static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
         static let selectedClipPosition = "selectedClipPosition"
         static let clipColorTheme = "clipColorTheme"
         static let clipColorAccentHex = "clipColorAccentHex"
@@ -367,6 +394,18 @@ final class Settings {
         }
     }
 
+    var previewTextApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewTextApplicationBundleID, forKey: Keys.previewTextApplicationBundleID) }
+    }
+
+    var previewImageApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewImageApplicationBundleID, forKey: Keys.previewImageApplicationBundleID) }
+    }
+
+    var previewLinkApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewLinkApplicationBundleID, forKey: Keys.previewLinkApplicationBundleID) }
+    }
+
     var selectedClipPosition: SelectedClipPosition {
         didSet { guard isLoaded else { return }; d.set(selectedClipPosition.rawValue, forKey: Keys.selectedClipPosition) }
     }
@@ -416,6 +455,9 @@ final class Settings {
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
+            Keys.previewImageApplicationBundleID: PreviewOpenTarget.image.defaultApplicationBundleID,
+            Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
             Keys.selectedClipPosition: SelectedClipPosition.center.rawValue,
             Keys.clipColorTheme: ClipColorTheme.default.rawValue,
             Keys.clipColorAccentHex: "#FF5A9F",
@@ -443,6 +485,12 @@ final class Settings {
         barHeight = d.double(forKey: Keys.barHeight)
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)
+            ?? PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = d.string(forKey: Keys.previewImageApplicationBundleID)
+            ?? PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = d.string(forKey: Keys.previewLinkApplicationBundleID)
+            ?? PreviewOpenTarget.link.defaultApplicationBundleID
         selectedClipPosition = SelectedClipPosition(rawValue: d.integer(forKey: Keys.selectedClipPosition)) ?? .center
         clipColorTheme = ClipColorTheme(rawValue: d.integer(forKey: Keys.clipColorTheme)) ?? .default
         clipColorAccentHex = d.string(forKey: Keys.clipColorAccentHex) ?? "#FF5A9F"
@@ -462,6 +510,29 @@ final class Settings {
 
     var sequenceHotkeyDisplay: String {
         HotKeyCenter.describe(keyCode: sequenceHotkeyKeyCode, modifiers: sequenceHotkeyModifiers)
+    }
+
+    func previewApplicationBundleID(for target: PreviewOpenTarget) -> String {
+        switch target {
+        case .text: previewTextApplicationBundleID
+        case .image: previewImageApplicationBundleID
+        case .link: previewLinkApplicationBundleID
+        }
+    }
+
+    func setPreviewApplicationBundleID(_ bundleID: String, for target: PreviewOpenTarget) {
+        guard !bundleID.isEmpty else { return }
+        switch target {
+        case .text: previewTextApplicationBundleID = bundleID
+        case .image: previewImageApplicationBundleID = bundleID
+        case .link: previewLinkApplicationBundleID = bundleID
+        }
+    }
+
+    func restorePreviewApplicationDefaults() {
+        previewTextApplicationBundleID = PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = PreviewOpenTarget.link.defaultApplicationBundleID
     }
 
     func isIgnoringSourceApp(_ bundleID: String?) -> Bool {

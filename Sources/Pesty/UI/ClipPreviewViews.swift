@@ -171,10 +171,7 @@ struct PestyPreviewPopover: View {
                 Text(item.presentationType.label)
                     .font(.system(size: 17, weight: .bold))
                 Spacer()
-                if let url {
-                    Button("Open in Safari") { NSWorkspace.shared.open(url) }
-                        .buttonStyle(.bordered)
-                }
+                externalOpenControl
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
@@ -191,6 +188,45 @@ struct PestyPreviewPopover: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private var externalOpenControl: some View {
+        if let title = InlinePreviewExternalOpener.primaryActionTitle(for: item) {
+            let recommendations = InlinePreviewExternalOpener.recommendedApplications(for: item)
+            Menu(title) {
+                if !recommendations.isEmpty {
+                    Section("Suggested Apps") {
+                        ForEach(recommendations) { application in
+                            Button {
+                                InlinePreviewExternalOpener.open(item, with: application)
+                            } label: {
+                                Label {
+                                    Text(application.name)
+                                } icon: {
+                                    Image(nsImage: application.icon)
+                                        .resizable()
+                                        .interpolation(.high)
+                                        .frame(width: 16, height: 16)
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                }
+                Button("Choose Another App…") {
+                    InlinePreviewExternalOpener.chooseAnotherAppAndOpen(item)
+                }
+            } primaryAction: {
+                InlinePreviewExternalOpener.openPrimary(item)
+            }
+            // SwiftUI can retain the backing NSMenu when this popover changes
+            // cards. Key it to the clip so image handlers never leak into a
+            // subsequently selected link (and vice versa).
+            .id(item.id)
+            .menuStyle(.borderedButton)
+            .controlSize(.small)
         }
     }
 }
