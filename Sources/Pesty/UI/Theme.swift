@@ -2,7 +2,12 @@ import SwiftUI
 
 enum Theme {
     static let cardWidth: CGFloat = 215
-    static let cardSpacing: CGFloat = 12
+    // Keep a deliberate gap between cards so the current selection reads as a
+    // card rather than a tight, clipped carousel cell.
+    static let cardSpacing: CGFloat = 28
+    // The scroll view owns enough horizontal room for a selected card's border
+    // and shadow at either edge of the Paste Bar.
+    static let cardStripViewportInset: CGFloat = 22
     static let cornerRadius: CGFloat = 16
     static let cardCorner: CGFloat = 13
     static let headerHeight: CGFloat = 54

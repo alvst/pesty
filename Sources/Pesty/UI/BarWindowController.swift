@@ -16,6 +16,8 @@ final class BarPanel: NSPanel {
 @MainActor
 final class BarWindowController: NSWindowController, NSWindowDelegate {
 
+    private static let slideDuration: TimeInterval = 0.18
+    private static let slideOvershoot: CGFloat = 16
     private var isPresenting = false
 
     init() {
@@ -49,12 +51,20 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         let vf = screen.visibleFrame
         let height = CGFloat(Settings.shared.barHeight)
         let onScreen = NSRect(x: vf.minX, y: vf.minY, width: vf.width, height: height)
+        let offScreen = belowScreenFrame(for: onScreen)
 
-        // A keyboard shortcut should make the next arrow key effective
-        // immediately; do not wait for an entrance animation.
-        panel.setFrame(onScreen, display: false)
+        // Make the panel key before it starts moving. That keeps an immediately
+        // following arrow key responsive while the bar and its cards rise as a
+        // single surface from below the screen.
+        panel.setFrame(offScreen, display: false)
         panel.makeKeyAndOrderFront(nil)
-        isPresenting = false
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = Self.slideDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(onScreen, display: true)
+        }, completionHandler: { [weak self] in
+            DispatchQueue.main.async { self?.isPresenting = false }
+        })
     }
 
     func hide(immediately: Bool = false) {
@@ -63,10 +73,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
             panel.orderOut(nil)
             return
         }
-        let off = NSRect(x: panel.frame.minX, y: panel.frame.minY - panel.frame.height,
-                         width: panel.frame.width, height: panel.frame.height)
+        let off = belowScreenFrame(for: panel.frame)
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.16
+            ctx.duration = Self.slideDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrame(off, display: true)
         }, completionHandler: {
@@ -84,6 +93,13 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         let visible = screen.visibleFrame
         panel.setFrame(NSRect(x: visible.minX, y: visible.minY,
                               width: visible.width, height: height), display: true)
+    }
+
+    private func belowScreenFrame(for frame: NSRect) -> NSRect {
+        NSRect(x: frame.minX,
+               y: frame.minY - frame.height - Self.slideOvershoot,
+               width: frame.width,
+               height: frame.height)
     }
 
     func windowDidResignKey(_ notification: Notification) {

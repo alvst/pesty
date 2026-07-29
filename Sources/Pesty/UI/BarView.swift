@@ -253,11 +253,14 @@ struct BarView: View {
                                     removal: .opacity))
                         }
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, Theme.cardStripViewportInset)
                     .padding(.top, Self.stripTopInset)
                     .padding(.bottom, Self.stripBottomInset)
-                    .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
                 }
+                // Do not clip the selected card's shadow/border at either
+                // edge. The HStack padding above keeps the card itself away
+                // from the panel while this preserves its full visual focus.
+                .scrollClipDisabled()
                 .onChange(of: store.selectedID) { _, id in
                     guard let id else { return }
                     // Avoid animating or re-anchoring ordinary keyboard
