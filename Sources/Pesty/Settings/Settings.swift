@@ -237,6 +237,7 @@ final class Settings {
         static let plainTextModifier = "plainTextModifier"
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
         static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
+        static let pasteStacksEnabled = "pasteStacksEnabled"
         static let launchAtLogin = "launchAtLogin"
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
@@ -313,6 +314,15 @@ final class Settings {
     var sequenceHotkeyModifiers: Int {
         didSet { guard isLoaded else { return }
             d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
+    var pasteStacksEnabled: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(pasteStacksEnabled, forKey: Keys.pasteStacksEnabled)
+            HotKeyCenter.shared.reload()
+            AppController.shared.updatePasteStackAvailability()
+        }
     }
 
     var launchAtLogin: Bool {
@@ -407,6 +417,7 @@ final class Settings {
             Keys.plainTextModifier: ShortcutModifier.shift.carbonValue,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
             Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
+            Keys.pasteStacksEnabled: true,
             Keys.launchAtLogin: false,
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
@@ -433,6 +444,7 @@ final class Settings {
         plainTextModifier = d.integer(forKey: Keys.plainTextModifier)
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
         sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
+        pasteStacksEnabled = d.bool(forKey: Keys.pasteStacksEnabled)
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)

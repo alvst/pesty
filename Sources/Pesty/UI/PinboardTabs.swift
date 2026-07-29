@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct PinboardTabs: View {
     @Bindable private var store = ClipboardStore.shared
+    @Bindable private var settings = Settings.shared
     private var stack: PasteSequence { AppController.shared.pasteSequence }
     @State private var draggedBoardID: UUID?
     @State private var lastDropTargetID: UUID?
@@ -17,12 +18,14 @@ struct PinboardTabs: View {
                     store.source = .history; store.selectFirst()
                 }
 
-                pill(title: "Paste Stack",
-                     dot: nil,
-                     icon: "rectangle.stack.fill",
-                     badge: stack.pendingCount,
-                     selected: store.source == .pasteStack) {
-                    AppController.shared.showPasteStackTab()
+                if settings.pasteStacksEnabled {
+                    pill(title: "Paste Stack",
+                         dot: nil,
+                         icon: "rectangle.stack.fill",
+                         badge: stack.pendingCount,
+                         selected: store.source == .pasteStack) {
+                        AppController.shared.showPasteStackTab()
+                    }
                 }
 
                 ForEach(store.pinboards) { board in

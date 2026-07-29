@@ -98,7 +98,9 @@ final class ClipboardStore {
             // Each saved Paste Stack is represented by one deck card on
             // Clipboard. Its clips remain in history for persistence, but do
             // not also appear as individual Clipboard cards.
-            guard case .history = source, PasteSequence.shared.hasSavedStacks else { return base }
+            guard case .history = source,
+                  Settings.shared.pasteStacksEnabled,
+                  PasteSequence.shared.hasSavedStacks else { return base }
             return base.filter { !PasteSequence.shared.containsHistoryItemID($0.id) }
         }
         return base.filter { $0.searchableText.contains(q) }

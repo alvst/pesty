@@ -206,7 +206,10 @@ final class AppController: NSObject, NSApplicationDelegate {
             previousApp = lastActiveApp
         }
         store.searchText = ""
-        store.source = requestedSource ?? .history
+        let requested = requestedSource ?? .history
+        store.source = !Settings.shared.pasteStacksEnabled && requested == .pasteStack
+            ? .history
+            : requested
         store.applyHistoryPolicy()
         if store.source != .pasteStack { store.selectFirst() }
         store.inlinePreviewVisible = false
@@ -225,6 +228,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
         barController?.hide(immediately: immediately)
+    }
+
+    /// Disabling Paste Stacks is reversible: keep persisted decks intact, but
+    /// stop collection, dismiss companion surfaces, and return the bar to its
+    /// ordinary Clipboard source.
+    func updatePasteStackAvailability() {
+        guard !Settings.shared.pasteStacksEnabled else { return }
+        pasteSequence.pause()
+        pasteStackTargetApp = nil
+        pasteStackController?.hide()
+        QuickLookService.shared.dismiss()
+        if store.source == .pasteStack {
+            store.searchText = ""
+            store.source = .history
+        }
     }
 
     func toggleInlinePreview() {
@@ -307,7 +325,9 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// Copies the primary Paste Bar selection rather than whichever SwiftUI
     /// card menu happened to register the Command-C key equivalent.
     func commandCopy() {
-        if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
+        if Settings.shared.pasteStacksEnabled,
+           store.source == .pasteStack,
+           let entry = pasteSequence.selectedEntry {
             copyItem(entry.item)
             return
         }
@@ -316,6 +336,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func beginPasteSequence() {
+        guard Settings.shared.pasteStacksEnabled else { return }
         pasteStackTargetApp = previousApp ?? lastActiveApp
         pasteSequence.begin()
         showPasteStack()
@@ -328,6 +349,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func showPasteStack() {
+        guard Settings.shared.pasteStacksEnabled else { return }
         if pasteStackController == nil {
             pasteStackController = PasteStackWindowController()
         }
@@ -339,6 +361,11 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func showPasteStackTab(stackID: UUID? = nil) {
+        guard Settings.shared.pasteStacksEnabled else {
+            store.searchText = ""
+            store.source = .history
+            return
+        }
         store.searchText = ""
         store.source = .pasteStack
         if let stackID {
@@ -359,6 +386,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func newPasteStack() {
+        guard Settings.shared.pasteStacksEnabled else { return }
         pasteStackTargetApp = previousApp ?? lastActiveApp
         pasteSequence.newStack()
         showPasteStack()
@@ -379,6 +407,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func capturePasteStackItem(_ item: ClipItem) {
+        guard Settings.shared.pasteStacksEnabled else { return }
         _ = pasteSequence.addIfNeeded(item)
     }
 
@@ -386,6 +415,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// the clip is represented by the stack deck instead of a duplicate card
     /// in the unfiltered Clipboard strip.
     func moveHistoryItemToPasteStack(_ item: ClipItem) {
+        guard Settings.shared.pasteStacksEnabled else { return }
         guard pasteSequence.addHistoryItem(item) else { return }
 
         if store.source == .history,
@@ -422,6 +452,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteNextInSequence() {
+        guard Settings.shared.pasteStacksEnabled else { return }
         #if !MAS
         guard !Settings.shared.pasteDirectly || PasteService.ensureAccessibility(prompt: true) else { return }
         #endif
@@ -431,11 +462,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteStackEntry(_ entry: PasteStackEntry) {
+        guard Settings.shared.pasteStacksEnabled else { return }
         guard let entry = pasteSequence.next(entryID: entry.id) else { return }
         performPasteStackEntry(entry)
     }
 
     func pasteSelectedStackEntry() {
+        guard Settings.shared.pasteStacksEnabled else { return }
         guard let entry = pasteSequence.selectedEntry else { return }
         pasteStackEntry(entry)
     }
@@ -712,7 +745,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// button intentionally is not part of keyboard navigation because it
     /// creates a pinboard instead of representing one.
     private func moveBarSection(by delta: Int) {
-        let sources: [BarSource] = [.history, .pasteStack] + store.pinboards.map { .pinboard($0.id) }
+        let stackSource: [BarSource] = Settings.shared.pasteStacksEnabled ? [.pasteStack] : []
+        let sources: [BarSource] = [.history] + stackSource + store.pinboards.map { .pinboard($0.id) }
         guard !sources.isEmpty else { return }
 
         let currentIndex = sources.firstIndex(of: store.source) ?? 0

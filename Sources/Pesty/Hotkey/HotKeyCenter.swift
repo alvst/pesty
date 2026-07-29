@@ -65,9 +65,11 @@ final class HotKeyCenter {
         hotKeyRef = register(keyCode: Settings.shared.hotkeyKeyCode,
                              modifiers: Settings.shared.hotkeyModifiers,
                              id: 1)
-        sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
-                                     modifiers: Settings.shared.sequenceHotkeyModifiers,
-                                     id: 2)
+        if Settings.shared.pasteStacksEnabled {
+            sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
+                                         modifiers: Settings.shared.sequenceHotkeyModifiers,
+                                         id: 2)
+        }
     }
 
     private func register(keyCode: Int, modifiers: Int, id: UInt32) -> EventHotKeyRef? {

@@ -14,6 +14,10 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     var isVisible: Bool { QLPreviewPanel.shared()?.isVisible ?? false }
 
+    func dismiss() {
+        QLPreviewPanel.shared()?.orderOut(nil)
+    }
+
     func toggle(items: [ClipItem], selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared() else { return }
         if panel.isVisible {

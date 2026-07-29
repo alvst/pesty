@@ -16,7 +16,10 @@ struct BarView: View {
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
 
     private var showsStackDeck: Bool {
-        store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
+        settings.pasteStacksEnabled
+            && store.source == .history
+            && store.searchText.isEmpty
+            && sequence.hasSavedStacks
     }
 
     var body: some View {
@@ -90,7 +93,9 @@ struct BarView: View {
                 if settings.clipPreviewStyle == .inlinePesty, store.source != .pasteStack {
                     previewButton
                 }
-                pasteStackButton
+                if settings.pasteStacksEnabled {
+                    pasteStackButton
+                }
                 moreMenu
             }
             .padding(.horizontal, 18)
@@ -151,7 +156,14 @@ struct BarView: View {
                     // longer than the field, keep the newest typed text visible.
                     .truncationMode(.head)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button { store.searchText = ""; store.selectFirst() } label: {
+                Button {
+                    store.searchText = ""
+                    if store.source == .pasteStack {
+                        sequence.selectFirst()
+                    } else {
+                        store.selectFirst()
+                    }
+                } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }

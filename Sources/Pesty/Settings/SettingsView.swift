@@ -565,19 +565,33 @@ private struct ShortcutsSettings: View {
 
                 SettingsFormGroup("Paste Stack") {
                     SettingsSurface {
-                        LabeledContent("Paste next clip") {
-                            HotkeyRecorderView(
-                                keyCode: $settings.sequenceHotkeyKeyCode,
-                                modifiers: $settings.sequenceHotkeyModifiers
-                            )
-                        }
-                        .font(.system(size: 14))
-                        .padding(.vertical, 9)
+                        Toggle("Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
+                            .font(.system(size: 14))
+                            .toggleStyle(.switch)
+                            .padding(.vertical, 10)
 
-                        Text("Start a Paste Stack from the bar, then use this shortcut to paste each clip in order.")
+                        if settings.pasteStacksEnabled {
+                            Divider()
+
+                            LabeledContent("Paste next clip") {
+                                HotkeyRecorderView(
+                                    keyCode: $settings.sequenceHotkeyKeyCode,
+                                    modifiers: $settings.sequenceHotkeyModifiers
+                                )
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 9)
+
+                            Text("Start a Paste Stack from the bar, then use this shortcut to paste each clip in order.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 9)
+                        } else {
+                            Text("Saved stacks stay stored, but Pesty returns their clips to Clipboard and unregisters the Paste Stack shortcut.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 9)
+                        }
                     }
                 }
 
