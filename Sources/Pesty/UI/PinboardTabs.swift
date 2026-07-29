@@ -1,8 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PinboardTabs: View {
     @Bindable private var store = ClipboardStore.shared
     private var stack: PasteSequence { AppController.shared.pasteSequence }
+    @State private var draggedBoardID: UUID?
+    @State private var lastDropTargetID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -23,17 +26,8 @@ struct PinboardTabs: View {
                 }
 
                 ForEach(store.pinboards) { board in
-                    pill(title: board.name,
-                         dot: board.color,
-                         selected: store.source == .pinboard(board.id)) {
-                        store.source = .pinboard(board.id); store.selectFirst()
-                    }
-                    .contextMenu {
-                        Button("Rename…") { rename(board) }
-                        Button("Delete Pinboard", role: .destructive) {
-                            store.deletePinboard(board.id)
-                        }
-                    }
+                    draggableBoardTab(board)
+                        .contextMenu { pinboardContextMenu(board) }
                 }
 
                 Button(action: addPinboard) {
@@ -45,7 +39,51 @@ struct PinboardTabs: View {
                 }
                 .buttonStyle(.plain)
                 .help("New Pinboard")
+                .onDrop(of: [.plainText], delegate: PinboardEndDropDelegate(
+                    store: store,
+                    draggedBoardID: $draggedBoardID,
+                    lastDropTargetID: $lastDropTargetID
+                ))
             }
+        }
+    }
+
+    private func draggableBoardTab(_ board: Pinboard) -> some View {
+        pill(title: board.name,
+             dot: board.color,
+             selected: store.source == .pinboard(board.id)) {
+            store.source = .pinboard(board.id)
+            store.selectFirst()
+        }
+        .onDrag {
+            draggedBoardID = board.id
+            lastDropTargetID = nil
+            return NSItemProvider(object: board.id.uuidString as NSString)
+        }
+        .onDrop(of: [.plainText], delegate: PinboardTabDropDelegate(
+            targetID: board.id,
+            store: store,
+            draggedBoardID: $draggedBoardID,
+            lastDropTargetID: $lastDropTargetID
+        ))
+        .help("Drag to reorder Pinboards")
+    }
+
+    @ViewBuilder
+    private func pinboardContextMenu(_ board: Pinboard) -> some View {
+        Button("Rename…") { rename(board) }
+        Divider()
+        Button { store.movePinboard(board.id, by: -1) } label: {
+            Label("Move Left", systemImage: "arrow.left")
+        }
+        .disabled(store.pinboards.first?.id == board.id)
+        Button { store.movePinboard(board.id, by: 1) } label: {
+            Label("Move Right", systemImage: "arrow.right")
+        }
+        .disabled(store.pinboards.last?.id == board.id)
+        Divider()
+        Button("Delete Pinboard", role: .destructive) {
+            store.deletePinboard(board.id)
         }
     }
 
@@ -94,6 +132,59 @@ struct PinboardTabs: View {
                                      defaultValue: board.name) {
             store.renamePinboard(board.id, to: name)
         }
+    }
+}
+
+private struct PinboardTabDropDelegate: DropDelegate {
+    let targetID: UUID
+    let store: ClipboardStore
+    @Binding var draggedBoardID: UUID?
+    @Binding var lastDropTargetID: UUID?
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedBoardID != nil && draggedBoardID != targetID
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedBoardID,
+              draggedBoardID != targetID,
+              lastDropTargetID != targetID else { return }
+        lastDropTargetID = targetID
+        store.movePinboard(draggedBoardID, over: targetID)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedBoardID = nil
+        lastDropTargetID = nil
+        return true
+    }
+}
+
+private struct PinboardEndDropDelegate: DropDelegate {
+    let store: ClipboardStore
+    @Binding var draggedBoardID: UUID?
+    @Binding var lastDropTargetID: UUID?
+
+    func validateDrop(info: DropInfo) -> Bool { draggedBoardID != nil }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedBoardID else { return }
+        store.movePinboardToEnd(draggedBoardID)
+        lastDropTargetID = nil
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedBoardID = nil
+        lastDropTargetID = nil
+        return true
     }
 }
 

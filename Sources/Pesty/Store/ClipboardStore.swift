@@ -259,6 +259,36 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    /// Moves a Pinboard relative to the tab currently under the drag. The
+    /// ordered array is persisted as part of the normal store snapshot.
+    func movePinboard(_ movedID: UUID, over targetID: UUID) {
+        guard movedID != targetID,
+              let from = pinboards.firstIndex(where: { $0.id == movedID }),
+              let to = pinboards.firstIndex(where: { $0.id == targetID }) else { return }
+        let moved = pinboards.remove(at: from)
+        // `to` is the target's pre-removal index. Keeping that index means the
+        // dragged tab lands after a target to its right and before one to its
+        // left, matching the visual drop direction.
+        pinboards.insert(moved, at: to)
+        scheduleSave()
+    }
+
+    func movePinboard(_ id: UUID, by offset: Int) {
+        guard let from = pinboards.firstIndex(where: { $0.id == id }) else { return }
+        let to = min(pinboards.count - 1, max(0, from + offset))
+        guard from != to else { return }
+        pinboards.swapAt(from, to)
+        scheduleSave()
+    }
+
+    func movePinboardToEnd(_ id: UUID) {
+        guard let from = pinboards.firstIndex(where: { $0.id == id }),
+              from != pinboards.count - 1 else { return }
+        let moved = pinboards.remove(at: from)
+        pinboards.append(moved)
+        scheduleSave()
+    }
+
     func deletePinboard(_ id: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         if case .pinboard(let cur) = source, cur == id { source = .history }

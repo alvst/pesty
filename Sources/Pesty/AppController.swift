@@ -575,12 +575,21 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard flags.contains(.command),
               !flags.contains(.control), !flags.contains(.option) else { return false }
 
-        if Int(event.keyCode) == kVK_ANSI_C, !flags.contains(.shift) {
-            commandCopy()
-            return true
+        if !flags.contains(.shift) {
+            switch Int(event.keyCode) {
+            case kVK_ANSI_C:
+                commandCopy()
+                return true
+            case kVK_LeftArrow:
+                moveBarSection(by: -1)
+                return true
+            case kVK_RightArrow:
+                moveBarSection(by: 1)
+                return true
+            default:
+                return false
+            }
         }
-
-        guard flags.contains(.shift) else { return false }
 
         switch Int(event.keyCode) {
         case kVK_ANSI_S:
@@ -697,6 +706,24 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func moveBarSelection(by delta: Int) {
         store.moveSelection(by: delta)
         QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+    }
+
+    /// Cycles the same sections, in the same order, as the tab bar. The plus
+    /// button intentionally is not part of keyboard navigation because it
+    /// creates a pinboard instead of representing one.
+    private func moveBarSection(by delta: Int) {
+        let sources: [BarSource] = [.history, .pasteStack] + store.pinboards.map { .pinboard($0.id) }
+        guard !sources.isEmpty else { return }
+
+        let currentIndex = sources.firstIndex(of: store.source) ?? 0
+        let nextIndex = (currentIndex + delta % sources.count + sources.count) % sources.count
+        switch sources[nextIndex] {
+        case .pasteStack:
+            showPasteStackTab()
+        case let source:
+            store.source = source
+            store.selectFirst()
+        }
     }
 
     private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
