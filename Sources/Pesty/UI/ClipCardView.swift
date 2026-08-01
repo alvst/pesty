@@ -36,6 +36,11 @@ struct ClipCardView: View {
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { AppController.shared.pasteItem(item) }
         .onTapGesture { store.select(item.id, with: NSEvent.modifierFlags) }
+        .onDrag {
+            let provider = ClipDragProvider.make(for: item)
+            AppController.shared.dismissBarAfterDragSessionStarts()
+            return provider
+        }
         .contextMenu { menu }
     }
 

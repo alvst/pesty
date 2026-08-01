@@ -230,6 +230,18 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.hide(immediately: immediately)
     }
 
+    /// SwiftUI asks the drag source for its provider immediately before it
+    /// gives that provider to AppKit. Queue this after the current mouse event
+    /// so the `NSDraggingSession` is established before the source panel moves
+    /// away. Hiding synchronously here can cancel the drag before a destination
+    /// ever sees it.
+    func dismissBarAfterDragSessionStarts() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.barController?.window?.isVisible == true else { return }
+            self.hideBar()
+        }
+    }
+
     /// Disabling Paste Stacks is reversible: keep persisted decks intact, but
     /// stop collection, dismiss companion surfaces, and return the bar to its
     /// ordinary Clipboard source.
