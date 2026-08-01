@@ -712,6 +712,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst(); return nil
             }
+            // When the search field is empty, Backspace has the same
+            // collection-scoped meaning as Forward Delete. This restores the
+            // expected keyboard deletion path without stealing Backspace from
+            // an active search query or from Paste Stack entries.
+            store.deleteSelected()
             return nil
         case kVK_ForwardDelete:
             if store.source == .pasteStack, let entry = pasteSequence.selectedEntry {
