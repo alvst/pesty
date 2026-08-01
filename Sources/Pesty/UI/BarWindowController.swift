@@ -19,6 +19,10 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     private static let slideDuration: TimeInterval = 0.18
     private static let slideOvershoot: CGFloat = 16
     private var isPresenting = false
+    private var isDismissing = false
+    /// Identifies the latest presentation or dismissal. Completion handlers
+    /// use it to avoid ordering the panel out after a newer transition begins.
+    private var transitionID = 0
 
     init() {
         let panel = BarPanel(
@@ -43,8 +47,18 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
 
+    /// The bar is available for interaction while it is on screen or entering,
+    /// but not after a dismissal has begun. `NSWindow.isVisible` stays true for
+    /// the latter case until the slide-down completion handler orders it out.
+    var isPresented: Bool {
+        window?.isVisible == true && !isDismissing
+    }
+
     func show() {
         guard let panel = window else { return }
+        transitionID &+= 1
+        let presentationTransitionID = transitionID
+        isDismissing = false
         isPresenting = true
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
             ?? NSScreen.main ?? NSScreen.screens.first else { isPresenting = false; return }
@@ -63,23 +77,39 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(onScreen, display: true)
         }, completionHandler: { [weak self] in
-            DispatchQueue.main.async { self?.isPresenting = false }
+            DispatchQueue.main.async {
+                guard let self, self.transitionID == presentationTransitionID else { return }
+                self.isPresenting = false
+            }
         })
     }
 
     func hide(immediately: Bool = false) {
         guard let panel = window, panel.isVisible else { return }
+        // An explicit paste should always win over an already-running visual
+        // dismissal so the panel cannot receive the synthetic paste shortcut.
+        guard immediately || !isDismissing else { return }
+        transitionID &+= 1
+        let dismissalTransitionID = transitionID
+        isPresenting = false
         if immediately {
+            isDismissing = false
             panel.orderOut(nil)
             return
         }
+        isDismissing = true
         let off = belowScreenFrame(for: panel.frame)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Self.slideDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrame(off, display: true)
-        }, completionHandler: {
-            panel.orderOut(nil)
+        }, completionHandler: { [weak self, weak panel] in
+            DispatchQueue.main.async {
+                guard let self, let panel,
+                      self.transitionID == dismissalTransitionID else { return }
+                panel.orderOut(nil)
+                self.isDismissing = false
+            }
         })
     }
 

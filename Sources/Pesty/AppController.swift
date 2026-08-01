@@ -27,6 +27,14 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     var suppressAutoHide = false
 
+    func applicationWillResignActive(_ notification: Notification) {
+        // Start the dismissal while Pesty is still active. Waiting for the
+        // destination app's activation notification can make a non-activating
+        // panel appear to linger over the app the user just switched to.
+        guard barController?.isPresented == true else { return }
+        hideBar()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
@@ -94,7 +102,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             // Command-Tab and app switching do not reliably make our borderless
             // panel resign key. Treat activation of another app as an explicit
             // dismissal so the bar never stays above the newly active app.
-            if barController?.window?.isVisible == true {
+            if barController?.isPresented == true {
                 hideBar()
             }
         }
@@ -188,7 +196,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func toggleBar() {
-        if let bar = barController, bar.window?.isVisible == true {
+        if barController?.isPresented == true {
             hideBar()
         } else {
             showBar()
@@ -347,7 +355,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             pasteSequence.selectFirst()
         }
         pasteStackController?.hide()
-        if barController?.window?.isVisible != true {
+        if barController?.isPresented != true {
             showBar(source: .pasteStack)
         }
     }
@@ -471,7 +479,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         // and navigation. Suspend it while the native editor owns first
         // responder so typing, Delete, Return, and Writing Tools all reach
         // the NSTextView instead.
-        let resumeBarKeys = barController?.window?.isVisible == true
+        let resumeBarKeys = barController?.isPresented == true
         if resumeBarKeys { stopKeyMonitor() }
         defer {
             suppressAutoHide = false
