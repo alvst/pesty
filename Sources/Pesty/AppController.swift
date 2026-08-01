@@ -19,7 +19,14 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var inlinePreviewController: InlinePreviewWindowController?
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
-    private var isReopenPresentationPending = false
+    /// Coalesces a launch presentation with a reopen event. AppKit can deliver
+    /// both while the app is becoming ready, and showing the panel twice can
+    /// reset its frame or steal focus from its first presentation.
+    private var isBarPresentationPending = false
+    /// The first run deliberately introduces Pesty through Settings. A reopen
+    /// event received during that short handoff should not replace onboarding
+    /// with the Paste Bar.
+    private var isInitialOnboardingPresentationPending = false
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -46,45 +53,65 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         if CommandLine.arguments.contains("--demo") {
             store.seedDemo()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.showBar()
-            }
+            requestBarPresentation(after: 0.5)
             return
         }
 
         if !Settings.shared.onboarded {
+            isInitialOnboardingPresentationPending = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                self?.showSettings()
+                guard let self else { return }
+                self.showSettings()
+                self.isInitialOnboardingPresentationPending = false
             }
             Settings.shared.onboarded = true
+        } else {
+            // After first-run onboarding, Pesty should be ready to paste as
+            // soon as it launches instead of remaining an invisible helper.
+            requestBarPresentation(after: 0.5)
         }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
         // Finder, Spotlight, and the Dock send a reopen event when the user
-        // invokes an app that is already running. The clipboard bar is an
-        // NSPanel, so AppKit's `hasVisibleWindows` value does not reliably
-        // describe whether Pesty already has a surface on screen.
-        guard !hasVisiblePestySurface else { return true }
-        guard !isReopenPresentationPending else { return false }
+        // invokes an app that is already running. Only an already-visible
+        // Paste Bar is a substitute for this request: Settings, previews, and
+        // temporary Pesty surfaces should not make the primary UI disappear.
+        // The first-run Settings handoff is the intentional exception.
+        guard !isInitialOnboardingPresentationPending else { return false }
+        guard !isBarVisible else { return true }
 
-        isReopenPresentationPending = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isReopenPresentationPending = false
-
-            // A window can appear while AppKit finishes the reopen event
-            // (for example, during onboarding). Avoid presenting a second
-            // Pesty surface in that case.
-            guard !self.hasVisiblePestySurface else { return }
-            self.showBar()
-        }
+        requestBarPresentation()
         return false
     }
 
-    private var hasVisiblePestySurface: Bool {
-        NSApp.windows.contains { $0.isVisible && !$0.isMiniaturized }
+    private var isBarVisible: Bool {
+        barController?.window?.isVisible == true
+    }
+
+    private func requestBarPresentation(after delay: TimeInterval = 0) {
+        guard !isInitialOnboardingPresentationPending,
+              !isBarVisible,
+              !isBarPresentationPending else { return }
+
+        isBarPresentationPending = true
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.finishBarPresentationRequest()
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.finishBarPresentationRequest()
+            }
+        }
+    }
+
+    private func finishBarPresentationRequest() {
+        isBarPresentationPending = false
+        guard !isInitialOnboardingPresentationPending,
+              !isBarVisible else { return }
+        showBar()
     }
 
     @objc private func appActivated(_ note: Notification) {
