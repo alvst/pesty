@@ -62,9 +62,9 @@ enum ClipColorTheme: Int, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .default:
-            "Use Pesty’s familiar, deterministic mix of card colors."
+            "Match each clip to its source app’s familiar card color."
         case .vibrant:
-            "Match each clip to the dominant color in its source app’s icon."
+            "Use a stronger, higher-contrast version of each source app color."
         case .accentShades:
             "Give each source app a stable lighter or darker shade of one color."
         }

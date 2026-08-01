@@ -3,22 +3,11 @@ import SwiftUI
 
 @MainActor
 enum SourceColor {
-    private static let defaultPalette: [Color] = [
-        Color(red: 0.85, green: 0.66, blue: 0.22),
-        Color(red: 0.34, green: 0.56, blue: 0.82),
-        Color(red: 0.72, green: 0.38, blue: 0.58),
-        Color(red: 0.27, green: 0.62, blue: 0.55),
-        Color(red: 0.80, green: 0.40, blue: 0.34),
-        Color(red: 0.45, green: 0.40, blue: 0.74),
-        Color(red: 0.49, green: 0.62, blue: 0.30),
-        Color(red: 0.84, green: 0.52, blue: 0.27),
-        Color(red: 0.30, green: 0.49, blue: 0.74),
-        Color(red: 0.62, green: 0.42, blue: 0.30),
-        Color(red: 0.74, green: 0.36, blue: 0.42),
-        Color(red: 0.40, green: 0.55, blue: 0.62)
-    ]
-    private static let defaultMapKey = "appColorMap"
-    private static let vibrantFallback = Color(red: 0.02, green: 0.48, blue: 1.0)
+    // Keep the default appearance aligned with Pesty's established card design:
+    // a card takes its color from the app that produced it.  The original color
+    // theme experiment used a stored palette for this option, which meant merely
+    // upgrading could unexpectedly recolor every existing card.
+    private static let sourceAppFallback = Color(red: 0.02, green: 0.48, blue: 1.0)
     private static let accentVariants: [AccentVariant] = [
         AccentVariant(hueOffset: -0.055, saturationOffset:  0.08, brightnessOffset: -0.34),
         AccentVariant(hueOffset:  0.040, saturationOffset: -0.08, brightnessOffset: -0.27),
@@ -32,21 +21,20 @@ enum SourceColor {
         AccentVariant(hueOffset:  0.055, saturationOffset: -0.14, brightnessOffset:  0.35)
     ]
 
-    private static var defaultMap: [String: Int] = {
-        UserDefaults.standard.dictionary(forKey: defaultMapKey) as? [String: Int] ?? [:]
-    }()
+    private static var sourceAppCache: [String: Color] = [:]
     private static var vibrantCache: [String: Color] = [:]
 
     static func color(for bundleID: String?) -> Color {
-        let id = bundleID?.isEmpty == false ? bundleID! : "unknown"
-
         return switch Settings.shared.clipColorTheme {
         case .default:
-            defaultColor(for: id)
+            sourceAppColor(for: bundleID)
         case .vibrant:
-            vibrantColor(for: id)
+            vibrantColor(for: bundleID)
         case .accentShades:
-            accentShade(for: id, accentHex: Settings.shared.clipColorAccentHex)
+            accentShade(
+                for: bundleID?.isEmpty == false ? bundleID! : "unknown",
+                accentHex: Settings.shared.clipColorAccentHex
+            )
         }
     }
 
@@ -54,22 +42,38 @@ enum SourceColor {
         accentVariants.map { accentShade(variant: $0, accentHex: accentHex) }
     }
 
-    private static func defaultColor(for bundleID: String) -> Color {
-        if let index = defaultMap[bundleID] {
-            return defaultPalette[index % defaultPalette.count]
-        }
+    private static func sourceAppColor(for bundleID: String?) -> Color {
+        guard let bundleID, !bundleID.isEmpty else { return sourceAppFallback }
+        if let color = sourceAppCache[bundleID] { return color }
 
-        let index = defaultMap.count % defaultPalette.count
-        defaultMap[bundleID] = index
-        UserDefaults.standard.set(defaultMap, forKey: defaultMapKey)
-        return defaultPalette[index]
+        let color = dominantColor(in: AppIconProvider.icon(forBundleID: bundleID)) ?? sourceAppFallback
+        sourceAppCache[bundleID] = color
+        return color
     }
 
-    private static func vibrantColor(for bundleID: String) -> Color {
+    private static func vibrantColor(for bundleID: String?) -> Color {
+        guard let bundleID, !bundleID.isEmpty else { return vibrantColor(from: sourceAppFallback) }
         if let color = vibrantCache[bundleID] { return color }
-        let color = dominantColor(in: AppIconProvider.icon(forBundleID: bundleID)) ?? vibrantFallback
+
+        let color = vibrantColor(from: sourceAppColor(for: bundleID))
         vibrantCache[bundleID] = color
         return color
+    }
+
+    private static func vibrantColor(from color: Color) -> Color {
+        guard let nsColor = NSColor(color).usingColorSpace(.sRGB) else { return color }
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        nsColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+
+        // Make the vibrant option visibly distinct while keeping headers dark
+        // enough for their white labels to remain readable.
+        return Color(
+            hue: Double(hue),
+            saturation: min(0.99, max(0.92, Double(saturation) * 1.08)),
+            brightness: min(0.90, max(0.68, Double(brightness) * 0.90))
+        )
     }
 
     private static func accentShade(for bundleID: String, accentHex: String) -> Color {
@@ -154,7 +158,7 @@ enum SourceColor {
         }
 
         if weight == 0 {
-            return darkWeight > 0 ? Color(red: 0.025, green: 0.075, blue: 0.24) : vibrantFallback
+            return darkWeight > 0 ? Color(red: 0.025, green: 0.075, blue: 0.24) : sourceAppFallback
         }
 
         let main = NSColor(deviceRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)
