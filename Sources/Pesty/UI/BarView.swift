@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     @State private var resizeStartHeight: Double?
+    @State private var resizeStartScreenY: CGFloat?
 
     var body: some View {
         ZStack {
@@ -31,15 +33,38 @@ struct BarView: View {
         .frame(height: 14)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
-                    guard let start = resizeStartHeight else { return }
-                    settings.barHeight = min(720, max(300, start - value.translation.height))
+            DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                .onChanged { _ in
+                    beginResizeIfNeeded()
+                    guard let height = resizedHeight else { return }
+                    // The panel moves as it resizes, which changes the
+                    // handle's local coordinates. Measure against screen
+                    // coordinates to avoid feeding that movement back into
+                    // the drag calculation.
+                    AppController.shared.resizeVisibleBar(to: height)
                 }
-                .onEnded { _ in resizeStartHeight = nil }
+                .onEnded { _ in
+                    if let height = resizedHeight {
+                        settings.barHeight = height
+                    }
+                    resizeStartHeight = nil
+                    resizeStartScreenY = nil
+                }
         )
         .help("Drag to resize the Pesty bar")
+    }
+
+    private func beginResizeIfNeeded() {
+        guard resizeStartHeight == nil else { return }
+        resizeStartHeight = settings.barHeight
+        resizeStartScreenY = NSEvent.mouseLocation.y
+    }
+
+    private var resizedHeight: Double? {
+        guard let startHeight = resizeStartHeight,
+              let startScreenY = resizeStartScreenY else { return nil }
+        let verticalTravel = Double(NSEvent.mouseLocation.y - startScreenY)
+        return min(720, max(300, startHeight + verticalTravel))
     }
 
     private var topBar: some View {

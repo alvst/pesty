@@ -62,9 +62,9 @@ final class Settings {
 
     var barHeight: Double {
         didSet {
-            guard isLoaded else { return }
-            let clamped = min(720, max(240, barHeight))
+            let clamped = min(720, max(300, barHeight))
             if clamped != barHeight { barHeight = clamped; return }
+            guard isLoaded else { return }
             d.set(barHeight, forKey: Keys.barHeight)
             AppController.shared.resizeVisibleBar(to: barHeight)
         }
@@ -103,7 +103,12 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
-        barHeight = d.double(forKey: Keys.barHeight)
+        let storedBarHeight = d.double(forKey: Keys.barHeight)
+        let normalizedBarHeight = min(720, max(300, storedBarHeight))
+        barHeight = normalizedBarHeight
+        if normalizedBarHeight != storedBarHeight {
+            d.set(normalizedBarHeight, forKey: Keys.barHeight)
+        }
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
