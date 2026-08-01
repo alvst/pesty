@@ -81,13 +81,37 @@ struct LinkPreviewContent: View {
 
 struct LinkCardPreview: View {
     let text: String
+    let titleOverride: String?
     private let previews = LinkPreviewStore.shared
+
+    init(text: String, titleOverride: String? = nil) {
+        self.text = text
+        self.titleOverride = titleOverride
+    }
 
     private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
     private var preview: LinkPreview? { previews.preview(for: url) }
     private var host: String { url?.host ?? text }
+    private var title: String {
+        if let titleOverride = titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !titleOverride.isEmpty {
+            return titleOverride
+        }
+        return preview?.title ?? host
+    }
 
     var body: some View {
+        // A fixed hero image makes a link card overflow a short Paste Bar.
+        // Render its title and favicon instead when the rich layout cannot fit.
+        ViewThatFits(in: .vertical) {
+            richPreview
+            compactPreview
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { previews.load(for: url) }
+    }
+
+    private var richPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
             Group {
                 if let image = preview?.image {
@@ -110,25 +134,47 @@ struct LinkCardPreview: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 7) {
-                if let icon = preview?.icon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 16, height: 16)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                } else {
-                    Image(systemName: "link")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 16, height: 16)
-                }
-                Text(preview?.title ?? host)
+                previewIcon(size: 16, cornerRadius: 4)
+                Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
             }
         }
-        .onAppear { previews.load(for: url) }
+    }
+
+    private var compactPreview: some View {
+        HStack(spacing: 9) {
+            previewIcon(size: 36, cornerRadius: 9)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func previewIcon(size: CGFloat, cornerRadius: CGFloat) -> some View {
+        if let icon = preview?.icon {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.accentColor.opacity(0.16))
+                .frame(width: size, height: size)
+                .overlay {
+                    Image(systemName: "link")
+                        .font(.system(size: size * 0.44, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+        }
     }
 }
 

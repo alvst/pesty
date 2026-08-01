@@ -118,7 +118,8 @@ struct ClipCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .link:
-            LinkCardPreview(text: item.text ?? item.displayTitle)
+            LinkCardPreview(text: item.text ?? item.displayTitle,
+                            titleOverride: item.customTitle)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         default:
             Text(item.text ?? "")
