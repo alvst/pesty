@@ -20,6 +20,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
     private var isReopenPresentationPending = false
+    private let copyToast = CopyToastController()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -312,14 +313,16 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func copyItem(_ item: ClipItem) {
         let previousChange = NSPasteboard.general.changeCount
-        let change = PasteService.copy(item)
-        monitor.suppressUntilChangeCount = change
+        let copyResult = PasteService.copy(item)
+        guard copyResult.didWriteContent else { return }
+        monitor.suppressUntilChangeCount = copyResult.changeCount
         // ClipboardMonitor deliberately ignores Pesty's own write, so make an
         // explicit copy use count as the most recent history item ourselves.
-        if change != previousChange {
+        if copyResult.changeCount != previousChange {
             store.promoteCopiedItem(item)
         }
         hideBar()
+        copyToast.show()
     }
 
     /// Copies the primary Paste Bar selection rather than whichever SwiftUI
@@ -524,8 +527,10 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         // The edited content becomes the live clipboard as well. Suppress the
         // monitor so this is an in-place change rather than a duplicate entry.
-        let change = PasteService.copy(updatedItem)
-        monitor.suppressUntilChangeCount = change
+        let copyResult = PasteService.copy(updatedItem)
+        if copyResult.didWriteContent {
+            monitor.suppressUntilChangeCount = copyResult.changeCount
+        }
 
         if previewedItemID == item.id { showPreview(for: updatedItem) }
     }

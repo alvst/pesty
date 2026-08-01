@@ -4,45 +4,76 @@ import Carbon.HIToolbox
 @MainActor
 enum PasteService {
 
+    struct CopyResult: Equatable {
+        let changeCount: Int
+        let didWriteContent: Bool
+    }
+
     @discardableResult
     static func copy(_ item: ClipItem,
                      to pasteboard: NSPasteboard = .general,
                      asPlainText: Bool = false,
-                     imageOverride: NSImage? = nil) -> Int {
+                     imageOverride: NSImage? = nil) -> CopyResult {
         if asPlainText {
-            guard let text = item.plainText else { return pasteboard.changeCount }
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            return pasteboard.changeCount
-        }
-        if item.type == .image {
-            guard let img = imageOverride ?? ClipboardStore.shared.loadImage(for: item) else {
-                return pasteboard.changeCount
+            guard let text = item.plainText else { return noCopyResult(on: pasteboard) }
+            return replaceContents(on: pasteboard) {
+                pasteboard.setString(text, forType: .string)
             }
-            pasteboard.clearContents()
-            pasteboard.writeObjects([img])
-            return pasteboard.changeCount
         }
-        pasteboard.clearContents()
+
         switch item.type {
         case .image:
-            break
+            guard let img = imageOverride ?? ClipboardStore.shared.loadImage(for: item) else {
+                return noCopyResult(on: pasteboard)
+            }
+            return replaceContents(on: pasteboard) {
+                pasteboard.writeObjects([img])
+            }
         case .file:
             let urls = item.fileURLs.compactMap { URL(string: $0) }
-            if !urls.isEmpty { pasteboard.writeObjects(urls as [NSURL]) }
-            if let t = item.text { pasteboard.setString(t, forType: .string) }
+            guard !urls.isEmpty || item.text != nil else { return noCopyResult(on: pasteboard) }
+            return replaceContents(on: pasteboard) {
+                let wroteURLs = !urls.isEmpty && pasteboard.writeObjects(urls as [NSURL])
+                let wroteText = item.text.map { pasteboard.setString($0, forType: .string) } ?? false
+                return wroteURLs || wroteText
+            }
         case .color:
-            if let hex = item.colorHex, let c = NSColor(hex: hex) {
-                pasteboard.writeObjects([c])
-                pasteboard.setString(hex, forType: .string)
+            guard let hex = item.colorHex, let color = NSColor(hex: hex) else {
+                return noCopyResult(on: pasteboard)
+            }
+            return replaceContents(on: pasteboard) {
+                let wroteColor = pasteboard.writeObjects([color])
+                let wroteText = pasteboard.setString(hex, forType: .string)
+                return wroteColor || wroteText
             }
         case .richText:
-            if let rtf = item.rtfData { pasteboard.setData(rtf, forType: .rtf) }
-            if let t = item.text { pasteboard.setString(t, forType: .string) }
+            guard item.rtfData != nil || item.text != nil else { return noCopyResult(on: pasteboard) }
+            return replaceContents(on: pasteboard) {
+                let wroteRTF = item.rtfData.map { pasteboard.setData($0, forType: .rtf) } ?? false
+                let wroteText = item.text.map { pasteboard.setString($0, forType: .string) } ?? false
+                return wroteRTF || wroteText
+            }
         case .text, .link:
-            if let t = item.text { pasteboard.setString(t, forType: .string) }
+            guard let text = item.text else { return noCopyResult(on: pasteboard) }
+            return replaceContents(on: pasteboard) {
+                pasteboard.setString(text, forType: .string)
+            }
         }
-        return pasteboard.changeCount
+    }
+
+    private static func noCopyResult(on pasteboard: NSPasteboard) -> CopyResult {
+        CopyResult(changeCount: pasteboard.changeCount, didWriteContent: false)
+    }
+
+    /// Replacing an item can update the pasteboard change count several times.
+    /// Write Pesty's source marker last so observers see the completed content
+    /// and can identify it as an intentional Pesty-originated update.
+    private static func replaceContents(on pasteboard: NSPasteboard,
+                                        writeContent: () -> Bool) -> CopyResult {
+        pasteboard.clearContents()
+        guard writeContent() else { return noCopyResult(on: pasteboard) }
+        PasteboardSourceMarker.markPestyAsSource(on: pasteboard)
+        return CopyResult(changeCount: pasteboard.changeCount, didWriteContent: true)
     }
 
     static func paste(_ item: ClipItem,
@@ -50,8 +81,9 @@ enum PasteService {
                       monitor: ClipboardMonitor,
                       asPlainText: Bool = false,
                       imageOverride: NSImage? = nil) {
-        let change = copy(item, asPlainText: asPlainText, imageOverride: imageOverride)
-        monitor.suppressUntilChangeCount = change
+        let copyResult = copy(item, asPlainText: asPlainText, imageOverride: imageOverride)
+        guard copyResult.didWriteContent else { return }
+        monitor.suppressUntilChangeCount = copyResult.changeCount
         if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
 
         guard let target = targetApp, !target.isTerminated else { return }
@@ -152,4 +184,26 @@ enum PasteService {
         return AXIsProcessTrustedWithOptions(opts)
     }
     #endif
+}
+
+/// `org.nspasteboard.source` is a lightweight provenance marker used by
+/// clipboard managers. It contains only a bundle identifier, never clipboard
+/// content, so it is safe to carry alongside every representation Pesty writes.
+enum PasteboardSourceMarker {
+    static let pasteboardType = NSPasteboard.PasteboardType("org.nspasteboard.source")
+    static let pestyBundleIdentifier = "com.greycorelabs.pesty"
+
+    static func markPestyAsSource(on pasteboard: NSPasteboard) {
+        pasteboard.setString(pestyBundleIdentifier, forType: pasteboardType)
+    }
+
+    static func identifier(on pasteboard: NSPasteboard) -> String? {
+        let identifier = pasteboard.string(forType: pasteboardType)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return identifier?.isEmpty == false ? identifier : nil
+    }
+
+    static func isPestyOrigin(_ identifier: String?) -> Bool {
+        identifier == pestyBundleIdentifier
+    }
 }
