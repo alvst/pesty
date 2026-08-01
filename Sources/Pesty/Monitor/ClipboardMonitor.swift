@@ -1,6 +1,8 @@
 import AppKit
 import CryptoKit
+import Observation
 
+@Observable
 @MainActor
 final class ClipboardMonitor {
     private let pasteboard = NSPasteboard.general

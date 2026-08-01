@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -7,6 +8,9 @@ struct PinboardTabs: View {
     private var stack: PasteSequence { AppController.shared.pasteSequence }
     @State private var draggedBoardID: UUID?
     @State private var lastDropTargetID: UUID?
+    @State private var editingBoardID: UUID?
+    @State private var draftName = ""
+    @FocusState private var focusedBoardID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -49,32 +53,63 @@ struct PinboardTabs: View {
                 ))
             }
         }
+        // Finish a rename when another control takes focus. The explicit
+        // equality check prevents clearing the new board's editor while its
+        // TextField becomes first responder on the next run-loop turn.
+        .onChange(of: focusedBoardID) { oldValue, newValue in
+            if let oldValue, oldValue == editingBoardID, newValue != oldValue {
+                finishEditing()
+            }
+        }
     }
 
+    @ViewBuilder
     private func draggableBoardTab(_ board: Pinboard) -> some View {
-        pill(title: board.name,
-             dot: board.color,
-             selected: store.source == .pinboard(board.id)) {
-            store.source = .pinboard(board.id)
-            store.selectFirst()
+        if editingBoardID == board.id {
+            editableBoardTab(board)
+        } else {
+            pill(title: board.name,
+                 dot: board.color,
+                 selected: store.source == .pinboard(board.id)) {
+                store.source = .pinboard(board.id)
+                store.selectFirst()
+            }
+            .onDrag {
+                draggedBoardID = board.id
+                lastDropTargetID = nil
+                return NSItemProvider(object: board.id.uuidString as NSString)
+            }
+            .onDrop(of: [.plainText], delegate: PinboardTabDropDelegate(
+                targetID: board.id,
+                store: store,
+                draggedBoardID: $draggedBoardID,
+                lastDropTargetID: $lastDropTargetID
+            ))
+            .help("Drag to reorder Pinboards")
         }
-        .onDrag {
-            draggedBoardID = board.id
-            lastDropTargetID = nil
-            return NSItemProvider(object: board.id.uuidString as NSString)
-        }
-        .onDrop(of: [.plainText], delegate: PinboardTabDropDelegate(
-            targetID: board.id,
-            store: store,
-            draggedBoardID: $draggedBoardID,
-            lastDropTargetID: $lastDropTargetID
-        ))
-        .help("Drag to reorder Pinboards")
     }
 
     @ViewBuilder
     private func pinboardContextMenu(_ board: Pinboard) -> some View {
-        Button("Rename…") { rename(board) }
+        Button { beginEditing(board) } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+        Menu {
+            ForEach(PinboardColorOption.all) { color in
+                Button { store.setPinboardColor(board.id, to: color.hex) } label: {
+                    Label {
+                        Text(board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame
+                             ? "✓  \(color.name)"
+                             : color.name)
+                    } icon: {
+                        Image(nsImage: color.menuSwatch)
+                            .renderingMode(.original)
+                    }
+                }
+            }
+        } label: {
+            Label("Color", systemImage: "paintpalette")
+        }
         Divider()
         Button { store.movePinboard(board.id, by: -1) } label: {
             Label("Move Left", systemImage: "arrow.left")
@@ -125,17 +160,86 @@ struct PinboardTabs: View {
     }
 
     private func addPinboard() {
+        // Clicking + while another new board is being named bypasses the
+        // normal focus-loss callback, so commit that name before replacing the
+        // editor with the freshly created board.
+        finishEditing()
         let board = store.addPinboard(name: "New Pinboard")
         store.source = .pinboard(board.id)
+        beginEditing(board)
     }
 
-    private func rename(_ board: Pinboard) {
-        if let name = TextPrompt.run(title: "Rename Pinboard",
-                                     message: "Enter a new name",
-                                     defaultValue: board.name) {
-            store.renamePinboard(board.id, to: name)
+    private func editableBoardTab(_ board: Pinboard) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(board.color).frame(width: 7, height: 7)
+            TextField("Pinboard name", text: $draftName)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(minWidth: 92, idealWidth: 120)
+                .focused($focusedBoardID, equals: board.id)
+                .onSubmit(finishEditing)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 29)
+        .background(Theme.pillSelected, in: Capsule())
+        .fixedSize()
+    }
+
+    private func beginEditing(_ board: Pinboard) {
+        editingBoardID = board.id
+        draftName = board.name
+        DispatchQueue.main.async {
+            focusedBoardID = board.id
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
         }
     }
+
+    private func finishEditing() {
+        guard let id = editingBoardID else { return }
+        let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            store.renamePinboard(id, to: name)
+        }
+        editingBoardID = nil
+        focusedBoardID = nil
+    }
+}
+
+private struct PinboardColorOption: Identifiable {
+    let name: String
+    let hex: String
+
+    var id: String { hex }
+
+    /// Native AppKit menus tint template images, so draw each color swatch as
+    /// a non-template image to retain its actual color in the submenu.
+    var menuSwatch: NSImage {
+        let size = NSSize(width: 13, height: 13)
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        let circle = NSRect(x: 1, y: 1, width: size.width - 2, height: size.height - 2)
+        (NSColor(hex: hex) ?? .controlAccentColor).setFill()
+        NSBezierPath(ovalIn: circle).fill()
+        NSColor.black.withAlphaComponent(0.18).setStroke()
+        NSBezierPath(ovalIn: circle).stroke()
+
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
+
+    static let all = [
+        Self(name: "Red", hex: "#FF3B5C"),
+        Self(name: "Orange", hex: "#FF8A2B"),
+        Self(name: "Yellow", hex: "#F5B700"),
+        Self(name: "Green", hex: "#34C759"),
+        Self(name: "Blue", hex: "#0A84FF"),
+        Self(name: "Purple", hex: "#BF3BE0"),
+        Self(name: "Pink", hex: "#FF2D55"),
+        Self(name: "Gray", hex: "#98989F")
+    ]
 }
 
 private struct PinboardTabDropDelegate: DropDelegate {

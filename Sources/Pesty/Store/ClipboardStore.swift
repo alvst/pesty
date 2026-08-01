@@ -261,6 +261,15 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    /// Pinboard colors are tab metadata, deliberately independent from the
+    /// source-app colors used by clip cards. Persisting the value here keeps a
+    /// chosen tab color after relaunch and iCloud synchronization.
+    func setPinboardColor(_ id: UUID, to colorHex: String) {
+        guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
+        pinboards[i].colorHex = colorHex
+        scheduleSave()
+    }
+
     /// Moves a Pinboard relative to the tab currently under the drag. The
     /// ordered array is persisted as part of the normal store snapshot.
     func movePinboard(_ movedID: UUID, over targetID: UUID) {

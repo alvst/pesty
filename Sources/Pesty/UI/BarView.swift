@@ -11,6 +11,7 @@ struct BarView: View {
 
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @Bindable private var monitor = AppController.shared.monitor
     @State private var resizeStartHeight: Double?
     @State private var cardFrames: [UUID: CGRect] = [:]
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
@@ -182,13 +183,27 @@ struct BarView: View {
 
     private var moreMenu: some View {
         Menu {
-            Button("Settings…") { AppController.shared.showSettings() }
-            Button("Clear History") { store.clearHistory() }
+            Button { AppController.shared.showSettings() } label: {
+                Label("Settings…", systemImage: "gearshape")
+            }
+            Button { AppController.shared.togglePestyPause() } label: {
+                Label(
+                    monitor.isPaused ? "Resume Pesty" : "Pause Pesty",
+                    systemImage: monitor.isPaused ? "play.fill" : "pause.fill"
+                )
+            }
+            Button { store.clearHistory() } label: {
+                Label("Clear History", systemImage: "trash")
+            }
             Divider()
-            Button("About Pesty") { AppController.shared.showAbout() }
-            Button("Quit Pesty") { NSApp.terminate(nil) }
+            Button { AppController.shared.showAbout() } label: {
+                Label("About Pesty", systemImage: "info.circle")
+            }
+            Button { NSApp.terminate(nil) } label: {
+                Label("Quit Pesty", systemImage: "power")
+            }
         } label: {
-            Image(systemName: "ellipsis")
+            Image(systemName: monitor.isPaused ? "pause.fill" : "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(width: 30, height: 30)
