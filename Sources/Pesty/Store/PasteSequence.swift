@@ -91,7 +91,8 @@ final class PasteSequence {
         savedStacks.contains { stack in stack.entries.contains { $0.item.id == id } }
     }
 
-    private init() {}
+    // Kept internal for state-level tests; production code uses `shared`.
+    init() {}
 
     func restoreSavedStacks(_ stacks: [SavedPasteStack]) {
         savedStacks = stacks.sorted { $0.createdAt > $1.createdAt }
@@ -249,26 +250,32 @@ final class PasteSequence {
     /// Deletes only the active saved stack; all other deck cards remain.
     func cancel() {
         guard let activeStackID else { return }
-        savedStacks.removeAll { $0.id == activeStackID }
-        if let next = savedStacks.first(where: \.hasEntries) {
-            activate(next)
-        } else {
-            entries = []
-            self.activeStackID = nil
-            selectedEntryID = nil
-            isCollecting = false
-        }
-        ClipboardStore.shared.pasteStacksDidChange()
+        deleteStack(activeStackID)
     }
 
+    /// Removes one saved deck. When it is the active deck, promote the next
+    /// visible deck in strip order (or the preceding one at the end) so the
+    /// active ID and entry selection can never point into a deleted stack.
     func deleteStack(_ id: UUID) {
-        guard savedStacks.contains(where: { $0.id == id }) else { return }
-        if activeStackID == id {
-            cancel()
-        } else {
-            savedStacks.removeAll { $0.id == id }
-            ClipboardStore.shared.pasteStacksDidChange()
+        guard let index = savedStacks.firstIndex(where: { $0.id == id }) else { return }
+        let deletedActiveStack = activeStackID == id
+        savedStacks.remove(at: index)
+
+        if deletedActiveStack {
+            let following = savedStacks.dropFirst(index)
+            let preceding = savedStacks.prefix(index).reversed()
+            if let replacement = following.first(where: \.hasEntries)
+                ?? preceding.first(where: \.hasEntries) {
+                activate(replacement)
+            } else {
+                entries = []
+                activeStackID = nil
+                selectedEntryID = nil
+                isCollecting = false
+            }
         }
+
+        ClipboardStore.shared.pasteStacksDidChange()
     }
 
     /// Used when the user elects to have saved stacks follow clipboard
