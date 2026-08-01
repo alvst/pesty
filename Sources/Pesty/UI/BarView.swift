@@ -24,8 +24,7 @@ struct BarView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow)
-            Theme.panelTint
+            panelBackground
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
@@ -52,6 +51,20 @@ struct BarView: View {
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+    }
+
+    /// macOS 26 supplies the blur and refraction at the AppKit window level.
+    /// Earlier systems keep the existing visual-effect and dark-tint layering,
+    /// so the bar remains readable and visually consistent on the supported
+    /// deployment targets.
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(macOS 26.0, *) {
+            Theme.panelTint
+        } else {
+            VisualEffectView(material: .hudWindow)
+            Theme.panelTint
+        }
     }
 
     private var resizeHandle: some View {
