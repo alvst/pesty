@@ -143,6 +143,10 @@ private struct AboutView: View {
                 Link("Report an Issue", destination: URL(string: "https://github.com/momenbasel/pesty/issues")!)
             }
             .padding(.top, 4)
+            Button("Quit Pesty", role: .destructive) {
+                NSApp.terminate(nil)
+            }
+            .padding(.top, 8)
             Spacer()
             Text("MIT Licensed · Made with SwiftUI")
                 .font(.caption).foregroundStyle(.tertiary)
