@@ -9,8 +9,35 @@ final class BarPanel: NSPanel {
 @MainActor
 final class BarWindowController: NSWindowController, NSWindowDelegate {
 
-    private var isPresenting = false
-    private var isHiding = false
+    /// Where the bar is in its show/hide cycle.
+    ///
+    /// This is the authoritative answer to "is the bar up?". `NSWindow.isVisible` used
+    /// to serve that role, but it only returns to false inside an animation completion
+    /// handler, and AppKit drops those handlers when a later animation supersedes them
+    /// on the same property. One missed `orderOut` left the panel permanently
+    /// "visible", so every hotkey press routed to `hide()` and the bar never came back
+    /// until the app was relaunched. That is issue #64.
+    private enum Phase: Equatable {
+        case hidden
+        case showing(Int)
+        case shown
+        case hiding(Int)
+    }
+
+    private var phase: Phase = .hidden
+    private var epoch = 0
+
+    /// True while the bar is up or on its way up. `AppController.toggleBar` asks this
+    /// instead of `window.isVisible`.
+    var isPresented: Bool {
+        switch phase {
+        case .showing, .shown: return true
+        case .hidden, .hiding: return false
+        }
+    }
+
+    private static let showDuration: TimeInterval = 0.22
+    private static let hideDuration: TimeInterval = 0.16
 
     init() {
         let panel = BarPanel(
@@ -26,6 +53,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovable = false
+        // Without this a stray close() would deallocate the panel and leave `window`
+        // nil, which is another way to never show the bar again.
+        panel.isReleasedWhenClosed = false
         panel.contentView = NSHostingView(rootView: BarView())
         super.init(window: panel)
         panel.delegate = self
@@ -57,10 +87,28 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         return dx * dx + dy * dy
     }
 
+    /// Bumps the transition counter so any completion still in flight becomes stale.
+    private func beginTransition() -> Int {
+        epoch &+= 1
+        return epoch
+    }
+
+    /// Runs `body` exactly once for the transition identified by `token`, and never for
+    /// a transition that has already been superseded.
+    ///
+    /// Both the animation completion handler and a backstop timer call through here.
+    /// The timer is what actually guarantees progress - AppKit drops completion handlers
+    /// when a later animation replaces them, and relying on one to run was the original
+    /// bug. Bumping `epoch` on settle makes the second caller for the same token a no-op.
+    private func settle(_ token: Int, _ body: () -> Void) {
+        guard epoch == token else { return }
+        epoch &+= 1
+        body()
+    }
+
     func show() {
         guard let panel = window else { return }
-        isPresenting = true
-        guard let screen = Self.targetScreen() else { isPresenting = false; return }
+        guard let screen = Self.targetScreen() else { return }
         let vf = screen.visibleFrame
         let height = min(CGFloat(Settings.shared.barHeight), vf.height)
         let onScreen = NSRect(x: vf.minX, y: vf.minY, width: vf.width, height: height)
@@ -71,47 +119,72 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         // nothing sits below the target display. With displays stacked vertically it
         // lands on the neighbouring screen, so the bar appeared there in full and then
         // flew across the bezel. A view clipped to the window can never escape it.
-        isHiding = false
         panel.setFrame(onScreen, display: false)
-        guard let content = panel.contentView else { isPresenting = false; return }
+        guard let content = panel.contentView else { return }
         content.autoresizingMask = []
         content.frame = NSRect(x: 0, y: -height, width: onScreen.width, height: height)
+
+        let token = beginTransition()
+        phase = .showing(token)
 
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
 
+        let finish = { [weak self] in
+            guard let self else { return }
+            self.settle(token) {
+                self.phase = .shown
+                // The panel can lose key focus while it is still animating up, and
+                // windowDidResignKey ignores that because the bar is not .shown yet.
+                // Catch it here so the bar does not sit on screen unfocused forever.
+                if panel.isVisible, !panel.isKeyWindow, !AppController.shared.suppressAutoHide {
+                    AppController.shared.hideBar()
+                }
+            }
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
+            ctx.duration = Self.showDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             content.animator().frame = NSRect(x: 0, y: 0, width: onScreen.width, height: height)
-        }, completionHandler: { [weak self] in
-            DispatchQueue.main.async { self?.isPresenting = false }
-        })
+        }, completionHandler: { DispatchQueue.main.async(execute: finish) })
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.showDuration + 0.05, execute: finish)
     }
 
     func hide() {
-        guard let panel = window, panel.isVisible, !isHiding,
-              let content = panel.contentView else { return }
-        isHiding = true
+        guard let panel = window, let content = panel.contentView else { return }
+        guard isPresented else { return }
+
+        let token = beginTransition()
+        phase = .hiding(token)
         let down = NSRect(x: 0, y: -content.frame.height,
                           width: content.frame.width, height: content.frame.height)
+
+        let finish = { [weak self] in
+            guard let self else { return }
+            self.settle(token) {
+                panel.orderOut(nil)
+                self.phase = .hidden
+            }
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.16
+            ctx.duration = Self.hideDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             content.animator().frame = down
-        }, completionHandler: { [weak self] in
-            DispatchQueue.main.async {
-                // show() may have re-staged the panel mid-animation; only retire it if
-                // this hide is still the one in flight.
-                guard self?.isHiding == true else { return }
-                self?.isHiding = false
-                panel.orderOut(nil)
-            }
-        })
+        }, completionHandler: { DispatchQueue.main.async(execute: finish) })
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hideDuration + 0.05, execute: finish)
+    }
+
+    /// Drops the bar with no animation and no completion handler to depend on.
+    /// Used after sleep or a display change, where an in-flight transition can be
+    /// left stranded on a screen that no longer exists.
+    func forceHide() {
+        _ = beginTransition()
+        phase = .hidden
+        window?.orderOut(nil)
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard !isPresenting, !AppController.shared.suppressAutoHide else { return }
+        guard phase == .shown, !AppController.shared.suppressAutoHide else { return }
         AppController.shared.hideBar()
     }
 }

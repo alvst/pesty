@@ -26,6 +26,14 @@ final class AppController: NSObject, NSApplicationDelegate {
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification, object: nil)
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
         monitor.start()
 
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
@@ -128,11 +136,31 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func toggleBar() {
-        if let bar = barController, bar.window?.isVisible == true {
+        if let bar = barController, bar.isPresented {
             hideBar()
         } else {
             showBar()
         }
+    }
+
+    /// A sleep cycle can strand the bar mid-transition and can drop the Carbon hotkey.
+    /// Reset both rather than trying to reason about what survived.
+    @objc private func systemDidWake() {
+        barController?.forceHide()
+        stopKeyMonitor()
+        HotKeyCenter.shared.reload()
+    }
+
+    /// Docking, undocking, and resolution changes can leave the bar sized for a screen
+    /// that no longer exists. Drop it so the next open re-measures.
+    ///
+    /// This deliberately does NOT re-register the hotkey. That notification also fires
+    /// for things as minor as a colour-profile change, and a transient
+    /// RegisterEventHotKey failure during display churn would leave the app with no
+    /// hotkey at all until the next relaunch - the exact bug this is meant to fix.
+    @objc private func screenParametersChanged() {
+        barController?.forceHide()
+        stopKeyMonitor()
     }
 
     func showBar() {
@@ -144,7 +172,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.source = .history
         store.selectFirst()
 
-        if barController == nil {
+        // Rebuild if the panel was ever torn down - a nil window is another way the
+        // bar silently stops appearing.
+        if barController == nil || barController?.window == nil {
             barController = BarWindowController()
         }
         barController?.show()

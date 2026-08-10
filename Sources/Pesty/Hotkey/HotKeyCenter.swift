@@ -28,15 +28,48 @@ final class HotKeyCenter {
         }, 1, &spec, nil, &handlerRef)
     }
 
+    /// Re-registers the global hotkey.
+    ///
+    /// The old registration has to be released before the new one can take the same
+    /// combination, so a failed `RegisterEventHotKey` leaves the app with no hotkey at
+    /// all. That is unrecoverable without a relaunch, and it is one of the ways the bar
+    /// "stops opening" (issue #64). Another process can hold the combination briefly
+    /// during login or a display change, so retry a few times before giving up, and put
+    /// the old registration back if the new one will not take.
     func reload() {
+        let previous = hotKeyRef
         unregister()
+
         let keyCode = UInt32(Settings.shared.hotkeyKeyCode)
         let modifiers = UInt32(Settings.shared.hotkeyModifiers)
         guard keyCode != 0 else { return }
+
+        if register(keyCode: keyCode, modifiers: modifiers) { return }
+
+        // Put the old one back so the user is never left without a hotkey, then retry.
+        hotKeyRef = previous
+        retryRegister(keyCode: keyCode, modifiers: modifiers, attemptsLeft: 5)
+    }
+
+    private func register(keyCode: UInt32, modifiers: UInt32) -> Bool {
         let id = EventHotKeyID(signature: signature, id: 1)
         var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &ref)
-        if status == noErr { hotKeyRef = ref }
+        guard RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &ref) == noErr
+        else { return false }
+        hotKeyRef = ref
+        return true
+    }
+
+    private func retryRegister(keyCode: UInt32, modifiers: UInt32, attemptsLeft: Int) {
+        guard attemptsLeft > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            let stale = self.hotKeyRef
+            self.unregister()
+            if self.register(keyCode: keyCode, modifiers: modifiers) { return }
+            self.hotKeyRef = stale
+            self.retryRegister(keyCode: keyCode, modifiers: modifiers, attemptsLeft: attemptsLeft - 1)
+        }
     }
 
     private func unregister() {
