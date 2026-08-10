@@ -35,6 +35,12 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
 
+        #if MAS
+        // CKSyncEngine handles the push payloads itself; the app only registers.
+        NSApplication.shared.registerForRemoteNotifications()
+        if Settings.shared.cloudKitSync { CloudSyncService.shared.start() }
+        #endif
+
         if CommandLine.arguments.contains("--demo") {
             store.seedDemo()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in

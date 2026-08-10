@@ -48,6 +48,18 @@ private struct GeneralSettings: View {
                 #endif
             }
 
+            #if MAS
+            Section("Sync") {
+                Toggle("Sync history with iCloud", isOn: Binding(
+                    get: { settings.cloudKitSync },
+                    set: { on in
+                        settings.cloudKitSync = on
+                        if on { CloudSyncService.shared.enable() } else { CloudSyncService.shared.stop() }
+                    }))
+                Text(CloudSyncService.shared.status)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            #else
             Section("Sync") {
                 Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
                     get: { settings.iCloudSync },
@@ -57,6 +69,7 @@ private struct GeneralSettings: View {
                      : "Sign in to iCloud and enable iCloud Drive to use sync.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            #endif
 
             #if !MAS
             Section("Permissions") {

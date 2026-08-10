@@ -1,6 +1,10 @@
 import AppKit
 import Observation
 
+extension Notification.Name {
+    static let pestyStoreDidSave = Notification.Name("PestyStoreDidSave")
+}
+
 enum BarSource: Equatable {
     case history
     case pinboard(UUID)
@@ -154,7 +158,19 @@ final class ClipboardStore {
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
         if pinboards[i].items.contains(where: { $0.sameContent(as: item) }) { return }
-        var copy = item
+        // Pinboard copies mint their own UUID (one sync record per container).
+        var copy = ClipItem(
+            type: item.type,
+            text: item.text,
+            rtfData: item.rtfData,
+            imageFileName: item.imageFileName,
+            imageHash: item.imageHash,
+            fileURLs: item.fileURLs,
+            colorHex: item.colorHex,
+            sourceBundleID: item.sourceBundleID,
+            sourceAppName: item.sourceAppName,
+            customTitle: item.customTitle,
+            createdAt: item.createdAt)
         if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
         pinboards[i].items.insert(copy, at: 0)
         scheduleSave()
@@ -196,7 +212,7 @@ final class ClipboardStore {
         let name = "\(UUID().uuidString).png"
         let url = imagesDir.appendingPathComponent(name)
         do {
-            try data.write(to: url)
+            try data.write(to: url, options: .atomic)
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             return name
         } catch { return nil }
@@ -248,6 +264,118 @@ final class ClipboardStore {
         ignoreWatchUntil = Date().addingTimeInterval(1.5)
         try? data.write(to: storeURL, options: .atomic)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storeURL.path)
+        NotificationCenter.default.post(name: .pestyStoreDidSave, object: nil)
+    }
+
+    // MARK: - Remote (CloudKit) apply
+
+    /// Applies decoded CloudKit clips. Dedupe by contentKey keeps the newer
+    /// createdAt; insertion stays newest-first. Callers update their own
+    /// last-synced bookkeeping so these changes do not loop back into sync.
+    func applyRemote(clips: [(ClipItem, container: String, imageSourceURL: URL?)]) {
+        guard !clips.isEmpty else { return }
+        for entry in clips {
+            let item = entry.0
+            if let src = entry.imageSourceURL, let name = item.imageFileName {
+                let dst = imagesDir.appendingPathComponent(name)
+                try? FileManager.default.removeItem(at: dst)
+                try? FileManager.default.copyItem(at: src, to: dst)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dst.path)
+            }
+            if entry.container == "history" {
+                applyRemoteToHistory(item)
+            } else if let boardID = UUID(uuidString: entry.container) {
+                applyRemoteToPinboard(item, boardID: boardID)
+            }
+        }
+        trimHistory()
+        if selectedID == nil { selectFirst() }
+        scheduleSave()
+    }
+
+    func applyRemoteDeletes(ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        let set = Set(ids)
+        let removedHistory = history.filter { set.contains($0.id) }
+        history.removeAll { set.contains($0.id) }
+        var removedPinned: [ClipItem] = []
+        for i in pinboards.indices {
+            removedPinned += pinboards[i].items.filter { set.contains($0.id) }
+            pinboards[i].items.removeAll { set.contains($0.id) }
+        }
+        let removedBoards = pinboards.filter { set.contains($0.id) }
+        pinboards.removeAll { set.contains($0.id) }
+        if case .pinboard(let cur) = source, set.contains(cur) { source = .history }
+        for item in removedHistory + removedPinned + removedBoards.flatMap(\.items) {
+            deleteImageFile(item)
+        }
+        if let sel = selectedID, set.contains(sel) { selectFirst() }
+        scheduleSave()
+    }
+
+    /// Upserts pinboard name/color only; item membership syncs through clip records.
+    func applyRemote(pinboards boards: [Pinboard]) {
+        guard !boards.isEmpty else { return }
+        for b in boards {
+            if let i = pinboards.firstIndex(where: { $0.id == b.id }) {
+                pinboards[i].name = b.name
+                pinboards[i].colorHex = b.colorHex
+            } else {
+                pinboards.append(Pinboard(id: b.id, name: b.name, colorHex: b.colorHex, items: []))
+            }
+        }
+        scheduleSave()
+    }
+
+    private func applyRemoteToHistory(_ item: ClipItem) {
+        let replaced = history.filter { $0.id == item.id }
+        history.removeAll { $0.id == item.id }
+        let key = contentKey(item)
+        if let dupIdx = history.firstIndex(where: { contentKey($0) == key }) {
+            let dup = history[dupIdx]
+            if dup.createdAt >= item.createdAt {
+                deleteImageFile(item)
+                for old in replaced { deleteImageFile(old) }
+                return
+            }
+            history.remove(at: dupIdx)
+            deleteImageFile(dup)
+        }
+        insertSortedByDate(item, into: &history)
+        // Same-id replace: drop the old image file unless something still uses it.
+        for old in replaced { deleteImageFile(old) }
+    }
+
+    private func applyRemoteToPinboard(_ item: ClipItem, boardID: UUID) {
+        // Placeholder board if the clip record arrives before its Pinboard record.
+        if !pinboards.contains(where: { $0.id == boardID }) {
+            pinboards.append(Pinboard(id: boardID, name: "Pinboard", items: []))
+        }
+        guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
+        // Legacy shared-id records: a pinboard clip also evicts the same id from history.
+        var replaced = history.filter { $0.id == item.id }
+        history.removeAll { $0.id == item.id }
+        replaced += pinboards[i].items.filter { $0.id == item.id }
+        pinboards[i].items.removeAll { $0.id == item.id }
+        let key = contentKey(item)
+        if let dupIdx = pinboards[i].items.firstIndex(where: { contentKey($0) == key }) {
+            let dup = pinboards[i].items[dupIdx]
+            if dup.createdAt >= item.createdAt {
+                deleteImageFile(item)
+                for old in replaced { deleteImageFile(old) }
+                return
+            }
+            pinboards[i].items.remove(at: dupIdx)
+            deleteImageFile(dup)
+        }
+        insertSortedByDate(item, into: &pinboards[i].items)
+        // Same-id replace: drop the old image file unless something still uses it.
+        for old in replaced { deleteImageFile(old) }
+    }
+
+    private func insertSortedByDate(_ item: ClipItem, into items: inout [ClipItem]) {
+        let idx = items.firstIndex(where: { $0.createdAt < item.createdAt }) ?? items.endIndex
+        items.insert(item, at: idx)
     }
 
     func setICloudSync(_ enabled: Bool) {
