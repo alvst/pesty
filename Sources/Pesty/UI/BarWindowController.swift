@@ -46,6 +46,11 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     private static let showDuration: TimeInterval = 0.22
     private static let hideDuration: TimeInterval = 0.16
 
+    private static var contentBottomExtension: CGFloat {
+        if #available(macOS 26.0, *) { return Theme.cornerRadius }
+        return 0
+    }
+
     init() {
         let panel = BarPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 360),
@@ -63,7 +68,29 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         // Without this a stray close() would deallocate the panel and leave `window`
         // nil, which is another way to never show the bar again.
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: BarView())
+        let content = NSHostingView(rootView: BarView())
+        if #available(macOS 26.0, *) {
+            let glassContent = NSView()
+            content.translatesAutoresizingMaskIntoConstraints = false
+            glassContent.addSubview(content)
+            NSLayoutConstraint.activate([
+                content.leadingAnchor.constraint(equalTo: glassContent.leadingAnchor),
+                content.trailingAnchor.constraint(equalTo: glassContent.trailingAnchor),
+                content.topAnchor.constraint(equalTo: glassContent.topAnchor),
+                content.bottomAnchor.constraint(equalTo: glassContent.bottomAnchor,
+                                                constant: -Theme.cornerRadius),
+            ])
+
+            let glass = NSGlassEffectView()
+            glass.contentView = glassContent
+            glass.cornerRadius = Theme.cornerRadius
+            glass.tintColor = NSColor.black.withAlphaComponent(0.12)
+            glass.style = .regular
+            panel.contentView = glass
+            panel.hasShadow = false
+        } else {
+            panel.contentView = content
+        }
         super.init(window: panel)
         panel.delegate = self
     }
@@ -128,8 +155,11 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         // flew across the bezel. A view clipped to the window can never escape it.
         panel.setFrame(onScreen, display: false)
         guard let content = panel.contentView else { return }
+        let bottomExtension = Self.contentBottomExtension
+        let contentHeight = height + bottomExtension
         content.autoresizingMask = []
-        content.frame = NSRect(x: 0, y: -height, width: onScreen.width, height: height)
+        content.frame = NSRect(x: 0, y: -contentHeight,
+                               width: onScreen.width, height: contentHeight)
 
         let token = beginTransition()
         phase = .showing(token)
@@ -137,7 +167,7 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
 
-        let finish = { [weak self] in
+        let finish: @MainActor @Sendable () -> Void = { [weak self] in
             guard let self else { return }
             self.settle(token) {
                 self.phase = .shown
@@ -152,7 +182,8 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Self.showDuration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            content.animator().frame = NSRect(x: 0, y: 0, width: onScreen.width, height: height)
+            content.animator().frame = NSRect(x: 0, y: -bottomExtension,
+                                              width: onScreen.width, height: contentHeight)
         }, completionHandler: { DispatchQueue.main.async(execute: finish) })
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.showDuration + 0.05, execute: finish)
     }
@@ -166,7 +197,7 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         let down = NSRect(x: 0, y: -content.frame.height,
                           width: content.frame.width, height: content.frame.height)
 
-        let finish = { [weak self] in
+        let finish: @MainActor @Sendable () -> Void = { [weak self] in
             guard let self else { return }
             self.settle(token) {
                 panel.orderOut(nil)
