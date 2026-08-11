@@ -16,14 +16,24 @@ struct ClipCardView: View {
         }
         .frame(width: Theme.cardWidth)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
+        .background {
+            if selected {
+                RoundedRectangle(
+                    cornerRadius: Theme.cardCorner + Theme.selectedCardRing,
+                    style: .continuous
+                )
+                .fill(Theme.selection)
+                .padding(-Theme.selectedCardRing)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
                 .strokeBorder(selected ? Theme.selection : Theme.cardBorder,
-                              lineWidth: selected ? 2.5 : 1)
+                              lineWidth: selected ? 1.5 : 1)
         )
-        .shadow(color: .black.opacity(selected ? 0.35 : 0.18),
-                radius: selected ? 12 : 5, y: selected ? 5 : 2)
+        .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
         .scaleEffect(hovering && !selected ? 1.015 : 1.0)
+        .zIndex(selected ? 1 : 0)
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
@@ -39,30 +49,35 @@ struct ClipCardView: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.type.label)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     Text(item.createdAt.clipRelativeLong)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.headerSubText)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
                 appIconTile
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
         }
         .frame(height: Theme.headerHeight)
     }
 
     private var appIconTile: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(Color.black.opacity(0.22))
-            .frame(width: 38, height: 38)
+        RoundedRectangle(cornerRadius: 15, style: .continuous)
+            .fill(Color.white.opacity(0.14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14))
+            )
+            .frame(width: 56, height: 56)
             .overlay(
                 Image(nsImage: AppIconProvider.icon(forBundleID: item.sourceBundleID))
                     .resizable()
-                    .frame(width: 28, height: 28)
+                    .interpolation(.high)
+                    .frame(width: 48, height: 48)
             )
     }
 
@@ -101,7 +116,7 @@ struct ClipCardView: View {
                 Image(systemName: "doc.fill").font(.system(size: 32))
                     .foregroundStyle(headerColor)
                 Text(item.displayTitle).font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary).lineLimit(2)
+                    .foregroundStyle(Theme.cardTextSecondary).lineLimit(2)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -109,14 +124,14 @@ struct ClipCardView: View {
             VStack(spacing: 10) {
                 Spacer(minLength: 0)
                 Image(systemName: "safari").font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(Theme.cardTextTertiary)
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity)
         default:
             Text(item.text ?? "")
                 .font(.system(size: 12.5))
-                .foregroundStyle(Theme.textPrimary.opacity(0.9))
+                .foregroundStyle(Theme.cardTextPrimary.opacity(0.9))
                 .lineLimit(10)
                 .multilineTextAlignment(.leading)
         }
@@ -124,7 +139,7 @@ struct ClipCardView: View {
 
     private func placeholder(_ symbol: String) -> some View {
         Image(systemName: symbol).font(.system(size: 30))
-            .foregroundStyle(Theme.textTertiary)
+            .foregroundStyle(Theme.cardTextTertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -133,12 +148,12 @@ struct ClipCardView: View {
             if item.type == .link {
                 Text(item.displayTitle)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary).lineLimit(1)
+                    .foregroundStyle(Theme.cardTextPrimary).lineLimit(1)
             }
             HStack(spacing: 6) {
                 Text(metaLeft)
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.cardTextSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if index < 9 {
@@ -148,7 +163,7 @@ struct ClipCardView: View {
                         Text("\(index + 1)")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(Theme.cardTextTertiary)
                 }
             }
         }
