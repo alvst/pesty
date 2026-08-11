@@ -21,9 +21,14 @@ struct BarView: View {
 
     private var topBar: some View {
         HStack(spacing: 14) {
-            if settings.iCloudSync {
-                syncButton
-            }
+            // The two builds sync through different systems: the App Store build uses
+            // CloudKit, everything else uses iCloud Drive. Gate the button on whichever
+            // one this build actually drives.
+            #if MAS
+            if settings.cloudKitSync { syncButton }
+            #else
+            if settings.iCloudSync { syncButton }
+            #endif
             searchIndicator
             PinboardTabs()
                 .layoutPriority(1)
