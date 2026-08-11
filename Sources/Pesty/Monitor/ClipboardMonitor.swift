@@ -54,6 +54,7 @@ final class ClipboardMonitor {
         }
         let bundleID = src?.bundleIdentifier
         let appName = src?.localizedName
+        guard !Settings.shared.isIgnoringSourceApp(bundleID) else { return nil }
 
         func decorate(_ item: inout ClipItem) {
             item.sourceBundleID = bundleID
