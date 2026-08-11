@@ -54,7 +54,14 @@ final class ClipboardMonitor {
         }
         let bundleID = src?.bundleIdentifier
         let appName = src?.localizedName
-        guard !Settings.shared.isIgnoringSourceApp(bundleID) else { return nil }
+
+        // The pasteboard is polled every 0.4s, so by the time a copy is noticed the user
+        // may already have switched away from the app they copied from. Check the app
+        // that was frontmost a moment ago as well: a false positive costs one skipped
+        // clip, a false negative leaks a password into history and into iCloud.
+        let ignored = Settings.shared.isIgnoringSourceApp(bundleID)
+            || Settings.shared.isIgnoringSourceApp(AppController.shared.lastActiveApp?.bundleIdentifier)
+        guard !ignored else { return nil }
 
         func decorate(_ item: inout ClipItem) {
             item.sourceBundleID = bundleID

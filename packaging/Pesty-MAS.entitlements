@@ -10,6 +10,11 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- The Privacy tab picks apps to exclude from history with an NSOpenPanel.
+         Without this the sandbox hands back a URL the app cannot read, and any app
+         outside /Applications silently fails to be added. -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
     <key>com.apple.developer.icloud-services</key>
     <array>
         <string>CloudKit</string>

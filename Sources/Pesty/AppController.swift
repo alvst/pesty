@@ -77,6 +77,22 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.saveNow()
     }
 
+    /// The escape hatch for a hidden menu bar icon.
+    ///
+    /// Pesty is an accessory app, so with the status item hidden there is no Dock icon,
+    /// no window, and no menu - and if the global hotkey failed to register because
+    /// another app already owns the combination, there is no way back in at all short of
+    /// deleting the preference from Terminal. Opening Pesty again from Finder or
+    /// Spotlight brings the icon back and shows Settings.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !Settings.shared.showMenuBarIcon {
+            Settings.shared.showMenuBarIcon = true
+            setMenuBarIconVisible(true)
+        }
+        showSettings()
+        return true
+    }
+
     private func setupStatusItem() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

@@ -276,6 +276,11 @@ final class ClipboardStore {
         guard !clips.isEmpty else { return }
         for entry in clips {
             let item = entry.0
+            // The per-app exclusion list is local to each Mac and is not synced, so a
+            // clip from an ignored app copied on another device would otherwise arrive
+            // here and land in history anyway. A privacy filter that leaks across
+            // devices is not a privacy filter.
+            guard !Settings.shared.isIgnoringSourceApp(item.sourceBundleID) else { continue }
             if let src = entry.imageSourceURL, let name = item.imageFileName {
                 let dst = imagesDir.appendingPathComponent(name)
                 try? FileManager.default.removeItem(at: dst)

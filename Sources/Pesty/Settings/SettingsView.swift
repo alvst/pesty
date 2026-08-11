@@ -21,7 +21,7 @@ private struct PrivacySettings: View {
     var body: some View {
         Form {
             Section("Excluded Apps") {
-                Text("Pesty will not save anything copied while one of these apps is active. This is useful for password managers such as 1Password.")
+                Text("Pesty will not save anything copied while one of these apps is frontmost. Copies made from a browser extension are attributed to the browser, so add that too if you use one.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
