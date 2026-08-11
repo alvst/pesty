@@ -12,6 +12,9 @@ enum Theme {
     static let cardBorder = Color.black.opacity(0.12)
     static let selection = Color(red: 0.0, green: 0.478, blue: 1.0)
     static let selectedCardRing: CGFloat = 6
+    // Leave 43 pt beyond the selected-card ring at either strip edge while
+    // preserving the ScrollView's normal clipping behavior.
+    static let cardStripHorizontalPadding: CGFloat = selectedCardRing + 43
 
     static let chromeTextPrimary = Color.white.opacity(0.95)
     static let chromeTextSecondary = Color.white.opacity(0.55)

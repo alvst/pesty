@@ -107,7 +107,7 @@ struct BarView: View {
                                 removal: .opacity))
                     }
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, Theme.cardStripHorizontalPadding)
                 .padding(.top, 16)
                 .padding(.bottom, 26)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
