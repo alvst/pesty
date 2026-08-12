@@ -6,8 +6,7 @@ struct BarView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow)
-            Theme.panelTint
+            panelBackground
         }
         .overlay(alignment: .top) {
             VStack(spacing: 0) {
@@ -17,6 +16,16 @@ struct BarView: View {
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(macOS 26.0, *) {
+            Color.clear
+        } else {
+            VisualEffectView(material: .hudWindow)
+            Theme.panelTint
+        }
     }
 
     private var topBar: some View {

@@ -5,7 +5,7 @@ Thanks for your interest. Pesty is a small, native macOS app with no third-party
 ## Prerequisites
 
 - macOS 14 (Sonoma) or later
-- Xcode 16+ / Swift 6 toolchain
+- Xcode 26.3+ / Swift 6 toolchain
 
 ## Build and run
 
