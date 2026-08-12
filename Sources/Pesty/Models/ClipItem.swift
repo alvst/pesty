@@ -44,6 +44,20 @@ struct ClipItem: Identifiable, Codable, Equatable {
 
     var charCount: Int { text?.count ?? 0 }
 
+    var plainText: String? {
+        switch type {
+        case .image:
+            return nil
+        case .color:
+            return colorHex
+        case .file:
+            let paths = fileURLs.map { URL(string: $0)?.path ?? $0 }
+            return paths.isEmpty ? nil : paths.joined(separator: "\n")
+        case .text, .richText, .link:
+            return text
+        }
+    }
+
     var displayTitle: String {
         if let t = customTitle, !t.isEmpty { return t }
         switch type {
