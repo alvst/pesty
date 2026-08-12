@@ -54,7 +54,7 @@ struct BarView: View {
         } label: {
             Image(systemName: settings.iCloudSync ? "checkmark.icloud.fill" : "arrow.triangle.2.circlepath")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.textSecondary)
+                .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.chromeTextSecondary)
         }
         .buttonStyle(.plain)
         .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
@@ -64,15 +64,15 @@ struct BarView: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(store.searchText.isEmpty ? Theme.textSecondary : Theme.textPrimary)
+                .foregroundStyle(store.searchText.isEmpty ? Theme.chromeTextSecondary : Theme.chromeTextPrimary)
             if !store.searchText.isEmpty {
                 Text(store.searchText)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.chromeTextPrimary)
                     .lineLimit(1)
                 Button { store.searchText = ""; store.selectFirst() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12)).foregroundStyle(Theme.chromeTextTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -93,7 +93,7 @@ struct BarView: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextSecondary)
                 .frame(width: 30, height: 30)
         }
         .menuStyle(.borderlessButton)
@@ -116,9 +116,9 @@ struct BarView: View {
                                 removal: .opacity))
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 18)
+                .padding(.horizontal, Theme.cardStripHorizontalPadding)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
             }
             .onChange(of: store.selectedID) { _, id in
@@ -136,12 +136,12 @@ struct BarView: View {
         VStack(spacing: 10) {
             Image(systemName: store.searchText.isEmpty ? "doc.on.clipboard" : "magnifyingglass")
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Theme.textTertiary)
+                .foregroundStyle(Theme.chromeTextTertiary)
             Text(store.searchText.isEmpty
                  ? "Nothing copied yet"
                  : "No matches for “\(store.searchText)”")
                 .font(.system(size: 13))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextSecondary)
         }
     }
 }

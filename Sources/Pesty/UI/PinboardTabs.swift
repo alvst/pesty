@@ -30,7 +30,7 @@ struct PinboardTabs: View {
                 Button(action: addPinboard) {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.chromeTextSecondary)
                         .frame(width: 26, height: 26)
                         .background(Theme.fieldBG, in: Circle())
                 }
@@ -55,7 +55,7 @@ struct PinboardTabs: View {
                     .font(.system(size: 12.5, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+            .foregroundStyle(selected ? Theme.chromeTextPrimary : Theme.chromeTextSecondary)
             .padding(.horizontal, 12)
             .frame(height: 29)
             .background(selected ? Theme.pillSelected : Theme.pillBG, in: Capsule())
