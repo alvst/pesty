@@ -12,7 +12,12 @@ final class ClipboardMonitor {
     private(set) var isPaused = false
     var isRunning: Bool { timer != nil }
 
-    init(pasteboard: NSPasteboard? = AppRuntime.current.allowsClipboardMonitoring ? .general : nil) {
+    init() {
+        pasteboard = AppRuntime.current.allowsClipboardMonitoring ? .general : nil
+        lastChangeCount = pasteboard?.changeCount ?? -1
+    }
+
+    init(pasteboard: NSPasteboard?) {
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard?.changeCount ?? -1
     }
