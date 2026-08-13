@@ -88,6 +88,14 @@ final class AppRuntimeTests: XCTestCase {
         XCTAssertTrue(secondLaunch.settingsDefaults.bool(forKey: "onboarded"))
         XCTAssertEqual(secondLaunch.settingsDefaults.integer(forKey: "hotkeyKeyCode"), 9)
         XCTAssertEqual(secondLaunch.settingsDefaults.integer(forKey: "hotkeyModifiers"), 4_864)
+
+        let preferencesDirectory = root
+            .appendingPathComponent("Pesty-FeatureLab/Library/Preferences", isDirectory: true)
+        let preferencesFile = preferencesDirectory.appendingPathComponent("FeatureLabSettings.plist")
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: preferencesDirectory.path)
+        let fileAttributes = try FileManager.default.attributesOfItem(atPath: preferencesFile.path)
+        XCTAssertEqual((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        XCTAssertEqual((fileAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
     @MainActor

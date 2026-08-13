@@ -171,11 +171,19 @@ final class FeatureLabSettingsDefaults: SettingsDefaultsStore {
         do {
             try fileManager.createDirectory(
                 at: parentDirectory,
-                withIntermediateDirectories: true)
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: parentDirectory.path)
             try data.write(to: fileURL, options: .atomic)
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: fileURL.path)
         } catch {
             // An unwritable lab root must not redirect preferences to a live domain.
             // The in-process values remain usable and safety enforcement remains active.
+            try? fileManager.removeItem(at: fileURL)
         }
     }
 
