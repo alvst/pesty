@@ -48,7 +48,8 @@ final class ClipboardStore {
     private var ignoreWatchUntil: Date = .distantPast
 
     static var localBase: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        if let isolatedBase = AppRuntime.current.storageBaseURL { return isolatedBase }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Pesty", isDirectory: true)
     }
 
@@ -57,6 +58,7 @@ final class ClipboardStore {
     }
 
     static var iCloudBase: URL? {
+        guard AppRuntime.current.allowsCloudSync else { return nil }
         guard !isSandboxed else { return nil }
         let p = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
@@ -67,13 +69,14 @@ final class ClipboardStore {
     var iCloudAvailable: Bool { ClipboardStore.iCloudBase != nil }
 
     private init() {
-        let base = (Settings.shared.iCloudSync ? ClipboardStore.iCloudBase : nil) ?? ClipboardStore.localBase
+        let useICloud = AppRuntime.current.allowsCloudSync && Settings.shared.iCloudSync
+        let base = (useICloud ? ClipboardStore.iCloudBase : nil) ?? ClipboardStore.localBase
         baseDir = base
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         storeURL = base.appendingPathComponent("store.json")
         prepareDirectories()
         load()
-        if Settings.shared.iCloudSync { startWatching() }
+        if useICloud { startWatching() }
     }
 
     private func prepareDirectories() {
@@ -654,6 +657,7 @@ final class ClipboardStore {
     }
 
     func setICloudSync(_ enabled: Bool) {
+        guard AppRuntime.current.allowsCloudSync else { return }
         stopWatching()
         let target = (enabled ? ClipboardStore.iCloudBase : ClipboardStore.localBase) ?? ClipboardStore.localBase
         let newImages = target.appendingPathComponent("images", isDirectory: true)
