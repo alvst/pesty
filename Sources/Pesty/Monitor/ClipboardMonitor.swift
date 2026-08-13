@@ -4,18 +4,21 @@ import CryptoKit
 @MainActor
 final class ClipboardMonitor {
     private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
-    private let pasteboard = NSPasteboard.general
+    private let pasteboard: NSPasteboard?
     private var lastChangeCount: Int
     private var timer: Timer?
 
     var suppressUntilChangeCount: Int = -1
     private(set) var isPaused = false
+    var isRunning: Bool { timer != nil }
 
-    init() {
-        lastChangeCount = pasteboard.changeCount
+    init(pasteboard: NSPasteboard? = AppRuntime.current.allowsClipboardMonitoring ? .general : nil) {
+        self.pasteboard = pasteboard
+        lastChangeCount = pasteboard?.changeCount ?? -1
     }
 
     func start() {
+        guard pasteboard != nil else { return }
         timer?.invalidate()
         let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
@@ -29,16 +32,17 @@ final class ClipboardMonitor {
     func togglePause() { isPaused.toggle() }
 
     private func poll() {
+        guard let pasteboard else { return }
         let current = pasteboard.changeCount
         guard current != lastChangeCount else { return }
         lastChangeCount = current
         guard !isPaused else { return }
         if current == suppressUntilChangeCount { return }
-        guard let item = makeItem() else { return }
+        guard let item = makeItem(from: pasteboard) else { return }
         ClipboardStore.shared.addCaptured(item)
     }
 
-    private func makeItem() -> ClipItem? {
+    private func makeItem(from pasteboard: NSPasteboard) -> ClipItem? {
         let types = pasteboard.types ?? []
 
         if types.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) { return nil }
@@ -89,7 +93,7 @@ final class ClipboardMonitor {
         }
 
         if types.contains(.png) || types.contains(.tiff) {
-            if let data = pngData() {
+            if let data = pngData(from: pasteboard) {
                 let hash = Self.sha256Hex(data)
                 guard let name = ClipboardStore.shared.storeImageData(data) else { return nil }
                 var item = ClipItem(type: .image, imageFileName: name, imageHash: hash)
@@ -131,7 +135,7 @@ final class ClipboardMonitor {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func pngData() -> Data? {
+    private func pngData(from pasteboard: NSPasteboard) -> Data? {
         if let data = pasteboard.data(forType: .png) { return data }
         guard let tiff = pasteboard.data(forType: .tiff),
               let rep = NSBitmapImageRep(data: tiff) else { return nil }

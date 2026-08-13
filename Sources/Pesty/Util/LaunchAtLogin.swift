@@ -1,8 +1,10 @@
 import Foundation
 import ServiceManagement
 
+@MainActor
 enum LaunchAtLogin {
     static func set(enabled: Bool) {
+        guard AppRuntime.current.allowsLaunchAtLogin else { return }
         do {
             if enabled {
                 if SMAppService.mainApp.status != .enabled {
@@ -19,6 +21,7 @@ enum LaunchAtLogin {
     }
 
     static var isEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
+        guard AppRuntime.current.allowsLaunchAtLogin else { return false }
+        return SMAppService.mainApp.status == .enabled
     }
 }

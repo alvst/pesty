@@ -29,6 +29,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let deleteAfterSearchClearCooldown: TimeInterval = 0.6
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let runtime = AppRuntime.current
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
 
@@ -44,22 +45,28 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self, selector: #selector(screenParametersChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
 
-        monitor.start()
+        if runtime.allowsClipboardMonitoring { monitor.start() }
 
-        HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
-        HotKeyCenter.shared.start()
+        if runtime.allowsGlobalHotKey {
+            HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
+            HotKeyCenter.shared.start()
+        }
 
         setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
-        if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
+        if runtime.allowsLaunchAtLogin, Settings.shared.launchAtLogin {
+            LaunchAtLogin.set(enabled: true)
+        }
 
         #if MAS
-        // CKSyncEngine handles the push payloads itself; the app only registers.
-        NSApplication.shared.registerForRemoteNotifications()
-        if Settings.shared.cloudKitSync { CloudSyncService.shared.start() }
+        if runtime.allowsCloudSync {
+            // CKSyncEngine handles the push payloads itself; the app only registers.
+            NSApplication.shared.registerForRemoteNotifications()
+            if Settings.shared.cloudKitSync { CloudSyncService.shared.start() }
+        }
         #endif
 
-        if CommandLine.arguments.contains("--demo") {
+        if runtime.isDemo {
             store.seedDemo()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.showBar()
@@ -224,6 +231,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func toggleICloudSync() {
+        guard AppRuntime.current.allowsCloudSync else { return }
         let enabling = !Settings.shared.iCloudSync
         if enabling && !ClipboardStore.shared.iCloudAvailable {
             let alert = NSAlert()
@@ -241,6 +249,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         task.arguments = ["-n", path]
+        if AppRuntime.current.isDemo {
+            task.arguments?.append("--args")
+            task.arguments?.append(contentsOf: CommandLine.arguments.dropFirst())
+        }
         try? task.run()
         NSApp.terminate(nil)
     }
@@ -258,7 +270,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func systemDidWake() {
         barController?.forceHide()
         stopKeyMonitor()
-        HotKeyCenter.shared.reload()
+        if AppRuntime.current.allowsGlobalHotKey { HotKeyCenter.shared.reload() }
     }
 
     /// Docking, undocking, and resolution changes can leave the bar sized for a screen

@@ -14,6 +14,7 @@ final class HotKeyCenter {
     private init() {}
 
     func start() {
+        guard AppRuntime.current.allowsGlobalHotKey else { return }
         installHandlerIfNeeded()
         reload()
     }
@@ -37,6 +38,10 @@ final class HotKeyCenter {
     /// during login or a display change, so retry a few times before giving up, and put
     /// the old registration back if the new one will not take.
     func reload() {
+        guard AppRuntime.current.allowsGlobalHotKey else {
+            unregister()
+            return
+        }
         let previous = hotKeyRef
         unregister()
 

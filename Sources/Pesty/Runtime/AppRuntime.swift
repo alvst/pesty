@@ -1,9 +1,10 @@
 import Foundation
+import Carbon.HIToolbox
 
 struct AppLaunchIntent: Equatable {
     enum Mode: Equatable {
         case standard
-        case demo(featureLabRoot: String?)
+        case demo(featureLabRoot: String?, allowsClipboardMonitoring: Bool)
     }
 
     let mode: Mode
@@ -19,7 +20,9 @@ struct AppLaunchIntent: Equatable {
             guard !path.isEmpty, NSString(string: path).isAbsolutePath else { return nil }
             return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
         }
-        return AppLaunchIntent(mode: .demo(featureLabRoot: safeRoot))
+        return AppLaunchIntent(mode: .demo(
+            featureLabRoot: safeRoot,
+            allowsClipboardMonitoring: arguments.contains("--feature-lab-monitor")))
     }
 
     private static func optionValue(named name: String, in arguments: [String]) -> String? {
@@ -114,7 +117,9 @@ struct AppRuntimeConfiguration {
         temporaryDirectory: URL = FileManager.default.temporaryDirectory,
         uniqueProfileID: @autoclosure () -> String = UUID().uuidString
     ) -> AppRuntimeConfiguration {
-        guard case .demo(let requestedRoot) = intent.mode else { return .production }
+        guard case .demo(let requestedRoot, let allowsClipboardMonitoring) = intent.mode else {
+            return .production
+        }
 
         let profileRoot: URL
         if let requestedRoot {
@@ -131,14 +136,16 @@ struct AppRuntimeConfiguration {
             "launchAtLogin": false,
             "iCloudSync": false,
             "cloudKitSync": false,
-            "onboarded": true
+            "onboarded": true,
+            "hotkeyKeyCode": kVK_ANSI_V,
+            "hotkeyModifiers": cmdKey | shiftKey | controlKey
         ])
         return AppRuntimeConfiguration(
             isDemo: true,
             settingsDefaults: defaults,
             storageBaseURL: storageBase,
-            allowsClipboardMonitoring: false,
-            allowsGlobalHotKey: false,
+            allowsClipboardMonitoring: allowsClipboardMonitoring,
+            allowsGlobalHotKey: true,
             allowsCloudSync: false,
             allowsLaunchAtLogin: false)
     }
