@@ -91,6 +91,106 @@ final class InMemorySettingsDefaults: SettingsDefaultsStore {
     }
 }
 
+/// A preferences store whose entire domain lives inside one explicit feature-lab root.
+/// Registered defaults remain fallback values, matching `UserDefaults` semantics, while
+/// values selected in Settings are written atomically for the next launch of that lab.
+@MainActor
+final class FeatureLabSettingsDefaults: SettingsDefaultsStore {
+    private let fileURL: URL
+    private let fileManager: FileManager
+    private var values: [String: Any]
+    private var registeredDefaults: [String: Any] = [:]
+
+    init(fileURL: URL, fileManager: FileManager = .default) {
+        self.fileURL = fileURL
+        self.fileManager = fileManager
+        values = Self.loadValues(from: fileURL)
+    }
+
+    func register(defaults registrationDictionary: [String: Any]) {
+        for (key, value) in registrationDictionary where registeredDefaults[key] == nil {
+            registeredDefaults[key] = value
+        }
+    }
+
+    func set(_ value: Any?, forKey defaultName: String) {
+        if let value {
+            values[defaultName] = value
+        } else {
+            values.removeValue(forKey: defaultName)
+        }
+        persist()
+    }
+
+    /// Reasserts non-negotiable lab protections without disturbing feature preferences.
+    func enforce(_ enforcedValues: [String: Any]) {
+        for (key, value) in enforcedValues {
+            values[key] = value
+        }
+        persist()
+    }
+
+    func object(forKey defaultName: String) -> Any? { value(forKey: defaultName) }
+
+    func integer(forKey defaultName: String) -> Int {
+        (value(forKey: defaultName) as? NSNumber)?.intValue ?? 0
+    }
+
+    func bool(forKey defaultName: String) -> Bool {
+        (value(forKey: defaultName) as? NSNumber)?.boolValue ?? false
+    }
+
+    func double(forKey defaultName: String) -> Double {
+        (value(forKey: defaultName) as? NSNumber)?.doubleValue ?? 0
+    }
+
+    func string(forKey defaultName: String) -> String? {
+        value(forKey: defaultName) as? String
+    }
+
+    func stringArray(forKey defaultName: String) -> [String]? {
+        value(forKey: defaultName) as? [String]
+    }
+
+    func dictionary(forKey defaultName: String) -> [String: Any]? {
+        value(forKey: defaultName) as? [String: Any]
+    }
+
+    private func value(forKey key: String) -> Any? {
+        values[key] ?? registeredDefaults[key]
+    }
+
+    private func persist() {
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: values,
+            format: .binary,
+            options: 0)
+        else { return }
+
+        let parentDirectory = fileURL.deletingLastPathComponent()
+        do {
+            try fileManager.createDirectory(
+                at: parentDirectory,
+                withIntermediateDirectories: true)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            // An unwritable lab root must not redirect preferences to a live domain.
+            // The in-process values remain usable and safety enforcement remains active.
+        }
+    }
+
+    private static func loadValues(from fileURL: URL) -> [String: Any] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let propertyList = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil),
+              let values = propertyList as? [String: Any]
+        else { return [:] }
+        return values
+    }
+}
+
 @MainActor
 struct AppRuntimeConfiguration {
     let isDemo: Bool
@@ -132,14 +232,25 @@ struct AppRuntimeConfiguration {
         }
         let storageBase = profileRoot
             .appendingPathComponent("Library/Application Support/Pesty", isDirectory: true)
-        let defaults = InMemorySettingsDefaults(seed: [
+        let enforcedSafetyValues: [String: Any] = [
             "launchAtLogin": false,
             "iCloudSync": false,
             "cloudKitSync": false,
             "onboarded": true,
             "hotkeyKeyCode": kVK_ANSI_V,
             "hotkeyModifiers": cmdKey | shiftKey | controlKey
-        ])
+        ]
+        let defaults: any SettingsDefaultsStore
+        if requestedRoot != nil {
+            let persistentDefaults = FeatureLabSettingsDefaults(
+                fileURL: profileRoot
+                    .appendingPathComponent("Library/Preferences", isDirectory: true)
+                    .appendingPathComponent("FeatureLabSettings.plist"))
+            persistentDefaults.enforce(enforcedSafetyValues)
+            defaults = persistentDefaults
+        } else {
+            defaults = InMemorySettingsDefaults(seed: enforcedSafetyValues)
+        }
         return AppRuntimeConfiguration(
             isDemo: true,
             settingsDefaults: defaults,
