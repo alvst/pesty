@@ -9,7 +9,7 @@ extension ClipboardStore {
                      sourceBundleID: "com.apple.Notes", sourceAppName: "Notes",
                      createdAt: now.addingTimeInterval(-12)),
             ClipItem(type: .link,
-                     text: "https://github.com/momenbasel/pesty",
+                     text: "https://github.com/alvst/pesty",
                      sourceBundleID: "com.apple.Safari", sourceAppName: "Safari",
                      createdAt: now.addingTimeInterval(-90)),
             ClipItem(type: .text,

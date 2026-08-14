@@ -1,0 +1,521 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		047B736AA62E20A0A9702C45 /* BoardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D24BE4E5B5C47893A3A1D57 /* BoardsView.swift */; };
+		103861ED72019A701814009B /* CompanionSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E718B0FC32C19F23818D11E4 /* CompanionSettingsView.swift */; };
+		133824BE3DDB10D16562801E /* PestyLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 907433182EF9C7B49F88AC9E /* PestyLibraryTests.swift */; };
+		13D98759C2AD6E40FF1A9C01 /* PestyLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77E33E3B7D291C8C0974B4B0 /* PestyLibrary.swift */; };
+		2172937D54729A67CB31F19F /* ClipKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB475510E4B4020C68A5DE3E /* ClipKind.swift */; };
+		2680DFDDD7F6595948E5C1BC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1650E3A260B19A8716F88D60 /* Assets.xcassets */; };
+		433D42B45D84563570C8D00B /* LibrarySyncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D95F70AAEE440B10D056214F /* LibrarySyncing.swift */; };
+		49F9DA4CDBCEF5050086D8A3 /* PestyClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3668CF5CD1A694F35E33B4 /* PestyClip.swift */; };
+		4EB099BC02C70ABAA4C7D4FA /* LocalLibraryPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505BE2DA560A90B505607145 /* LocalLibraryPersistence.swift */; };
+		5696992C5BFC3A5DB2A546E4 /* ClipDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C4A38F9C67F85D0C08B7DE /* ClipDetailView.swift */; };
+		6067442D28B0C101C77EAC8C /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02B70E10BD4D2C098C3D2D2A /* LibraryStore.swift */; };
+		656D975AD1FB84D4177AB5C0 /* PestyAlvieApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FAC6B477E246B4103A4BC2 /* PestyAlvieApp.swift */; };
+		7F106B3F9498827F14B16C89 /* MacPestyStoreImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A580A55CDABFC5803836A241 /* MacPestyStoreImporter.swift */; };
+		858C36C1ECEF3AD180761371 /* ClipboardWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28F66E6017390DDFDAB256BF /* ClipboardWriter.swift */; };
+		BD71D83025E85D9CC79BD816 /* PestyBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0064D10DB3FB26EEFA3D5D58 /* PestyBoard.swift */; };
+		D2232FEA9E55FDD59D3C68ED /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30C68B3622CA2FE5436A432 /* LibraryView.swift */; };
+		E0BE79D7FF4F8F5849595B8A /* NewClipSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBEDF0CD12671CD23313265 /* NewClipSheet.swift */; };
+		FD5F6156298B7393F65126F4 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096D293DE67A7F36A0247FAD /* RootTabView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F35A6C50135FC003BD1175E8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 51ED394A27B65664F435D73F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8160736EF5C38BB87B9D1904;
+			remoteInfo = "Pesty-Alvie";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0064D10DB3FB26EEFA3D5D58 /* PestyBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyBoard.swift; sourceTree = "<group>"; };
+		02B70E10BD4D2C098C3D2D2A /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		096D293DE67A7F36A0247FAD /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		1650E3A260B19A8716F88D60 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		28F66E6017390DDFDAB256BF /* ClipboardWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardWriter.swift; sourceTree = "<group>"; };
+		4D24BE4E5B5C47893A3A1D57 /* BoardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardsView.swift; sourceTree = "<group>"; };
+		505BE2DA560A90B505607145 /* LocalLibraryPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLibraryPersistence.swift; sourceTree = "<group>"; };
+		580FE41A03F8A8F1E4FCC9EB /* Pesty-Alvie.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Pesty-Alvie.entitlements"; sourceTree = "<group>"; };
+		5CBEDF0CD12671CD23313265 /* NewClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewClipSheet.swift; sourceTree = "<group>"; };
+		75149CE53884A3C8277AF2B5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		77E33E3B7D291C8C0974B4B0 /* PestyLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyLibrary.swift; sourceTree = "<group>"; };
+		7DFABE8F13CB8A382671FC74 /* Pesty-Alvie.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pesty-Alvie.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		89FAC6B477E246B4103A4BC2 /* PestyAlvieApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyAlvieApp.swift; sourceTree = "<group>"; };
+		8A3668CF5CD1A694F35E33B4 /* PestyClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyClip.swift; sourceTree = "<group>"; };
+		907433182EF9C7B49F88AC9E /* PestyLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyLibraryTests.swift; sourceTree = "<group>"; };
+		A580A55CDABFC5803836A241 /* MacPestyStoreImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPestyStoreImporter.swift; sourceTree = "<group>"; };
+		C7C4A38F9C67F85D0C08B7DE /* ClipDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDetailView.swift; sourceTree = "<group>"; };
+		C8DA3F166C54640BABB54762 /* Pesty-AlvieTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pesty-AlvieTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D95F70AAEE440B10D056214F /* LibrarySyncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySyncing.swift; sourceTree = "<group>"; };
+		E30C68B3622CA2FE5436A432 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		E718B0FC32C19F23818D11E4 /* CompanionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSettingsView.swift; sourceTree = "<group>"; };
+		EB475510E4B4020C68A5DE3E /* ClipKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipKind.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		099E4A4303355A2759EB517B /* App */ = {
+			isa = PBXGroup;
+			children = (
+				89FAC6B477E246B4103A4BC2 /* PestyAlvieApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		0B37300F85DBD33B8C327041 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1650E3A260B19A8716F88D60 /* Assets.xcassets */,
+				75149CE53884A3C8277AF2B5 /* Info.plist */,
+				580FE41A03F8A8F1E4FCC9EB /* Pesty-Alvie.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		3BC72FFCC19DFFD903485B0A /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				907433182EF9C7B49F88AC9E /* PestyLibraryTests.swift */,
+			);
+			name = Tests;
+			path = "Pesty-Alvie/Tests";
+			sourceTree = "<group>";
+		};
+		598A95973EB0FFF67F139F8A /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				EB475510E4B4020C68A5DE3E /* ClipKind.swift */,
+				A580A55CDABFC5803836A241 /* MacPestyStoreImporter.swift */,
+				0064D10DB3FB26EEFA3D5D58 /* PestyBoard.swift */,
+				8A3668CF5CD1A694F35E33B4 /* PestyClip.swift */,
+				77E33E3B7D291C8C0974B4B0 /* PestyLibrary.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		5B54D1F77EC3D95FF9894179 /* Store */ = {
+			isa = PBXGroup;
+			children = (
+				28F66E6017390DDFDAB256BF /* ClipboardWriter.swift */,
+				02B70E10BD4D2C098C3D2D2A /* LibraryStore.swift */,
+				505BE2DA560A90B505607145 /* LocalLibraryPersistence.swift */,
+			);
+			path = Store;
+			sourceTree = "<group>";
+		};
+		8EBA94996C71803AD5A620CA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7DFABE8F13CB8A382671FC74 /* Pesty-Alvie.app */,
+				C8DA3F166C54640BABB54762 /* Pesty-AlvieTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9BD2F5C313044FD1154473C8 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				D95F70AAEE440B10D056214F /* LibrarySyncing.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
+		AF8B70CEA42DD1D49FF90AD4 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				4D24BE4E5B5C47893A3A1D57 /* BoardsView.swift */,
+				C7C4A38F9C67F85D0C08B7DE /* ClipDetailView.swift */,
+				E718B0FC32C19F23818D11E4 /* CompanionSettingsView.swift */,
+				E30C68B3622CA2FE5436A432 /* LibraryView.swift */,
+				5CBEDF0CD12671CD23313265 /* NewClipSheet.swift */,
+				096D293DE67A7F36A0247FAD /* RootTabView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		E1368CB2ECB6B731EF53EB16 = {
+			isa = PBXGroup;
+			children = (
+				F3FA90F958EB7C8B06E384A9 /* Pesty-Alvie */,
+				3BC72FFCC19DFFD903485B0A /* Tests */,
+				8EBA94996C71803AD5A620CA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F3FA90F958EB7C8B06E384A9 /* Pesty-Alvie */ = {
+			isa = PBXGroup;
+			children = (
+				099E4A4303355A2759EB517B /* App */,
+				598A95973EB0FFF67F139F8A /* Domain */,
+				0B37300F85DBD33B8C327041 /* Resources */,
+				5B54D1F77EC3D95FF9894179 /* Store */,
+				9BD2F5C313044FD1154473C8 /* Sync */,
+				AF8B70CEA42DD1D49FF90AD4 /* UI */,
+			);
+			path = "Pesty-Alvie";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8160736EF5C38BB87B9D1904 /* Pesty-Alvie */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4BB243A3B14A80A588A52C8A /* Build configuration list for PBXNativeTarget "Pesty-Alvie" */;
+			buildPhases = (
+				B4CE1F21530718BB77E0B3E0 /* Sources */,
+				A959AE277E2190287E8ABFE2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Pesty-Alvie";
+			packageProductDependencies = (
+			);
+			productName = "Pesty-Alvie";
+			productReference = 7DFABE8F13CB8A382671FC74 /* Pesty-Alvie.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A43F12528006AB03B3C8CF69 /* Pesty-AlvieTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 694AF159F9D02EF2391584FA /* Build configuration list for PBXNativeTarget "Pesty-AlvieTests" */;
+			buildPhases = (
+				639799DC1476999C1E48BCD7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AF981075C4BAB12342221587 /* PBXTargetDependency */,
+			);
+			name = "Pesty-AlvieTests";
+			packageProductDependencies = (
+			);
+			productName = "Pesty-AlvieTests";
+			productReference = C8DA3F166C54640BABB54762 /* Pesty-AlvieTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		51ED394A27B65664F435D73F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 60C89402B97B68779AC98206 /* Build configuration list for PBXProject "Pesty-Alvie" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E1368CB2ECB6B731EF53EB16;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8EBA94996C71803AD5A620CA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8160736EF5C38BB87B9D1904 /* Pesty-Alvie */,
+				A43F12528006AB03B3C8CF69 /* Pesty-AlvieTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A959AE277E2190287E8ABFE2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2680DFDDD7F6595948E5C1BC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		639799DC1476999C1E48BCD7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				133824BE3DDB10D16562801E /* PestyLibraryTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4CE1F21530718BB77E0B3E0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				047B736AA62E20A0A9702C45 /* BoardsView.swift in Sources */,
+				5696992C5BFC3A5DB2A546E4 /* ClipDetailView.swift in Sources */,
+				2172937D54729A67CB31F19F /* ClipKind.swift in Sources */,
+				858C36C1ECEF3AD180761371 /* ClipboardWriter.swift in Sources */,
+				103861ED72019A701814009B /* CompanionSettingsView.swift in Sources */,
+				6067442D28B0C101C77EAC8C /* LibraryStore.swift in Sources */,
+				433D42B45D84563570C8D00B /* LibrarySyncing.swift in Sources */,
+				D2232FEA9E55FDD59D3C68ED /* LibraryView.swift in Sources */,
+				4EB099BC02C70ABAA4C7D4FA /* LocalLibraryPersistence.swift in Sources */,
+				7F106B3F9498827F14B16C89 /* MacPestyStoreImporter.swift in Sources */,
+				E0BE79D7FF4F8F5849595B8A /* NewClipSheet.swift in Sources */,
+				656D975AD1FB84D4177AB5C0 /* PestyAlvieApp.swift in Sources */,
+				BD71D83025E85D9CC79BD816 /* PestyBoard.swift in Sources */,
+				49F9DA4CDBCEF5050086D8A3 /* PestyClip.swift in Sources */,
+				13D98759C2AD6E40FF1A9C01 /* PestyLibrary.swift in Sources */,
+				FD5F6156298B7393F65126F4 /* RootTabView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AF981075C4BAB12342221587 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8160736EF5C38BB87B9D1904 /* Pesty-Alvie */;
+			targetProxy = F35A6C50135FC003BD1175E8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		05FDA202F4906A9E74AB0460 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.alvst.pesty-alvie.companion.tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie";
+			};
+			name = Release;
+		};
+		4312D6610A96A5EF3DABDF85 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Pesty-Alvie/Resources/Pesty-Alvie.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Pesty-Alvie/Resources/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.alvst.pesty-alvie.companion";
+				PRODUCT_MODULE_NAME = Pesty;
+				PRODUCT_NAME = "Pesty-Alvie";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		76694187820B9FE345CC9A9E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8FEE13903558869368E67F59 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Pesty-Alvie/Resources/Pesty-Alvie.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Pesty-Alvie/Resources/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.alvst.pesty-alvie.companion";
+				PRODUCT_MODULE_NAME = Pesty;
+				PRODUCT_NAME = "Pesty-Alvie";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C4938F389A0E16A541629A8C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.alvst.pesty-alvie.companion.tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie";
+			};
+			name = Debug;
+		};
+		FEE9C852A16511F7D5AF48C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4BB243A3B14A80A588A52C8A /* Build configuration list for PBXNativeTarget "Pesty-Alvie" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8FEE13903558869368E67F59 /* Debug */,
+				4312D6610A96A5EF3DABDF85 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		60C89402B97B68779AC98206 /* Build configuration list for PBXProject "Pesty-Alvie" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				76694187820B9FE345CC9A9E /* Debug */,
+				FEE9C852A16511F7D5AF48C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		694AF159F9D02EF2391584FA /* Build configuration list for PBXNativeTarget "Pesty-AlvieTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C4938F389A0E16A541629A8C /* Debug */,
+				05FDA202F4906A9E74AB0460 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 51ED394A27B65664F435D73F /* Project object */;
+}

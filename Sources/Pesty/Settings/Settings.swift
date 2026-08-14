@@ -11,14 +11,38 @@ enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .nativeQuickLook: "Native Quick Look"
-        case .inlinePesty: "Inline Pesty preview"
+        case .inlinePesty: "Inline Pesty-Alvie preview"
         }
     }
 
     var detail: String {
         switch self {
         case .nativeQuickLook: "Open a macOS Quick Look panel with Space."
-        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty."
+        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty-Alvie."
+        }
+    }
+}
+
+enum PreviewOpenTarget: CaseIterable, Identifiable {
+    case text
+    case image
+    case link
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .text: "Text & rich text"
+        case .image: "Images"
+        case .link: "Links"
+        }
+    }
+
+    var defaultApplicationBundleID: String {
+        switch self {
+        case .text: "com.apple.TextEdit"
+        case .image: "com.apple.Preview"
+        case .link: "com.apple.Safari"
         }
     }
 }
@@ -162,6 +186,7 @@ final class Settings {
         static let hotkeyModifiers = "hotkeyModifiers"
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
         static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
+        static let pasteStacksEnabled = "pasteStacksEnabled"
         static let stackPasteInReverse = "stackPasteInReverse"
         static let keepPastedStackItems = "keepPastedStackItems"
         static let pasteStacksFollowHistory = "pasteStacksFollowHistory"
@@ -176,6 +201,9 @@ final class Settings {
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
+        static let previewImageApplicationBundleID = "previewImageApplicationBundleID"
+        static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -228,6 +256,15 @@ final class Settings {
             d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
     }
 
+    var pasteStacksEnabled: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(pasteStacksEnabled, forKey: Keys.pasteStacksEnabled)
+            HotKeyCenter.shared.reload()
+            AppController.shared.updatePasteStackAvailability()
+        }
+    }
+
     var stackPasteInReverse: Bool {
         didSet { guard isLoaded else { return }; d.set(stackPasteInReverse, forKey: Keys.stackPasteInReverse) }
     }
@@ -277,9 +314,11 @@ final class Settings {
 
     var barHeight: Double {
         didSet {
-            guard isLoaded else { return }
-            let clamped = min(720, max(240, barHeight))
+            // Keep the stored range in step with the resize handle and the
+            // Settings slider. A smaller bar cannot fit the shared card UI.
+            let clamped = min(720, max(300, barHeight))
             if clamped != barHeight { barHeight = clamped; return }
+            guard isLoaded else { return }
             d.set(barHeight, forKey: Keys.barHeight)
             AppController.shared.resizeVisibleBar(to: barHeight)
         }
@@ -293,8 +332,20 @@ final class Settings {
         didSet {
             guard isLoaded else { return }
             d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle)
-            if clipPreviewStyle != .inlinePesty { ClipboardStore.shared.inlinePreviewVisible = false }
+            if clipPreviewStyle != .inlinePesty { AppController.shared.hideInlinePreview() }
         }
+    }
+
+    var previewTextApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewTextApplicationBundleID, forKey: Keys.previewTextApplicationBundleID) }
+    }
+
+    var previewImageApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewImageApplicationBundleID, forKey: Keys.previewImageApplicationBundleID) }
+    }
+
+    var previewLinkApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewLinkApplicationBundleID, forKey: Keys.previewLinkApplicationBundleID) }
     }
 
     var showMenuBarIcon: Bool {
@@ -319,9 +370,12 @@ final class Settings {
             Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
             Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
-            Keys.hotkeyModifiers: cmdKey | shiftKey,
+            // Keep the personal build's global shortcuts distinct so upstream
+            // Pesty can run at the same time without Carbon registration clashes.
+            Keys.hotkeyModifiers: cmdKey | controlKey,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
-            Keys.sequenceHotkeyModifiers: cmdKey | optionKey,
+            Keys.sequenceHotkeyModifiers: cmdKey | controlKey | optionKey,
+            Keys.pasteStacksEnabled: true,
             Keys.stackPasteInReverse: false,
             Keys.keepPastedStackItems: true,
             Keys.pasteStacksFollowHistory: false,
@@ -336,6 +390,9 @@ final class Settings {
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
+            Keys.previewImageApplicationBundleID: PreviewOpenTarget.image.defaultApplicationBundleID,
+            Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false
@@ -347,6 +404,7 @@ final class Settings {
         hotkeyModifiers = d.integer(forKey: Keys.hotkeyModifiers)
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
         sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
+        pasteStacksEnabled = d.bool(forKey: Keys.pasteStacksEnabled)
         stackPasteInReverse = d.bool(forKey: Keys.stackPasteInReverse)
         keepPastedStackItems = d.bool(forKey: Keys.keepPastedStackItems)
         pasteStacksFollowHistory = d.bool(forKey: Keys.pasteStacksFollowHistory)
@@ -359,9 +417,20 @@ final class Settings {
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
-        barHeight = d.double(forKey: Keys.barHeight)
+        let storedBarHeight = d.double(forKey: Keys.barHeight)
+        let normalizedBarHeight = min(720, max(300, storedBarHeight))
+        barHeight = normalizedBarHeight
+        if normalizedBarHeight != storedBarHeight {
+            d.set(normalizedBarHeight, forKey: Keys.barHeight)
+        }
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)
+            ?? PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = d.string(forKey: Keys.previewImageApplicationBundleID)
+            ?? PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = d.string(forKey: Keys.previewLinkApplicationBundleID)
+            ?? PreviewOpenTarget.link.defaultApplicationBundleID
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
@@ -378,6 +447,29 @@ final class Settings {
 
     var quickPasteModifierDisplay: String {
         ShortcutModifier(carbonValue: quickPasteModifier)?.symbol ?? "⌘"
+    }
+
+    func previewApplicationBundleID(for target: PreviewOpenTarget) -> String {
+        switch target {
+        case .text: previewTextApplicationBundleID
+        case .image: previewImageApplicationBundleID
+        case .link: previewLinkApplicationBundleID
+        }
+    }
+
+    func setPreviewApplicationBundleID(_ bundleID: String, for target: PreviewOpenTarget) {
+        guard !bundleID.isEmpty else { return }
+        switch target {
+        case .text: previewTextApplicationBundleID = bundleID
+        case .image: previewImageApplicationBundleID = bundleID
+        case .link: previewLinkApplicationBundleID = bundleID
+        }
+    }
+
+    func restorePreviewApplicationDefaults() {
+        previewTextApplicationBundleID = PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = PreviewOpenTarget.link.defaultApplicationBundleID
     }
 
     func isIgnoringSourceApp(_ bundleID: String?) -> Bool {

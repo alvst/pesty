@@ -61,7 +61,7 @@ jobs:
         id: sum
         run: |
           set -euo pipefail
-          DMG="packaging/Pesty-${{ steps.ver.outputs.version }}.dmg"
+          DMG="packaging/Pesty-Alvie-${{ steps.ver.outputs.version }}.dmg"
           echo "sha256=$(shasum -a 256 "$DMG" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
 
@@ -72,9 +72,9 @@ jobs:
           set -euo pipefail
           gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.sum.outputs.dmg }}" \
-            --title "Pesty ${{ steps.ver.outputs.version }}" \
-            --notes "Pesty ${{ steps.ver.outputs.version }}
+            --title "Pesty-Alvie ${{ steps.ver.outputs.version }}" \
+            --notes "Pesty-Alvie ${{ steps.ver.outputs.version }}
 
           SHA-256: \`${{ steps.sum.outputs.sha256 }}\`
 
-          Signed with Developer ID and notarized by Apple. Install via Homebrew (\`brew install --cask momenbasel/pesty/pesty\`) or download the DMG below."
+          Signed with Developer ID and notarized by Apple. Download the DMG below."

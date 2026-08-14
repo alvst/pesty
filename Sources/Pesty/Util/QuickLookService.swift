@@ -8,11 +8,15 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     private var previewItems: [PreviewItem] = []
     private var startIndexByClipID: [UUID: Int] = [:]
     private let temporaryDirectory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("Pesty-QuickLook", isDirectory: true)
+        .appendingPathComponent(AppIdentity.quickLookDirectoryName, isDirectory: true)
 
     private override init() {}
 
     var isVisible: Bool { QLPreviewPanel.shared()?.isVisible ?? false }
+
+    func dismiss() {
+        QLPreviewPanel.shared()?.orderOut(nil)
+    }
 
     func toggle(items: [ClipItem], selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared() else { return }

@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 enum AppIconProvider {
-    private static let pestyBundleID = "com.greycorelabs.pesty"
+    private static let pestyBundleID = AppIdentity.bundleIdentifier
     private static var cache: [String: NSImage] = [:]
 
     static func icon(forBundleID bundleID: String?) -> NSImage {
@@ -22,7 +22,7 @@ enum AppIconProvider {
         // `NSApp.applicationIconImage` is the generic app-dashed symbol when Pesty
         // is launched with `swift run`. Prefer the bundled icon so copied clips
         // identify Pesty correctly in both the packaged app and development builds.
-        if let url = Bundle.main.url(forResource: "Pesty", withExtension: "icns"),
+        if let url = Bundle.main.url(forResource: AppIdentity.displayName, withExtension: "icns"),
            let icon = NSImage(contentsOf: url) {
             return icon
         }
@@ -33,7 +33,7 @@ enum AppIconProvider {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let developmentIcon = projectRoot.appending(path: "packaging/Pesty.icns")
+        let developmentIcon = projectRoot.appending(path: "packaging/Pesty-Alvie.icns")
         if let icon = NSImage(contentsOf: developmentIcon) {
             return icon
         }

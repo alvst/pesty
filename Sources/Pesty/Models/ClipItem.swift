@@ -44,6 +44,24 @@ struct ClipItem: Identifiable, Codable, Equatable {
 
     var charCount: Int { text?.count ?? 0 }
 
+    /// The lossless text representation used by the explicit “Paste as Plain
+    /// Text” action. Images intentionally do not expose one: inventing a
+    /// description for an image would be surprising and lossy.
+    var plainText: String? {
+        switch type {
+        case .image:
+            return nil
+        case .color:
+            return colorHex
+        case .file:
+            if let text, !text.isEmpty { return text }
+            let paths = fileURLs.map { URL(string: $0)?.path ?? $0 }
+            return paths.isEmpty ? nil : paths.joined(separator: "\n")
+        case .text, .richText, .link:
+            return text
+        }
+    }
+
     var displayTitle: String {
         if let t = customTitle, !t.isEmpty { return t }
         switch type {

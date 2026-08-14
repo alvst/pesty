@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 mkdir -p packaging
 swift scripts/IconGen.swift packaging/icon_1024.png
 
-ICONSET="packaging/Pesty.iconset"
+ICONSET="packaging/Pesty-Alvie.iconset"
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET"
 
@@ -21,5 +21,5 @@ gen 512  icon_256x256@2x.png
 gen 512  icon_512x512.png
 gen 1024 icon_512x512@2x.png
 
-iconutil -c icns "$ICONSET" -o packaging/Pesty.icns
-echo "wrote packaging/Pesty.icns"
+iconutil -c icns "$ICONSET" -o packaging/Pesty-Alvie.icns
+echo "wrote packaging/Pesty-Alvie.icns"

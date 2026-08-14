@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pesty",
+    name: "Pesty-Alvie",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Pesty", targets: ["Pesty"])
+        .executable(name: "Pesty-Alvie", targets: ["Pesty"])
     ],
     targets: [
         .executableTarget(
@@ -14,6 +14,11 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ]
+        ),
+        .testTarget(
+            name: "PestyTests",
+            dependencies: ["Pesty"],
+            path: "Tests/PestyTests"
         )
     ],
     swiftLanguageModes: [.v5]

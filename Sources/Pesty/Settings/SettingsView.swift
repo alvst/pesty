@@ -39,7 +39,7 @@ struct SettingsView: View {
                     .resizable()
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                Text("Pesty")
+                Text("Pesty-Alvie")
                     .font(.system(size: 16, weight: .bold))
             }
             .padding(.bottom, 18)
@@ -57,7 +57,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
             Spacer()
-            Text("Pesty \(Bundle.main.appVersion)")
+            Text("Pesty-Alvie \(Bundle.main.appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }
@@ -88,10 +88,10 @@ private enum SettingsSection: CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .general: "History, behavior, and app preferences"
-        case .privacy: "Keep clips from selected apps out of Pesty"
-        case .shortcuts: "Keyboard controls for Pesty and Paste Stack"
+        case .privacy: "Keep clips from selected apps out of Pesty-Alvie"
+        case .shortcuts: "Keyboard controls for Pesty-Alvie and Paste Stack"
         case .sync: "Keep your clipboard history available on every Mac"
-        case .about: "Pesty for macOS"
+        case .about: "Pesty-Alvie for macOS"
         }
     }
     var symbol: String {
@@ -126,7 +126,7 @@ private struct GeneralSettings: View {
                                     LabeledContent("Number of clips", value: "\(settings.historyLimit) items")
                                         .font(.system(size: 14))
                                 }
-                                Text("Pesty keeps the most recent \(settings.historyLimit) clips.")
+                                Text("Pesty-Alvie keeps the most recent \(settings.historyLimit) clips.")
                                     .font(.caption).foregroundStyle(.secondary)
                             } else {
                                 VStack(alignment: .leading, spacing: 9) {
@@ -175,13 +175,13 @@ private struct GeneralSettings: View {
                             #endif
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
                             Divider()
-                            settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
+                            settingToggle("Hide Pesty-Alvie when clicking outside", isOn: $settings.hideOnClickOutside)
                             Divider()
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
                             Divider()
-                            settingToggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
+                            settingToggle("Show resize handle on the Pesty-Alvie bar", isOn: $settings.showBarResizeHandle)
                             Divider()
-                            settingToggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
+                            settingToggle("Show Pesty-Alvie in the menu bar", isOn: $settings.showMenuBarIcon)
                             Divider()
                             VStack(alignment: .leading, spacing: 8) {
                                 LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
@@ -216,6 +216,33 @@ private struct GeneralSettings: View {
                     }
                 }
 
+                settingsGroup("Open Clips With") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            previewApplicationRow(for: .text)
+                            Divider()
+                            previewApplicationRow(for: .image)
+                            Divider()
+                            previewApplicationRow(for: .link)
+                            Divider()
+                            HStack {
+                                Text("Restore Apple defaults")
+                                    .font(.system(size: 14))
+                                Spacer()
+                                Button("Restore") {
+                                    settings.restorePreviewApplicationDefaults()
+                                }
+                            }
+                            .padding(.vertical, 10)
+                        }
+                        Text("These set the one-click app in Inline Pesty-Alvie previews. Use its arrow to choose a different app just once.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.bottom, 8)
+                    }
+                }
+
                 #if !MAS
                 settingsGroup("Accessibility") {
                     settingCard {
@@ -239,7 +266,7 @@ private struct GeneralSettings: View {
                                     openAccessibilityPane()
                                 }
                             } else if requestedGrant {
-                                Button("Restart Pesty") { AppController.restart() }
+                                Button("Restart Pesty-Alvie") { AppController.restart() }
                             }
                         }
                     }
@@ -295,6 +322,53 @@ private struct GeneralSettings: View {
             .padding(.vertical, 10)
     }
 
+    private func previewApplicationRow(for target: PreviewOpenTarget) -> some View {
+        let bundleID = settings.previewApplicationBundleID(for: target)
+        return HStack(spacing: 10) {
+            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(target.title)
+                    .font(.system(size: 14, weight: .medium))
+                Text(applicationName(for: bundleID))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("Change…") {
+                choosePreviewApplication(for: target)
+            }
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func choosePreviewApplication(for target: PreviewOpenTarget) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Default App for \(target.title)"
+        panel.message = "Pesty-Alvie will use this app when opening \(target.title.lowercased()) from an inline preview."
+        panel.prompt = "Choose App"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
+        settings.setPreviewApplicationBundleID(bundleID, for: target)
+    }
+
+    private func applicationName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let bundle = Bundle(url: url) else { return bundleID }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? bundleID
+    }
+
     private func settingsGroup<Content: View>(_ title: String,
                                                @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -323,7 +397,7 @@ private struct PrivacySettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("Excluded Apps") {
                     SettingsSurface {
-                        Text("Pesty will not save anything copied while one of these apps is the source. This is useful for password managers such as 1Password.")
+                        Text("Pesty-Alvie will not save anything copied while one of these apps is the source. This is useful for password managers such as 1Password.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
@@ -332,7 +406,7 @@ private struct PrivacySettings: View {
                         if settings.ignoredSourceAppBundleIDs.isEmpty {
                             ContentUnavailableView("No apps excluded",
                                                    systemImage: "hand.raised",
-                                                   description: Text("Add an app to keep its copied content out of Pesty."))
+                                                   description: Text("Add an app to keep its copied content out of Pesty-Alvie."))
                             .font(.system(size: 12))
                             .padding(.vertical, 14)
                         } else {
@@ -357,7 +431,7 @@ private struct PrivacySettings: View {
                             .toggleStyle(.switch)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Pesty also respects the standard macOS concealed-clipboard marker used by password managers.")
+                        Text("Pesty-Alvie also respects the standard macOS concealed-clipboard marker used by password managers.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 8)
@@ -397,8 +471,8 @@ private struct PrivacySettings: View {
 
     private func chooseApps() {
         let panel = NSOpenPanel()
-        panel.title = "Exclude Apps from Pesty"
-        panel.message = "Pesty will ignore copied content from the apps you choose."
+        panel.title = "Exclude Apps from Pesty-Alvie"
+        panel.message = "Pesty-Alvie will ignore copied content from the apps you choose."
         panel.prompt = "Add Apps"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -427,9 +501,9 @@ private struct ShortcutsSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                SettingsFormGroup("Open Pesty") {
+                SettingsFormGroup("Open Pesty-Alvie") {
                     SettingsSurface {
-                        LabeledContent("Show the Pesty bar") {
+                        LabeledContent("Show the Pesty-Alvie bar") {
                             HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
                                                modifiers: $settings.hotkeyModifiers)
                         }
@@ -440,32 +514,45 @@ private struct ShortcutsSettings: View {
 
                 SettingsFormGroup("Paste Stack") {
                     SettingsSurface {
-                        LabeledContent("Paste next stack item") {
-                            HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
-                                               modifiers: $settings.sequenceHotkeyModifiers)
+                        Toggle("Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
+                            .font(.system(size: 14))
+                            .toggleStyle(.switch)
+                            .padding(.vertical, 10)
+                        if settings.pasteStacksEnabled {
+                            Divider()
+                            LabeledContent("Paste next stack item") {
+                                HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
+                                                   modifiers: $settings.sequenceHotkeyModifiers)
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 9)
+                            Divider()
+                            Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
+                                .font(.system(size: 14))
+                                .toggleStyle(.switch)
+                                .padding(.vertical, 10)
+                            Divider()
+                            Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
+                                .font(.system(size: 14))
+                                .toggleStyle(.switch)
+                                .padding(.vertical, 10)
+                            Divider()
+                            Toggle("Remove saved stacks with clipboard history", isOn: $settings.pasteStacksFollowHistory)
+                                .font(.system(size: 14))
+                                .toggleStyle(.switch)
+                                .padding(.vertical, 10)
+                            Text("Start a Paste Stack, then copy clips in any app to add them automatically. Keep pasted items enabled to re-add completed clips later.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 5)
+                                .padding(.bottom, 8)
+                        } else {
+                            Text("Paste Stack tabs, cards, collection, and its global shortcut are off. Existing stacks are kept and return if you enable the feature again.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 5)
+                                .padding(.bottom, 8)
                         }
-                        .font(.system(size: 14))
-                        .padding(.vertical, 9)
-                        Divider()
-                        Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
-                            .font(.system(size: 14))
-                            .toggleStyle(.switch)
-                            .padding(.vertical, 10)
-                        Divider()
-                        Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
-                            .font(.system(size: 14))
-                            .toggleStyle(.switch)
-                            .padding(.vertical, 10)
-                        Divider()
-                        Toggle("Remove saved stacks with clipboard history", isOn: $settings.pasteStacksFollowHistory)
-                            .font(.system(size: 14))
-                            .toggleStyle(.switch)
-                            .padding(.vertical, 10)
-                        Text("Start a Paste Stack, then copy clips in any app to add them automatically. Keep pasted items enabled to re-add completed clips later.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 5)
-                            .padding(.bottom, 8)
                     }
                 }
 
@@ -588,7 +675,7 @@ private struct AboutView: View {
         VStack(spacing: 12) {
             Image(nsImage: NSApp.applicationIconImage ?? NSImage())
                 .resizable().frame(width: 88, height: 88)
-            Text("Pesty").font(.system(size: 26, weight: .bold))
+            Text("Pesty-Alvie").font(.system(size: 26, weight: .bold))
             Text("Version \(Bundle.main.appVersion)")
                 .font(.subheadline).foregroundStyle(.secondary)
             Text("A free, open-source clipboard manager for macOS.\nInspired by Paste.")
@@ -596,11 +683,11 @@ private struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
             HStack(spacing: 16) {
-                Link("GitHub", destination: URL(string: "https://github.com/momenbasel/pesty")!)
-                Link("Report an Issue", destination: URL(string: "https://github.com/momenbasel/pesty/issues")!)
+                Link("Fork on GitHub", destination: URL(string: "https://github.com/alvst/pesty")!)
+                Link("Report an Issue", destination: URL(string: "https://github.com/alvst/pesty/issues")!)
             }
             .padding(.top, 4)
-            Button("Quit Pesty", role: .destructive) {
+            Button("Quit Pesty-Alvie", role: .destructive) {
                 NSApp.terminate(nil)
             }
             .padding(.top, 8)

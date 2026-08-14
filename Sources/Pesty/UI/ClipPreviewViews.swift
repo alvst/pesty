@@ -81,13 +81,38 @@ struct LinkPreviewContent: View {
 
 struct LinkCardPreview: View {
     let text: String
+    let titleOverride: String?
     private let previews = LinkPreviewStore.shared
+
+    init(text: String, titleOverride: String? = nil) {
+        self.text = text
+        self.titleOverride = titleOverride
+    }
 
     private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
     private var preview: LinkPreview? { previews.preview(for: url) }
     private var host: String { url?.host ?? text }
+    private var title: String {
+        if let titleOverride = titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !titleOverride.isEmpty {
+            return titleOverride
+        }
+        return preview?.title ?? host
+    }
 
     var body: some View {
+        // Rich artwork is useful in a tall bar, but its fixed thumbnail used
+        // to force link cards below the shared strip height in a short bar.
+        // Prefer a compact card when the full layout does not fit.
+        ViewThatFits(in: .vertical) {
+            richPreview
+            compactPreview
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { previews.load(for: url) }
+    }
+
+    private var richPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
             Group {
                 if let image = preview?.image {
@@ -110,31 +135,53 @@ struct LinkCardPreview: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 7) {
-                if let icon = preview?.icon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 16, height: 16)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                } else {
-                    Image(systemName: "link")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 16, height: 16)
-                }
-                Text(preview?.title ?? host)
+                previewIcon(size: 16, cornerRadius: 4)
+                Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
             }
         }
-        .onAppear { previews.load(for: url) }
+    }
+
+    private var compactPreview: some View {
+        HStack(spacing: 9) {
+            previewIcon(size: 36, cornerRadius: 9)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func previewIcon(size: CGFloat, cornerRadius: CGFloat) -> some View {
+        if let icon = preview?.icon {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.accentColor.opacity(0.16))
+                .frame(width: size, height: size)
+                .overlay {
+                    Image(systemName: "link")
+                        .font(.system(size: size * 0.44, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+        }
     }
 }
 
 struct PestyPreviewPopover: View {
     let item: ClipItem
-    let pointer: CGPoint
+    let pointerOffset: CGFloat
 
     private var url: URL? {
         guard item.type == .link else { return nil }
@@ -142,34 +189,20 @@ struct PestyPreviewPopover: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let inset: CGFloat = 24
-            let width = max(280, min(980, proxy.size.width - inset * 2))
-            let targetX = pointer.x > 0 ? pointer.x : proxy.size.width / 2
-            let left = min(max(inset, targetX - width / 2), max(inset, proxy.size.width - width - inset))
-            let cardTop = pointer.y > 0 ? pointer.y : proxy.size.height - 44
-            let height = min(520, max(220, cardTop - 84))
-            let totalHeight = height + 13
-            let arrowOffset = min(width / 2 - 22, max(-width / 2 + 22, targetX - left - width / 2))
-            let centerY = max(20 + totalHeight / 2, cardTop - 12 - totalHeight / 2)
-
-            VStack(spacing: 0) {
-                previewPanel
-                    .frame(height: height)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(.white.opacity(0.22))
-                    }
-                PreviewPointer()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .frame(width: 24, height: 13)
-                    .offset(x: arrowOffset)
-            }
-            .frame(width: width)
-            .shadow(color: .black.opacity(0.38), radius: 24, y: 10)
-            .position(x: left + width / 2, y: centerY)
+        VStack(spacing: 0) {
+            previewPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(.white.opacity(0.22))
+                }
+            PreviewPointer()
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .frame(width: 22, height: 11)
+                .offset(x: pointerOffset)
         }
+        .padding(8)
         .allowsHitTesting(true)
     }
 
@@ -185,10 +218,7 @@ struct PestyPreviewPopover: View {
                 Text(item.type.label)
                     .font(.system(size: 17, weight: .bold))
                 Spacer()
-                if let url {
-                    Button("Open in Safari") { NSWorkspace.shared.open(url) }
-                        .buttonStyle(.bordered)
-                }
+                externalOpenControl
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
@@ -202,8 +232,48 @@ struct PestyPreviewPopover: View {
                     SelectedClipPreviewView(item: item)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .padding(10)
+            .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private var externalOpenControl: some View {
+        if let title = InlinePreviewExternalOpener.primaryActionTitle(for: item) {
+            let recommendations = InlinePreviewExternalOpener.recommendedApplications(for: item)
+            Menu(title) {
+                if !recommendations.isEmpty {
+                    Section("Suggested Apps") {
+                        ForEach(recommendations) { application in
+                            Button {
+                                InlinePreviewExternalOpener.open(item, with: application)
+                            } label: {
+                                Label {
+                                    Text(application.name)
+                                } icon: {
+                                    Image(nsImage: application.icon)
+                                        .resizable()
+                                        .interpolation(.high)
+                                        .frame(width: 16, height: 16)
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                }
+                Button("Choose Another App…") {
+                    InlinePreviewExternalOpener.chooseAnotherAppAndOpen(item)
+                }
+            } primaryAction: {
+                InlinePreviewExternalOpener.openPrimary(item)
+            }
+            // SwiftUI can retain the backing NSMenu when this popover changes
+            // cards. Key it to the clip so image handlers never leak into a
+            // subsequently selected link (and vice versa).
+            .id(item.id)
+            .menuStyle(.borderedButton)
+            .controlSize(.small)
         }
     }
 }

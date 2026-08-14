@@ -3,25 +3,23 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pesty — Support &amp; Help</title>
-<meta name="description" content="Support for Pesty, the free clipboard manager for macOS. Get help, troubleshoot pasting, permissions, iCloud sync, and history, or contact the developer." />
-<meta name="author" content="Moamen Basel" />
+<title>Pesty-Alvie — Support &amp; Help</title>
+<meta name="description" content="Support notes for Pesty-Alvie, Alvie's personal co-installable Pesty build for macOS." />
+<meta name="author" content="Pesty by Moamen Basel; Pesty-Alvie fork by Alvie" />
 <meta name="theme-color" content="#5B6CFF" />
-<link rel="canonical" href="https://www.moamenbasel.com/pesty/support.html" />
 <link rel="icon" type="image/png" href="assets/icon.png" />
 <meta property="og:type" content="website" />
-<meta property="og:site_name" content="Pesty" />
-<meta property="og:title" content="Pesty — Support &amp; Help" />
-<meta property="og:description" content="Get help with Pesty for macOS: pasting, permissions, iCloud sync, history, and how to contact support." />
-<meta property="og:url" content="https://www.moamenbasel.com/pesty/support.html" />
+<meta property="og:site_name" content="Pesty-Alvie" />
+<meta property="og:title" content="Pesty-Alvie — Support &amp; Help" />
+<meta property="og:description" content="Build, permission, storage, and coexistence help for Pesty-Alvie." />
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
-    {"@type":"Question","name":"How do I paste a clip?","acceptedAnswer":{"@type":"Answer","text":"Open Pesty with your shortcut (default Shift-Command-V), use the arrow keys to pick a clip, then press Return. On the Mac App Store version this copies the clip and returns focus to your app, so press Command-V to paste. The open-source build can also paste directly for you if you enable Accessibility."}},
-    {"@type":"Question","name":"Where is my clipboard history stored?","acceptedAnswer":{"@type":"Answer","text":"Entirely on your Mac, inside the app's private container. Pesty has no servers and makes no network calls. Nothing is uploaded unless you turn on optional iCloud Drive sync."}},
-    {"@type":"Question","name":"How do I contact Pesty support?","acceptedAnswer":{"@type":"Answer","text":"Email ceo@greycorelabs.com or open an issue at github.com/momenbasel/pesty/issues. Most questions are answered within two business days."}}
+    {"@type":"Question","name":"How do I paste a clip?","acceptedAnswer":{"@type":"Answer","text":"Open Pesty-Alvie with its default Control-Command-V shortcut, choose a clip, and press Return."}},
+    {"@type":"Question","name":"Where is my clipboard history stored?","acceptedAnswer":{"@type":"Answer","text":"The local build uses ~/Library/Application Support/Pesty-Alvie, separate from upstream Pesty. Optional iCloud Drive sync uses iCloud Drive/Pesty-Alvie."}},
+    {"@type":"Question","name":"How do I report a Pesty-Alvie problem?","acceptedAnswer":{"@type":"Answer","text":"Open an issue at github.com/alvst/pesty/issues. Use the upstream tracker only for behavior reproduced in upstream Pesty."}}
   ]
 }
 </script>
@@ -56,20 +54,19 @@
 <body>
 <div class="wrap">
 <header>
-  <img class="logo" src="assets/icon.png" alt="Pesty clipboard manager app icon" />
-  <h1>Pesty Support</h1>
-  <p class="tag">Help, troubleshooting, and how to reach us.</p>
+  <img class="logo" src="assets/icon.png" alt="Pesty-Alvie clipboard manager app icon" />
+  <h1>Pesty-Alvie Support</h1>
+  <p class="tag">Build, permission, storage, and coexistence notes.</p>
 </header>
 
 <section>
   <h2>Get help</h2>
-  <p>Have a question, hit a bug, or want to request a feature? Reach out any of these ways and we will get back to you, usually within two business days.</p>
+  <p>Report behavior specific to this personal build in the fork. If it also reproduces in a clean upstream Pesty build, use the upstream project after checking for an existing issue.</p>
   <div class="contact">
-    <a class="btn" href="mailto:ceo@greycorelabs.com?subject=Pesty%20Support">Email support</a>
-    <a class="btn alt" href="https://github.com/momenbasel/pesty/issues">Open a GitHub issue</a>
-    <a class="btn alt" href="https://github.com/momenbasel/pesty/issues/new">Report a bug</a>
+    <a class="btn" href="https://github.com/alvst/pesty/issues/new">Report a Pesty-Alvie bug</a>
+    <a class="btn alt" href="https://github.com/alvst/pesty/issues">Fork issues</a>
+    <a class="btn alt" href="https://github.com/momenbasel/pesty/issues">Upstream issues</a>
   </div>
-  <p style="margin-top:14px;color:var(--muted);font-size:15px;">Email: <a href="mailto:ceo@greycorelabs.com">ceo@greycorelabs.com</a></p>
 </section>
 
 <section>
@@ -77,17 +74,14 @@
 
   <details open>
     <summary>How do I paste a clip?</summary>
-    <p>Open Pesty with your keyboard shortcut (default <kbd>⇧⌘V</kbd>). Use the arrow keys to pick a clip and press <kbd>Return</kbd>, or press <kbd>⌘1</kbd>–<kbd>⌘9</kbd> to grab one of the first nine clips.</p>
-    <ul>
-      <li><strong>Mac App Store version:</strong> selecting a clip copies it and returns focus to the app you were using — then press <kbd>⌘V</kbd> to paste. This version is fully sandboxed and needs no special permissions.</li>
-      <li><strong>Open-source / direct-download version:</strong> it can paste directly into the active app for you. Turn on <em>Paste directly into the active app</em> in Settings and grant Accessibility when prompted.</li>
-    </ul>
+    <p>Open Pesty-Alvie with its default <kbd>⌃⌘V</kbd> shortcut. Use the arrow keys to pick a clip and press <kbd>Return</kbd>, or press <kbd>⌘1</kbd>–<kbd>⌘9</kbd> to grab one of the first nine clips.</p>
+    <p>Direct paste requires a fresh Accessibility grant for Pesty-Alvie because it intentionally does not reuse upstream Pesty's signed identity.</p>
   </details>
 
   <details>
-    <summary>Pesty is not saving what I copy</summary>
+    <summary>Pesty-Alvie is not saving what I copy</summary>
     <ul>
-      <li>Make sure Pesty is running — look for its icon in the menu bar. Open it with <kbd>⇧⌘V</kbd>.</li>
+      <li>Make sure Pesty-Alvie is running — look for its icon in the menu bar. Open it with <kbd>⌃⌘V</kbd>.</li>
       <li><em>Ignore passwords</em> is on by default, so clips marked concealed by password managers are intentionally skipped.</li>
       <li>Check the <em>History limit</em> in Settings if older clips are dropping off.</li>
     </ul>
@@ -95,12 +89,12 @@
 
   <details>
     <summary>How do I change the keyboard shortcut?</summary>
-    <p>Open Settings (menu bar icon → Settings, or <kbd>⌘,</kbd>) and click the shortcut field next to <em>Show Pesty</em>, then press the key combination you want.</p>
+    <p>Open Settings (menu bar icon → Settings, or <kbd>⌘,</kbd>) and click the shortcut field next to <em>Show Pesty-Alvie</em>, then press the key combination you want.</p>
   </details>
 
   <details>
     <summary>Is my clipboard private?</summary>
-    <p>Yes. Everything stays on your Mac inside the app's private container. Pesty has no servers, no analytics, and makes no network calls. See the <a href="privacy.html">Privacy Policy</a> for details.</p>
+    <p>Clipboard history stays in Pesty-Alvie's separate local or iCloud Drive folder and is not sent to the developer. Inline link previews can contact the copied website for metadata. See the <a href="privacy.html">privacy notes</a> for details.</p>
   </details>
 
   <details>
@@ -109,16 +103,16 @@
   </details>
 
   <details>
-    <summary>How do I clear my history or reset Pesty?</summary>
+    <summary>How do I clear my history or reset Pesty-Alvie?</summary>
     <p>Open Settings → <em>Data</em> → <em>Clear Clipboard History</em>. This permanently removes stored clips from your Mac.</p>
   </details>
 
   <details>
-    <summary>How do I uninstall Pesty?</summary>
+    <summary>How do I uninstall Pesty-Alvie?</summary>
     <ul>
-      <li><strong>Mac App Store:</strong> delete Pesty from Launchpad or the Applications folder.</li>
-      <li><strong>Homebrew:</strong> run <code>brew uninstall --cask pesty</code>.</li>
-      <li><strong>DMG install:</strong> drag Pesty from Applications to the Trash.</li>
+      <li>Quit Pesty-Alvie and move <code>Pesty-Alvie.app</code> from Applications to the Trash.</li>
+      <li>Its separate history remains in <code>~/Library/Application Support/Pesty-Alvie</code> until you remove it intentionally.</li>
+      <li>Upstream Pesty and its data are unaffected.</li>
     </ul>
   </details>
 
@@ -129,9 +123,9 @@
 </section>
 
 <footer>
-  Pesty is free and open source under the MIT License ·
+  Pesty-Alvie is based on Pesty and remains under the MIT License ·
   <a href="index.html">Home</a> · <a href="privacy.html">Privacy</a> ·
-  <a href="https://github.com/momenbasel/pesty">GitHub</a><br />
+  <a href="https://github.com/alvst/pesty">Fork</a> · <a href="https://github.com/momenbasel/pesty">Upstream</a><br />
   Not affiliated with Paste (Wonder Warp / FIPLAB).
 </footer>
 </div>

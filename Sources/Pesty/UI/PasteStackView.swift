@@ -181,6 +181,8 @@ struct PasteStackView: View {
 /// Clipboard. It is a focused view of the most recent stack—not another list.
 struct PasteStackContentView: View {
     private static let stripStartID = "pesty.paste-stack.strip.start"
+    private static let minimumCardHeight: CGFloat = 210
+    @Bindable private var store = ClipboardStore.shared
     private var stack: PasteSequence { AppController.shared.pasteSequence }
     private var settings: Settings { Settings.shared }
 
@@ -198,7 +200,7 @@ struct PasteStackContentView: View {
                     Menu {
                         ForEach(savedStacks) { saved in
                             Button(stackLabel(for: saved)) {
-                                stack.selectStack(saved.id)
+                                AppController.shared.selectPasteStack(saved.id)
                             }
                         }
                     } label: {
@@ -272,41 +274,98 @@ struct PasteStackContentView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if visibleEntries.isEmpty {
+                searchEmptyState
             } else {
                 cardStrip
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: store.searchText) { _, query in
+            stack.selectFirst(matching: query)
+        }
+        .onChange(of: stack.activeStackID) { _, _ in
+            stack.reconcileSelection(matching: store.searchText)
+        }
     }
 
     private var cardStrip: some View {
+        GeometryReader { geometry in
+            let cardHeight = max(1, geometry.size.height
+                - Theme.cardStripTopInset - Theme.cardStripBottomInset)
+
+            if cardHeight < Self.minimumCardHeight {
+                compactEntryList
+            } else {
+                fullCardStrip(cardHeight: cardHeight)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var compactEntryList: some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 6) {
+                    ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
+                        PasteStackEntryRow(entry: entry,
+                                           index: index + 1,
+                                           selected: stack.selectedEntryID == entry.id,
+                                           showsPasteAction: true)
+                            .id(entry.id)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .onAppear {
+                guard let id = stack.selectedEntryID,
+                      visibleEntries.contains(where: { $0.id == id }) else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
+            .onChange(of: stack.selectedEntryID) { _, id in
+                guard let id,
+                      visibleEntries.contains(where: { $0.id == id }) else { return }
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func fullCardStrip(cardHeight: CGFloat) -> some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
+                LazyHStack(alignment: .top, spacing: Theme.cardStripLayoutSpacing) {
                     Color.clear
-                        .frame(width: 1, height: 1)
+                        .frame(width: Theme.cardStripStartTargetWidth,
+                               height: 1)
                         .id(Self.stripStartID)
 
-                    ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
                         ClipCardView(item: entry.item,
                                      index: index,
                                      selected: stack.selectedEntryID == entry.id,
                                      pasteStackEntry: entry)
+                            .frame(height: cardHeight)
+                            .padding(.horizontal, Theme.cardScrollTargetPadding)
                             .id(entry.id)
                             .opacity(entry.isPasted ? 0.58 : 1)
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                removal: .opacity))
                     }
                 }
-                .padding(.trailing, 28)
-                .padding(.top, 16)
-                .padding(.bottom, 26)
-                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: stack.displayEntries.map(\.id))
+                .padding(.trailing, Theme.cardStripEndContentInset)
+                .padding(.top, Theme.cardStripTopInset)
+                .padding(.bottom, Theme.cardStripBottomInset)
             }
+            .contentMargins(.horizontal, Theme.cardStripViewportInset, for: .scrollContent)
             .scrollClipDisabled()
             .onAppear {
-                guard let id = stack.selectedEntryID else { return }
+                guard let id = stack.selectedEntryID,
+                      visibleEntries.contains(where: { $0.id == id }) else { return }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
@@ -316,17 +375,36 @@ struct PasteStackContentView: View {
             .onChange(of: stack.selectedEntryID) { _, id in
                 guard let id else { return }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
+                    // Avoid re-centering a card that is already visible; the
+                    // strip advances only enough to bring the next card in.
+                    proxy.scrollTo(id)
                 }
             }
         }
-        .frame(maxHeight: .infinity)
     }
 
     private var summary: String {
         if stack.isCollecting { return "Collecting external copies" }
         if stack.pendingCount > 0 { return "\(stack.pendingCount) clips ready to paste" }
         return stack.hasEntries ? "All clips pasted" : "Collection paused"
+    }
+
+    private var visibleEntries: [PasteStackEntry] {
+        stack.visibleEntries(matching: store.searchText)
+    }
+
+    private var searchEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(Theme.textSecondary)
+            Text("No matches for “\(store.searchText)”")
+                .font(.system(size: 15, weight: .semibold))
+            Text("Try a different search.")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var savedStacks: [SavedPasteStack] {
@@ -405,7 +483,10 @@ private struct PasteStackEntryRow: View {
         }
         .opacity(entry.isPasted ? 0.48 : 1)
         .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .onTapGesture { stack.select(entry) }
+        .onTapGesture {
+            AppController.shared.focusBarCards()
+            stack.select(entry)
+        }
         .help(entry.isPasted ? "Pasted clip" : "Select this stack clip")
     }
 

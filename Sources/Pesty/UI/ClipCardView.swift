@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ClipCardView: View {
@@ -48,7 +49,6 @@ struct ClipCardView: View {
         .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
         .scaleEffect(hovering && !selected ? 1.015 : 1.0)
         .zIndex(selected ? 1 : 0)
-        .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -136,7 +136,8 @@ struct ClipCardView: View {
         case .file:
             fileContent
         case .link:
-            LinkCardPreview(text: item.text ?? item.displayTitle)
+            LinkCardPreview(text: item.text ?? item.displayTitle,
+                            titleOverride: item.customTitle)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         case .richText:
             RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", lineLimit: 10)
@@ -188,11 +189,6 @@ struct ClipCardView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if item.type == .link {
-                Text(item.displayTitle)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary).lineLimit(1)
-            }
             HStack(spacing: 6) {
                 Text(metaLeft)
                     .font(.system(size: 11))
@@ -242,64 +238,146 @@ struct ClipCardView: View {
                 }
             } else {
                 Button { AppController.shared.pasteStackEntry(entry) } label: {
-                    Label("Paste", systemImage: "doc.on.clipboard")
+                    Label(AppController.shared.pasteMenuTitle, systemImage: "doc.on.clipboard")
                 }
+                .keyboardShortcut(.return, modifiers: [])
+
+                Button { AppController.shared.pasteStackEntry(entry, asPlainText: true) } label: {
+                    Label("Paste as Plain Text", systemImage: "text.alignleft")
+                }
+                .keyboardShortcut(.return, modifiers: .shift)
+                .disabled(item.plainText == nil)
             }
+
             Button { AppController.shared.copyItem(item) } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
+            .keyboardShortcut("c", modifiers: .command)
+
             Divider()
+
+            editAndRenameActions
+
             Button(role: .destructive) {
                 AppController.shared.removePasteStackEntry(entry)
             } label: {
                 Label("Remove from Paste Stack", systemImage: "trash")
             }
+            .keyboardShortcut(.delete, modifiers: [])
+
+            Divider()
+            pinMenu
+
+            Divider()
+            previewAndShareActions
         } else {
             Button { AppController.shared.pasteItem(item) } label: {
-                Label("Paste", systemImage: "doc.on.clipboard")
+                Label(AppController.shared.pasteMenuTitle, systemImage: "doc.on.clipboard")
             }
+            .keyboardShortcut(.return, modifiers: [])
+
+            Button { AppController.shared.pasteItem(item, asPlainText: true) } label: {
+                Label("Paste as Plain Text", systemImage: "text.alignleft")
+            }
+            .keyboardShortcut(.return, modifiers: .shift)
+            .disabled(item.plainText == nil)
+
             Button { AppController.shared.copyItem(item) } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
+            .keyboardShortcut("c", modifiers: .command)
+
             Divider()
-            Button {
-                if let t = TextPrompt.run(title: "Rename", message: "Card title",
-                                          defaultValue: item.customTitle ?? "") {
-                    store.setTitle(t, for: item)
-                }
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
+
+            editAndRenameActions
+
             Button(role: .destructive) {
                 store.delete(item)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+            .keyboardShortcut(.delete, modifiers: [])
+
             Divider()
-            Menu {
-                if !store.pinboards.isEmpty {
-                    ForEach(store.pinboards) { b in
-                        Button { store.saveToPinboard(item, boardID: b.id) } label: {
-                            PinboardMenuItemLabel(pinboard: b)
-                        }
-                    }
-                    Divider()
-                }
-                Button {
-                    if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
-                        let b = store.addPinboard(name: name)
-                        store.saveToPinboard(item, boardID: b.id)
-                    }
-                } label: {
-                    Text("Create Pinboard…")
-                }
-            } label: {
-                Label("Pin", systemImage: "pin")
+            pinMenu
+
+            Divider()
+            previewAndShareActions
+        }
+    }
+
+    @ViewBuilder
+    private var editAndRenameActions: some View {
+        Button { AppController.shared.editItem(item) } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        .keyboardShortcut("e", modifiers: .command)
+
+        if writingToolsAvailable {
+            Button { AppController.shared.editItem(item, launchWritingTools: true) } label: {
+                Label("Writing Tools", systemImage: "pencil.and.scribble")
             }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+        }
+
+        Button { renameItem() } label: {
+            Label("Rename…", systemImage: "pencil.line")
+        }
+        .keyboardShortcut("r", modifiers: .command)
+    }
+
+    private var pinMenu: some View {
+        Menu {
+            if !store.pinboards.isEmpty {
+                ForEach(store.pinboards) { b in
+                    Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                        PinboardMenuItemLabel(pinboard: b)
+                    }
+                }
+                Divider()
+            }
+            Button { pinToNewBoard() } label: {
+                Label("Create Pinboard…", systemImage: "plus")
+            }
+        } label: {
+            Label("Pin", systemImage: "pin")
+        }
+    }
+
+    @ViewBuilder
+    private var previewAndShareActions: some View {
+        Button { AppController.shared.showPreview(for: item) } label: {
+            Label("Preview", systemImage: "eye")
+        }
+        .keyboardShortcut(.space, modifiers: [])
+
+        Button { AppController.shared.showSharePicker(for: item) } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private var writingToolsAvailable: Bool {
+        guard [.text, .richText, .link].contains(item.type) else { return false }
+        guard #available(macOS 15.2, *) else { return false }
+        return NSWritingToolsCoordinator.isWritingToolsAvailable
+    }
+
+    private func renameItem() {
+        if let title = TextPrompt.run(title: "Rename", message: "Card title",
+                                      defaultValue: item.customTitle ?? "") {
+            store.setTitle(title, for: item)
+        }
+    }
+
+    private func pinToNewBoard() {
+        if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
+            let board = store.addPinboard(name: name)
+            store.saveToPinboard(item, boardID: board.id)
         }
     }
 
     private func selectCard() {
+        AppController.shared.focusBarCards()
         if let entry = pasteStackEntry {
             AppController.shared.pasteSequence.select(entry)
         } else {

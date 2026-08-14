@@ -7,14 +7,16 @@ enum PasteService {
     /// application which placed the current content on the pasteboard, even though
     /// Pesty is not the foreground app by the time another manager observes it.
     private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
-    private static let sourceBundleID = "com.greycorelabs.pesty"
+    private static var sourceBundleID: String {
+        Bundle.main.bundleIdentifier ?? AppIdentity.bundleIdentifier
+    }
 
     @discardableResult
     static func copy(_ item: ClipItem,
                      to pasteboard: NSPasteboard = .general,
                      asPlainText: Bool = false,
                      imageOverride: NSImage? = nil) -> Int {
-        if asPlainText, let text = item.text ?? item.colorHex {
+        if asPlainText, let text = item.plainText {
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             markPestyAsSource(on: pasteboard)
@@ -53,7 +55,7 @@ enum PasteService {
     }
 
     private static func markPestyAsSource(on pasteboard: NSPasteboard) {
-        // Use Pesty's packaged identifier rather than the host process identifier,
+        // Use Pesty-Alvie's packaged identifier rather than the host process identifier,
         // which is absent when running from SwiftPM and would not resolve an icon.
         pasteboard.setString(sourceBundleID, forType: sourceType)
     }
@@ -78,55 +80,73 @@ enum PasteService {
         // Direct-download build: optionally paste straight into the active app by
         // synthesizing ⌘V. This requires the user's Accessibility grant.
         guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return }
-        // A Paste Stack shortcut normally includes Command and Option. Wait for
-        // those physical keys to be released before sending our own Command-V;
-        // otherwise macOS can interpret it as the still-held sequence shortcut
-        // and the queue advances without text ever reaching the target.
-        target.activate()
-        waitForFrontmost(target, attempts: 30)
+        beginDirectPaste(into: target)
         #endif
     }
 
     #if !MAS
-    private static func waitForFrontmost(_ app: NSRunningApplication, attempts: Int) {
-        guard attempts > 0, !app.isTerminated else { return }
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
-            waitForShortcutModifiersToRelease(attempts: 30)
+    private static func beginDirectPaste(into target: NSRunningApplication) {
+        guard !target.isTerminated else { return }
+        if target.isActive {
+            waitForPasteTriggerToRelease(for: target)
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
-            waitForFrontmost(app, attempts: attempts - 1)
+
+        if NSApp.isActive {
+            NSApp.yieldActivation(to: target)
+            guard target.activate(from: .current, options: []) else { return }
+        } else {
+            target.activate(options: [])
+        }
+        waitForTargetActivation(target, attempts: 30)
+    }
+
+    private static func waitForTargetActivation(_ target: NSRunningApplication, attempts: Int) {
+        guard !target.isTerminated else { return }
+        if target.isActive {
+            waitForPasteTriggerToRelease(for: target)
+            return
+        }
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+            waitForTargetActivation(target, attempts: attempts - 1)
         }
     }
 
-    private static func waitForShortcutModifiersToRelease(attempts: Int) {
-        let flags = CGEventSource.flagsState(.combinedSessionState)
+    private static func waitForPasteTriggerToRelease(for target: NSRunningApplication) {
+        guard !target.isTerminated else { return }
+
+        let flags = CGEventSource.flagsState(.hidSystemState)
         let shortcutMask = CGEventFlags.maskCommand.rawValue
             | CGEventFlags.maskAlternate.rawValue
             | CGEventFlags.maskControl.rawValue
             | CGEventFlags.maskShift.rawValue
         let modifiersHeld = flags.rawValue & shortcutMask
+        let returnHeld = CGEventSource.keyState(.hidSystemState, key: CGKeyCode(kVK_Return))
+            || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(kVK_ANSI_KeypadEnter))
 
-        guard modifiersHeld == 0 || attempts == 0 else {
+        guard modifiersHeld == 0, !returnHeld else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                waitForShortcutModifiersToRelease(attempts: attempts - 1)
+                waitForPasteTriggerToRelease(for: target)
             }
             return
         }
 
-        // Give AppKit one more turn through the run loop after activation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { sendCommandV() }
+        DispatchQueue.main.async {
+            guard !target.isTerminated, target.isActive else { return }
+            sendCommandV(to: target.processIdentifier)
+        }
     }
 
-    private static func sendCommandV() {
+    private static func sendCommandV(to processIdentifier: pid_t) {
         let src = CGEventSource(stateID: .combinedSessionState)
         let v = CGKeyCode(kVK_ANSI_V)
         guard let down = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: true),
               let up = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false) else { return }
         down.flags = .maskCommand
         up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        down.postToPid(processIdentifier)
+        up.postToPid(processIdentifier)
     }
 
     @discardableResult

@@ -1,0 +1,4 @@
+# The generated project is part of this standalone app. The root ignore rule
+# excludes Xcode projects, so keep this one visible to Git.
+!Pesty-Alvie.xcodeproj/
+!Pesty-Alvie.xcodeproj/**

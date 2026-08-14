@@ -5,6 +5,25 @@ enum Theme {
     // Leave room for the selected card's focus ring and shadow so adjacent
     // clips never visually run into it.
     static let cardSpacing: CGFloat = 28
+    // Inset the scrollable content without shrinking its clipping bounds, so
+    // the selected-card ring and shadow remain intact at either side.
+    static let cardStripViewportInset: CGFloat = 20
+    // Each scroll target is wider than its visible card. `scrollTo` therefore
+    // keeps the ring clear of the viewport edge instead of aligning the card
+    // flush against it. The stack spacing compensates so visible cards still
+    // retain the normal 28 pt gap.
+    static let cardScrollTargetPadding: CGFloat = 20
+    static let cardStripLayoutSpacing: CGFloat = cardSpacing - cardScrollTargetPadding * 2
+    // The extra buffer at the actual start and end of the scrollable content.
+    // Together with the viewport inset, this leaves 43 pt around a selected
+    // card's visible focus ring at either end of the strip.
+    static let cardStripEdgeInset: CGFloat = 29
+    static let cardStripStartTargetWidth: CGFloat = cardStripEdgeInset
+        - cardScrollTargetPadding
+        - cardStripLayoutSpacing
+    static let cardStripEndContentInset: CGFloat = cardStripEdgeInset - cardScrollTargetPadding
+    static let cardStripTopInset: CGFloat = 16
+    static let cardStripBottomInset: CGFloat = 26
     static let cornerRadius: CGFloat = 16
     // A softer card shape lets the selected blue outline read as an intentional
     // focus ring instead of a tight rectangle around the current clip.

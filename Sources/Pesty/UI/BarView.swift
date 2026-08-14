@@ -1,16 +1,22 @@
+import AppKit
 import SwiftUI
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
 
+    let searchBridge: BarSearchFieldBridge
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
     private var showsStackDeck: Bool {
-        store.source == .history && store.searchText.isEmpty && sequence.hasSavedStacks
+        settings.pasteStacksEnabled
+            && store.source == .history
+            && store.searchText.isEmpty
+            && sequence.hasSavedStacks
     }
     @State private var resizeStartHeight: Double?
+    @State private var resizeStartScreenY: CGFloat?
     @State private var cardFrames: [UUID: CGRect] = [:]
 
     var body: some View {
@@ -19,30 +25,35 @@ struct BarView: View {
             VStack(spacing: 0) {
                 if settings.showBarResizeHandle { resizeHandle }
                 topBar
-                if store.source == .pasteStack {
+                if settings.pasteStacksEnabled, store.source == .pasteStack {
                     PasteStackContentView()
                 } else {
-                    if settings.clipPreviewStyle == .inlinePesty,
-                       store.inlinePreviewVisible {
-                        Spacer(minLength: 0)
-                        strip.frame(height: 280)
-                    } else {
-                        strip
-                    }
+                    strip
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            if settings.clipPreviewStyle == .inlinePesty,
-               store.source != .pasteStack,
-               store.inlinePreviewVisible,
-               let item = store.selectedItem {
-                PestyPreviewPopover(
-                    item: item,
-                    pointer: cardFrames[item.id].map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero)
-            }
         }
         .coordinateSpace(name: "PestyBar")
-        .onPreferenceChange(ClipCardFramePreferenceKey.self) { cardFrames = $0 }
+        .onPreferenceChange(ClipCardFramePreferenceKey.self) {
+            cardFrames = $0
+            updateFloatingPreview()
+        }
+        .onChange(of: store.inlinePreviewVisible) { _, visible in
+            guard visible else { return }
+            DispatchQueue.main.async { updateFloatingPreview() }
+        }
+        .onChange(of: store.selectedID) { _, _ in
+            guard store.inlinePreviewVisible else { return }
+            DispatchQueue.main.async { updateFloatingPreview() }
+        }
+        .onChange(of: store.source) { _, source in
+            guard store.inlinePreviewVisible else { return }
+            guard source != .pasteStack else {
+                AppController.shared.hideInlinePreview()
+                return
+            }
+            DispatchQueue.main.async { updateFloatingPreview() }
+        }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
     }
@@ -62,14 +73,15 @@ struct BarView: View {
             if settings.iCloudSync {
                 syncButton
             }
-            if store.source != .pasteStack { searchIndicator }
+            searchIndicator
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
             if store.source != .pasteStack {
                 if settings.clipPreviewStyle == .inlinePesty { previewButton }
-                startPasteStackButton
+                if settings.pasteStacksEnabled { startPasteStackButton }
             }
+            if store.hasUndoableDeletion { undoDeleteButton }
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -87,6 +99,15 @@ struct BarView: View {
         .help(store.inlinePreviewVisible ? "Hide clip preview" : "Show clip preview")
     }
 
+    private func updateFloatingPreview() {
+        guard settings.clipPreviewStyle == .inlinePesty,
+              store.source != .pasteStack,
+              store.inlinePreviewVisible,
+              let item = store.selectedItem,
+              let frame = cardFrames[item.id] else { return }
+        AppController.shared.updateInlinePreview(item: item, cardFrame: frame)
+    }
+
     private var startPasteStackButton: some View {
         Button { AppController.shared.newPasteStack() } label: {
             Image(systemName: "rectangle.stack.badge.plus")
@@ -96,6 +117,20 @@ struct BarView: View {
         }
         .buttonStyle(.plain)
         .help("Start Paste Stack")
+    }
+
+    private var undoDeleteButton: some View {
+        Button { store.undoLastDelete() } label: {
+            Label("Undo", systemImage: "arrow.uturn.backward")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(Theme.fieldBG, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Undo last deleted item")
+        .transition(.move(edge: .trailing).combined(with: .opacity))
     }
 
     private var resizeHandle: some View {
@@ -108,15 +143,38 @@ struct BarView: View {
         .frame(height: 14)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    if resizeStartHeight == nil { resizeStartHeight = settings.barHeight }
-                    guard let start = resizeStartHeight else { return }
-                    settings.barHeight = min(720, max(300, start - value.translation.height))
+            DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                .onChanged { _ in
+                    beginResizeIfNeeded()
+                    guard let height = resizedHeight else { return }
+                    // Resize live without publishing the preference on every
+                    // pointer event. The panel's top edge moves during this
+                    // gesture, so screen coordinates avoid a feedback loop
+                    // through the handle's local coordinate space.
+                    AppController.shared.resizeVisibleBar(to: height)
                 }
-                .onEnded { _ in resizeStartHeight = nil }
+                .onEnded { _ in
+                    if let height = resizedHeight {
+                        settings.barHeight = height
+                    }
+                    resizeStartHeight = nil
+                    resizeStartScreenY = nil
+                }
         )
-        .help("Drag to resize the Pesty bar")
+        .help("Drag to resize the Pesty-Alvie bar")
+    }
+
+    private func beginResizeIfNeeded() {
+        guard resizeStartHeight == nil else { return }
+        resizeStartHeight = settings.barHeight
+        resizeStartScreenY = NSEvent.mouseLocation.y
+    }
+
+    private var resizedHeight: Double? {
+        guard let startHeight = resizeStartHeight,
+              let startScreenY = resizeStartScreenY else { return nil }
+        let verticalTravel = Double(NSEvent.mouseLocation.y - startScreenY)
+        return min(720, max(300, startHeight + verticalTravel))
     }
 
     private var syncButton: some View {
@@ -131,27 +189,57 @@ struct BarView: View {
         .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
     }
 
+    private var searchIsActive: Bool {
+        store.barInputMode == .search || !store.searchText.isEmpty
+    }
+
+    private var searchTextBinding: Binding<String> {
+        Binding(
+            get: { store.searchText },
+            set: { AppController.shared.updateBarSearchText($0) }
+        )
+    }
+
     private var searchIndicator: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: searchIsActive ? 6 : 0) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(store.searchText.isEmpty ? Theme.textSecondary : Theme.textPrimary)
-            if !store.searchText.isEmpty {
-                Text(store.searchText)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                Button { store.searchText = ""; store.selectFirst() } label: {
+                .foregroundStyle(searchIsActive ? Theme.textPrimary : Theme.textSecondary)
+
+            // Keep this native field mounted even in the compact state. The
+            // key monitor can focus it synchronously and return the same first
+            // key event, so type-anywhere search never loses a character.
+            NativeBarSearchField(
+                text: searchTextBinding,
+                bridge: searchBridge,
+                onBegin: { AppController.shared.setBarSearchEditing(true) },
+                onEnd: { AppController.shared.setBarSearchEditing(false) },
+                onSubmit: { AppController.shared.submitBarSearch() },
+                onCancel: { AppController.shared.cancelBarSearchOrHide() }
+            )
+            .frame(minWidth: searchIsActive ? 120 : 0,
+                   idealWidth: searchIsActive ? 180 : 0,
+                   maxWidth: searchIsActive ? 260 : 0,
+                   alignment: .leading)
+            .opacity(searchIsActive ? 1 : 0)
+            .allowsHitTesting(searchIsActive)
+            .accessibilityHidden(!searchIsActive)
+
+            if searchIsActive {
+                Button { AppController.shared.clearBarSearch() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, store.searchText.isEmpty ? 0 : 10)
+        .padding(.horizontal, searchIsActive ? 10 : 0)
         .frame(height: 30)
-        .background(store.searchText.isEmpty ? Color.clear : Theme.fieldBG, in: Capsule())
-        .animation(.easeOut(duration: 0.15), value: store.searchText.isEmpty)
+        .background(searchIsActive ? Theme.fieldBG : Color.clear, in: Capsule())
+        // Once a query exists, it must win space from the horizontally
+        // scrollable tab strip so the user can see what they typed.
+        .layoutPriority(searchIsActive ? 2 : 0)
+        .animation(.easeOut(duration: 0.15), value: searchIsActive)
     }
 
     private var moreMenu: some View {
@@ -160,7 +248,7 @@ struct BarView: View {
                 Label("Settings…", systemImage: "gearshape")
             }
             Button { AppController.shared.togglePestyPause() } label: {
-                Label(monitor.isPaused ? "Resume Pesty" : "Pause Pesty",
+                Label(monitor.isPaused ? "Resume Pesty-Alvie" : "Pause Pesty-Alvie",
                       systemImage: monitor.isPaused ? "play.fill" : "pause.fill")
             }
             Button { store.clearHistory() } label: {
@@ -168,10 +256,10 @@ struct BarView: View {
             }
             Divider()
             Button { AppController.shared.showAbout() } label: {
-                Label("About Pesty", systemImage: "info.circle")
+                Label("About Pesty-Alvie", systemImage: "info.circle")
             }
             Button { NSApp.terminate(nil) } label: {
-                Label("Quit Pesty", systemImage: "power")
+                Label("Quit Pesty-Alvie", systemImage: "power")
             }
         } label: {
             Image(systemName: monitor.isPaused ? "pause.fill" : "ellipsis")
@@ -186,67 +274,82 @@ struct BarView: View {
     }
 
     private var strip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Theme.cardSpacing) {
-                    // This is a real scroll target, rather than an ID applied
-                    // to the HStack. Scrolling it to the leading edge leaves
-                    // one card-spacing of room before the first card.
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(Self.stripStartID)
+        GeometryReader { geometry in
+            // A horizontal ScrollView measures card content at its intrinsic
+            // height. Rich link previews would otherwise make their card
+            // taller than every other card and shift the strip vertically.
+            let cardHeight = max(1, geometry.size.height
+                - Theme.cardStripTopInset - Theme.cardStripBottomInset)
 
-                    if showsStackDeck {
-                        ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
-                            PasteStackDeckCard(stack: stack,
-                                               isActive: stack.id == sequence.activeStackID,
-                                               isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
-                                .id(stack.id)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Theme.cardStripLayoutSpacing) {
+                        // This is a real scroll target, rather than an ID applied
+                        // to the HStack. Scrolling it to the leading edge leaves
+                        // a consistent edge inset before the first card.
+                        Color.clear
+                            .frame(width: Theme.cardStripStartTargetWidth,
+                                   height: 1)
+                            .id(Self.stripStartID)
+
+                        if showsStackDeck {
+                            ForEach(sequence.savedStacks.filter(\.hasEntries)) { stack in
+                                PasteStackDeckCard(stack: stack,
+                                                   isActive: stack.id == sequence.activeStackID,
+                                                   isCollecting: stack.id == sequence.activeStackID && sequence.isCollecting)
+                                    .frame(height: cardHeight)
+                                    .padding(.horizontal, Theme.cardScrollTargetPadding)
+                                    .id(stack.id)
+                            }
+                        }
+
+                        ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
+                            ClipCardView(item: item,
+                                         index: index,
+                                         selected: item.id == store.selectedID)
+                                .frame(height: cardHeight)
+                                .background {
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: ClipCardFramePreferenceKey.self,
+                                            value: [item.id: proxy.frame(in: .named("PestyBar"))])
+                                    }
+                                }
+                                .padding(.horizontal, Theme.cardScrollTargetPadding)
+                                .id(item.id)
                         }
                     }
-
-                    ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
-                        ClipCardView(item: item,
-                                     index: index,
-                                     selected: item.id == store.selectedID)
-                            .id(item.id)
-                            .background {
-                                GeometryReader { proxy in
-                                    Color.clear.preference(
-                                        key: ClipCardFramePreferenceKey.self,
-                                        value: [item.id: proxy.frame(in: .named("PestyBar"))])
-                                }
-                            }
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                removal: .opacity))
-                    }
+                    .padding(.trailing, Theme.cardStripEndContentInset)
+                    .padding(.top, Theme.cardStripTopInset)
+                    .padding(.bottom, Theme.cardStripBottomInset)
                 }
-                .padding(.trailing, 28)
-                .padding(.top, 16)
-                .padding(.bottom, 26)
-                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
-            }
-            .scrollClipDisabled()
-            .onChange(of: store.selectedID) { _, id in
-                guard let id else { return }
-                if store.initialScrollTargetID == id {
-                    store.initialScrollTargetID = nil
+                .contentMargins(.horizontal, Theme.cardStripViewportInset, for: .scrollContent)
+                .scrollClipDisabled()
+                .onChange(of: store.selectedID) { _, id in
+                    guard let id else { return }
+                    if store.initialScrollTargetID == id {
+                        store.initialScrollTargetID = nil
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            // The leading spacer preserves room for the first
+                            // card's focus ring when reopening Pesty.
+                            proxy.scrollTo(Self.stripStartID, anchor: .leading)
+                        }
+                        return
+                    }
+                    // Keyboard selection must be visible in the same event turn.
+                    // Leaving the anchor unspecified preserves the current viewport
+                    // until the selected card would otherwise be off-screen.
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        // The leading spacer preserves room for the first
-                        // card's focus ring when reopening Pesty.
-                        proxy.scrollTo(Self.stripStartID, anchor: .leading)
+                        proxy.scrollTo(id)
                     }
-                    return
                 }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
+                .overlay {
+                    if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
                 }
-            }
-            .overlay {
-                if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
             }
         }
         .frame(maxHeight: .infinity)

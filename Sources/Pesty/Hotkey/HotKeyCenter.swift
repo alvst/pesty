@@ -11,7 +11,8 @@ final class HotKeyCenter {
     private var hotKeyRef: EventHotKeyRef?
     private var sequenceHotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
-    private let signature: OSType = 0x50535459
+    // "ALVI" keeps Carbon diagnostics distinct from upstream Pesty's "PSTY".
+    private let signature: OSType = 0x414C5649
 
     private init() {}
 
@@ -49,9 +50,11 @@ final class HotKeyCenter {
         hotKeyRef = register(keyCode: Settings.shared.hotkeyKeyCode,
                              modifiers: Settings.shared.hotkeyModifiers,
                              id: 1)
-        sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
-                                     modifiers: Settings.shared.sequenceHotkeyModifiers,
-                                     id: 2)
+        if Settings.shared.pasteStacksEnabled {
+            sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
+                                         modifiers: Settings.shared.sequenceHotkeyModifiers,
+                                         id: 2)
+        }
     }
 
     private func register(keyCode: Int, modifiers: Int, id: UInt32) -> EventHotKeyRef? {

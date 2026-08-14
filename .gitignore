@@ -5,12 +5,12 @@
 *.xcuserstate
 DerivedData/
 
-packaging/Pesty.app/
+packaging/Pesty-Alvie.app/
 packaging/*.dmg
 packaging/*.zip
 packaging/*.icns
 packaging/icon_1024.png
-packaging/Pesty.iconset/
+packaging/Pesty-Alvie.iconset/
 
 *.log
 

@@ -1,8 +1,21 @@
 # Changelog
 
-All notable changes to Pesty are documented here. The format is based on
+All notable changes to Pesty-Alvie are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Changed
+- Renamed the personal fork's app, executable, bundle, icon, packaging, and
+  documentation identity to Pesty-Alvie.
+- Separated preferences, local and iCloud Drive storage, preview temp folders,
+  pasteboard source attribution, login-item identity, Accessibility identity,
+  and default global shortcuts from upstream Pesty.
+- Renamed the iOS companion product and project to Pesty-Alvie with separate
+  app, test, and CloudKit identifiers.
+
+The entries below describe the inherited upstream Pesty release history.
 
 ## [1.1.0] - 2026-06-26
 

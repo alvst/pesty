@@ -1,0 +1,51 @@
+name: Pesty-Alvie
+options:
+  bundleIdPrefix: com.alvst
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  Pesty-Alvie:
+    type: application
+    platform: iOS
+    sources:
+      - path: Pesty-Alvie
+        excludes:
+          - Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion
+        PRODUCT_NAME: Pesty-Alvie
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: Pesty-Alvie/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Pesty-Alvie/Resources/Pesty-Alvie.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+  Pesty-AlvieTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Pesty-Alvie/Tests
+    dependencies:
+      - target: Pesty-Alvie
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  Pesty-Alvie:
+    build:
+      targets:
+        Pesty-Alvie: all
+        Pesty-AlvieTests: [test]
+    test:
+      targets:
+        - Pesty-AlvieTests

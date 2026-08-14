@@ -5,6 +5,11 @@ import SwiftUI
 /// opens that stack in the full Paste Stack tab instead of exposing its clips
 /// as ordinary history cards.
 struct PasteStackDeckCard: View {
+    // The detailed image/title treatment needs roughly 300pt once the card
+    // header and footer are accounted for. Below that, keep the deck usable
+    // with a compact next-clip summary instead of clipping it.
+    private static let compactLayoutThreshold: CGFloat = 300
+
     let stack: SavedPasteStack
     let isActive: Bool
     let isCollecting: Bool
@@ -44,6 +49,21 @@ struct PasteStackDeckCard: View {
     }
 
     private var frontCard: some View {
+        GeometryReader { geometry in
+            cardContent(compact: geometry.size.height < Self.compactLayoutThreshold)
+        }
+        .frame(width: Theme.cardWidth)
+        .frame(maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
+            .strokeBorder(isActive ? Theme.selection.opacity(0.9) : Theme.selection.opacity(0.45),
+                          lineWidth: isActive ? 2 : 1)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 5, y: 2)
+    }
+
+    private func cardContent(compact: Bool) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "rectangle.stack.fill")
@@ -67,20 +87,24 @@ struct PasteStackDeckCard: View {
             .frame(height: Theme.headerHeight)
             .background(Theme.selection)
 
-            VStack(spacing: 11) {
+            VStack(spacing: compact ? 7 : 11) {
                 if let entry = nextEntry {
-                    entryPreview(entry)
-                    Text(entry.item.displayTitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.center)
-                    Text("Next clip")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textSecondary)
+                    if compact {
+                        compactEntrySummary(entry)
+                    } else {
+                        entryPreview(entry)
+                        Text(entry.item.displayTitle)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.center)
+                        Text("Next clip")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 } else {
                     Image(systemName: "rectangle.stack.badge.plus")
-                        .font(.system(size: 34, weight: .light))
+                        .font(.system(size: compact ? 28 : 34, weight: .light))
                         .foregroundStyle(Theme.selection)
                     Text("Waiting for clips")
                         .font(.system(size: 13, weight: .medium))
@@ -88,7 +112,7 @@ struct PasteStackDeckCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(14)
+            .padding(compact ? 10 : 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.cardBody)
 
@@ -103,15 +127,40 @@ struct PasteStackDeckCard: View {
             .padding(.vertical, 10)
             .background(Theme.cardBody)
         }
-        .frame(width: Theme.cardWidth)
-        .frame(maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-            .strokeBorder(isActive ? Theme.selection.opacity(0.9) : Theme.selection.opacity(0.45),
-                          lineWidth: isActive ? 2 : 1)
+    }
+
+    private func compactEntrySummary(_ entry: PasteStackEntry) -> some View {
+        HStack(spacing: 9) {
+            compactEntryThumbnail(entry)
+            Text(entry.item.displayTitle)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
         }
-        .shadow(color: .black.opacity(0.16), radius: 5, y: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func compactEntryThumbnail(_ entry: PasteStackEntry) -> some View {
+        if let image = previewImage(for: entry) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.medium)
+                .scaledToFill()
+                .frame(width: 36, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(entry.item.type.accent.opacity(0.16))
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Image(systemName: entry.item.type.symbol)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(entry.item.type.accent)
+                }
+        }
     }
 
     @ViewBuilder
