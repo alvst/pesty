@@ -82,6 +82,7 @@ final class Settings {
         static let ignoreConcealed = "ignoreConcealed"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
+        static let showBarResizeHandle = "showBarResizeHandle"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -168,9 +169,16 @@ final class Settings {
     var barHeight: Double {
         didSet {
             guard isLoaded else { return }
-            let clamped = min(720, max(240, barHeight))
-            if clamped != barHeight { barHeight = clamped; return }
+            let normalized = BarResizeGeometry.normalizedPersistedHeight(barHeight)
+            if normalized != barHeight { barHeight = normalized; return }
             d.set(barHeight, forKey: Keys.barHeight)
+        }
+    }
+
+    var showBarResizeHandle: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(showBarResizeHandle, forKey: Keys.showBarResizeHandle)
         }
     }
 
@@ -209,7 +217,8 @@ final class Settings {
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
             Keys.ignoredSourceAppBundleIDs: [],
-            Keys.barHeight: 430.0,
+            Keys.barHeight: BarResizeGeometry.defaultHeight,
+            Keys.showBarResizeHandle: false,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false,
@@ -230,12 +239,18 @@ final class Settings {
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
-        barHeight = d.double(forKey: Keys.barHeight)
+        let storedBarHeight = d.double(forKey: Keys.barHeight)
+        let normalizedBarHeight = BarResizeGeometry.normalizedPersistedHeight(storedBarHeight)
+        barHeight = normalizedBarHeight
+        showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         cloudKitSync = d.bool(forKey: Keys.cloudKitSync)
         isLoaded = true
+        if normalizedBarHeight != storedBarHeight {
+            d.set(normalizedBarHeight, forKey: Keys.barHeight)
+        }
     }
 
     var hotkeyDisplay: String {
