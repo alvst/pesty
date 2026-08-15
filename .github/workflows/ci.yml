@@ -19,10 +19,25 @@ jobs:
           xcode-version: '26.3'
 
       - name: Show toolchain
-        run: swift --version
+        run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          swift --version
 
-      - name: Build (debug)
-        run: swift build -v
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build direct app
+        run: swift build
+
+      - name: Build MAS configuration
+        run: swift build -Xswiftc -DMAS
 
       - name: Build app bundle
         run: VERSION=0.0.0 BUILD=ci ./scripts/build_app.sh
+
+      - name: Verify universal executable
+        run: /usr/bin/lipo packaging/Pesty.app/Contents/MacOS/Pesty -verify_arch arm64 x86_64

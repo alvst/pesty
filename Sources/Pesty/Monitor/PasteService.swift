@@ -102,8 +102,10 @@ enum PasteService {
 
     @discardableResult
     static func ensureAccessibility(prompt: Bool) -> Bool {
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let opts = [key: prompt] as CFDictionary
+        // The SDK imports kAXTrustedCheckOptionPrompt as shared mutable state,
+        // which is unsafe under complete concurrency checking. Its documented
+        // dictionary-key value is stable, so avoid touching that global.
+        let opts = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
         return AXIsProcessTrustedWithOptions(opts)
     }
     #endif
