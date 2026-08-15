@@ -68,7 +68,13 @@ struct ClipPreviewView: View {
                     }
                 }
             }
-        case .text, .richText, .link:
+        case .link:
+            if let text = item.text, !text.isEmpty {
+                LinkPreviewContent(text: text, compact: false)
+            } else {
+                unavailable("This clip has no link to preview.")
+            }
+        case .text, .richText:
             if let text = item.text, !text.isEmpty {
                 Text(text)
                     .font(.system(size: 14))
