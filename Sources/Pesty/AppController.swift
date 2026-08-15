@@ -46,6 +46,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         monitor.start()
 
+        QuickLookService.shared.onSelectionChange = { [weak self] id in
+            self?.store.selectedID = id
+        }
+
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
         HotKeyCenter.shared.start()
 
@@ -294,6 +298,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func hideBar() {
         stopKeyMonitor()
+        QuickLookService.shared.dismiss()
         barController?.hide()
     }
 
@@ -514,6 +519,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         switch code {
+        case kVK_Space:
+            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            return nil
         case kVK_Escape:
             if !store.multiSelectedIDs.isEmpty {
                 store.clearMultiSelection()
@@ -525,9 +533,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             pasteSelected(); return nil
         case kVK_LeftArrow, kVK_UpArrow:
-            store.moveSelection(by: -1); return nil
+            store.moveSelection(by: -1)
+            QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+            return nil
         case kVK_RightArrow, kVK_DownArrow:
-            store.moveSelection(by: 1); return nil
+            store.moveSelection(by: 1)
+            QuickLookService.shared.updateSelection(selectedID: store.selectedID)
+            return nil
         case kVK_Delete:
             if cmd { deleteEffectiveSelection(); return nil }
             if !store.searchText.isEmpty {

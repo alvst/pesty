@@ -227,6 +227,15 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         guard Settings.shared.hideOnClickOutside,
               phase == .shown,
               !AppController.shared.suppressAutoHide else { return }
-        AppController.shared.hideBar()
+        // Key focus briefly moves to Quick Look while it remains a companion
+        // surface to the bar. Defer one run loop so the new key window is
+        // known before deciding whether focus really left Pesty.
+        DispatchQueue.main.async {
+            guard !AppController.shared.suppressAutoHide else { return }
+            guard QuickLookService.shared.isVisible else {
+                AppController.shared.hideBar()
+                return
+            }
+        }
     }
 }
