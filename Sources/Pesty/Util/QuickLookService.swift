@@ -7,8 +7,16 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     private var previewItems: [PreviewItem] = []
     private var startIndexByClipID: [UUID: Int] = [:]
+    private var orderedStartIndexes: [(index: Int, id: UUID)] = []
+    private var indexObservation: NSKeyValueObservation?
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(AppIdentity.quickLookDirectoryName, isDirectory: true)
+
+    /// The panel handles its own arrow-key navigation natively once it is the
+    /// key window — those keystrokes never reach the bar's own key monitor.
+    /// This is how the bar's selection (and its highlight) stays in sync with
+    /// whatever the panel is currently showing.
+    var onSelectionChange: ((UUID) -> Void)?
 
     private override init() {}
 
@@ -39,16 +47,35 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
         previewItems = newItems
         startIndexByClipID = newStartIndexes
+        orderedStartIndexes = newStartIndexes.map { ($0.value, $0.key) }.sorted { $0.index < $1.index }
         panel.dataSource = self
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
         panel.makeKeyAndOrderFront(nil)
+        observeIndexChanges(panel)
     }
 
     func updateSelection(selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared(), panel.isVisible,
               let selectedID, let index = startIndexByClipID[selectedID] else { return }
         panel.currentPreviewItemIndex = index
+    }
+
+    private func observeIndexChanges(_ panel: QLPreviewPanel) {
+        indexObservation = panel.observe(\.currentPreviewItemIndex, options: [.new]) { [weak self] _, change in
+            guard let index = change.newValue, index >= 0 else { return }
+            DispatchQueue.main.async {
+                guard let self, let id = self.clipID(forPreviewIndex: index) else { return }
+                self.onSelectionChange?(id)
+            }
+        }
+    }
+
+    /// A clip can own more than one preview item (e.g. multiple files), so
+    /// the match is the clip whose own range of items contains this index,
+    /// not an exact key lookup.
+    private func clipID(forPreviewIndex index: Int) -> UUID? {
+        orderedStartIndexes.last { $0.index <= index }?.id
     }
 
     func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { previewItems.count }

@@ -177,7 +177,12 @@ final class ClipboardStore {
         return true
     }
 
-    func delete(_ item: ClipItem, at date: Date = .now) {
+    /// `permanently` skips the Undo ledger entirely, so the deleted content
+    /// never sits recoverable in store.json even for the five-minute window —
+    /// either because the user turned that off globally in Settings, or held
+    /// Option for this one deletion.
+    func delete(_ item: ClipItem, at date: Date = .now, permanently: Bool = false) {
+        let permanently = permanently || Settings.shared.deletePermanently
         let historyPlacements: [HistoryClipPlacement] = history.enumerated().compactMap { index, existing in
             guard existing.id == item.id else { return nil }
             return HistoryClipPlacement(
@@ -211,12 +216,16 @@ final class ClipboardStore {
 
         history.removeAll { $0.id == item.id }
         for i in pinboards.indices { pinboards[i].items.removeAll { $0.id == item.id } }
-        deletionLedger.recordDeletion(
-            id: item.id,
-            payload: payload,
-            removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
-            at: date
-        )
+        if permanently {
+            for deletedItem in payload.allItems { deleteImageFile(deletedItem) }
+        } else {
+            deletionLedger.recordDeletion(
+                id: item.id,
+                payload: payload,
+                removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
+                at: date
+            )
+        }
         if selectedID == item.id { selectFirst() }
         _ = refreshDeletionState(at: date)
         scheduleSave()

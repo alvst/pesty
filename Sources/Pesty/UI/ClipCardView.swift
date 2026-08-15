@@ -292,7 +292,7 @@ struct ClipCardView: View {
             editAndRenameActions
 
             Button(role: .destructive) {
-                store.delete(item)
+                store.delete(item, permanently: NSEvent.modifierFlags.contains(.option))
             } label: {
                 Label("Delete", systemImage: "trash")
             }

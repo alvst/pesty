@@ -48,6 +48,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         monitor.start()
 
+        QuickLookService.shared.onSelectionChange = { [weak self] id in
+            guard let self, self.store.source != .pasteStack else { return }
+            self.store.selectedID = id
+        }
+
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
@@ -285,6 +290,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.barInputMode = .cards
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
+        QuickLookService.shared.dismiss()
         barController?.hide(immediately: immediately)
     }
 
@@ -885,15 +891,17 @@ final class AppController: NSObject, NSApplicationDelegate {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if cmd, let sel = store.selectedItem { store.delete(sel); return nil }
-            if let sel = store.selectedItem { store.delete(sel) }
+            if cmd, let sel = store.selectedItem {
+                store.delete(sel, permanently: flags.contains(.option)); return nil
+            }
+            if let sel = store.selectedItem { store.delete(sel, permanently: flags.contains(.option)) }
             return nil
         case kVK_ForwardDelete:
             if store.source == .pasteStack, let entry = selectedVisiblePasteStackEntry {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if let sel = store.selectedItem { store.delete(sel) }
+            if let sel = store.selectedItem { store.delete(sel, permanently: flags.contains(.option)) }
             return nil
         default:
             break
