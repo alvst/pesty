@@ -262,7 +262,8 @@ struct ClipCardView: View {
         Divider()
 
         Button(role: .destructive) {
-            AppController.shared.deleteSelection(containing: item)
+            let optionHeld = NSEvent.modifierFlags.contains(.option)
+            AppController.shared.deleteSelection(containing: item, permanently: optionHeld)
         } label: {
             Label(deleteMenuTitle, systemImage: "trash")
         }

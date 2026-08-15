@@ -45,6 +45,9 @@ struct BarView: View {
             if store.multiSelectedIDs.count > 1 {
                 bulkDeleteButton
             }
+            if store.hasUndoableDeletion {
+                undoButton
+            }
             moreMenu
         }
         .padding(.horizontal, 18)
@@ -102,6 +105,24 @@ struct BarView: View {
         .controlSize(.small)
         .help("Delete \(count) selected clips (⌘⌫)")
         .accessibilityLabel("Delete \(count) selected clips")
+    }
+
+    private var undoButton: some View {
+        Button {
+            store.undoLastDelete()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.uturn.backward")
+                Text("Undo")
+            }
+            .font(.system(size: 12.5, weight: .medium))
+            .lineLimit(1)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .help("Undo the last deletion (⌘Z) — available for 5 minutes")
+        .accessibilityLabel("Undo last deletion")
     }
 
     private var moreMenu: some View {

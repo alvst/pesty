@@ -80,6 +80,7 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
+        static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showMenuBarIcon = "showMenuBarIcon"
@@ -158,6 +159,13 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
 
+    /// Skips the five-minute Undo window entirely: deleted clips are purged
+    /// immediately instead of sitting recoverable (payload and all) in
+    /// store.json until the window closes.
+    var deletePermanently: Bool {
+        didSet { guard isLoaded else { return }; d.set(deletePermanently, forKey: Keys.deletePermanently) }
+    }
+
     /// Applications whose copied content should never be recorded in history.
     /// Store bundle identifiers rather than paths so the choice continues to work
     /// when an app is updated or moved.
@@ -208,6 +216,7 @@ final class Settings {
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
+            Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showMenuBarIcon: true,
@@ -228,6 +237,7 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
+        deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
