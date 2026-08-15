@@ -43,6 +43,8 @@ final class ClipboardStore {
     private var imagesDir: URL
     private var baseDir: URL
     private var saveWorkItem: DispatchWorkItem?
+    private let pinboardOrderPreference = PinboardOrderPreference()
+    private var pinboardOrder: PinboardOrder
 
     private var fileWatch: DispatchSourceFileSystemObject?
     private var ignoreWatchUntil: Date = .distantPast
@@ -67,6 +69,7 @@ final class ClipboardStore {
     var iCloudAvailable: Bool { ClipboardStore.iCloudBase != nil }
 
     private init() {
+        pinboardOrder = pinboardOrderPreference.load()
         let base = (Settings.shared.iCloudSync ? ClipboardStore.iCloudBase : nil) ?? ClipboardStore.localBase
         baseDir = base
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
@@ -238,6 +241,7 @@ final class ClipboardStore {
     func addPinboard(name: String, colorHex: String = "#5B8DEF") -> Pinboard {
         let b = Pinboard(name: name, colorHex: colorHex)
         pinboards.append(b)
+        reconcilePinboardOrder()
         scheduleSave()
         return b
     }
@@ -253,9 +257,35 @@ final class ClipboardStore {
         if case .pinboard(let cur) = source, cur == id { source = .history }
         let removedItems = pinboards[i].items
         pinboards.remove(at: i)
+        reconcilePinboardOrder()
         for item in removedItems { deleteImageFile(item) }
         reconcileMultiSelection()
         scheduleSave()
+    }
+
+    @discardableResult
+    func movePinboard(_ id: UUID, before targetID: UUID) -> Bool {
+        performPinboardMove(.before(id: id, target: targetID))
+    }
+
+    @discardableResult
+    func movePinboard(_ id: UUID, after targetID: UUID) -> Bool {
+        performPinboardMove(.after(id: id, target: targetID))
+    }
+
+    @discardableResult
+    func movePinboard(_ id: UUID, over targetID: UUID) -> Bool {
+        performPinboardMove(.over(id: id, target: targetID))
+    }
+
+    @discardableResult
+    func movePinboard(_ id: UUID, by offset: Int) -> Bool {
+        performPinboardMove(.by(id: id, offset: offset))
+    }
+
+    @discardableResult
+    func movePinboardToEnd(_ id: UUID) -> Bool {
+        performPinboardMove(.toEnd(id: id))
     }
 
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
@@ -514,6 +544,10 @@ final class ClipboardStore {
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         history = snap.history
         pinboards = snap.pinboards
+        if !pinboardOrderPreference.hasStoredOrder {
+            pinboardOrder = PinboardOrder(ids: pinboards.map(\.id))
+        }
+        reconcilePinboardOrder()
         selectFirst()
     }
 
@@ -577,6 +611,7 @@ final class ClipboardStore {
         }
         let removedBoards = pinboards.filter { set.contains($0.id) }
         pinboards.removeAll { set.contains($0.id) }
+        reconcilePinboardOrder()
         if case .pinboard(let cur) = source, set.contains(cur) { source = .history }
         for item in removedHistory + removedPinned + removedBoards.flatMap(\.items) {
             deleteImageFile(item)
@@ -597,6 +632,7 @@ final class ClipboardStore {
                 pinboards.append(Pinboard(id: b.id, name: b.name, colorHex: b.colorHex, items: []))
             }
         }
+        reconcilePinboardOrder()
         scheduleSave()
     }
 
@@ -624,6 +660,7 @@ final class ClipboardStore {
         // Placeholder board if the clip record arrives before its Pinboard record.
         if !pinboards.contains(where: { $0.id == boardID }) {
             pinboards.append(Pinboard(id: boardID, name: "Pinboard", items: []))
+            reconcilePinboardOrder()
         }
         guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
         // Legacy shared-id records: a pinboard clip also evicts the same id from history.
@@ -717,6 +754,7 @@ final class ClipboardStore {
         }
         pinboards = pinboards.map { byID[$0.id] ?? $0 }
             + byID.values.filter { b in !pinboards.contains(where: { $0.id == b.id }) }
+        reconcilePinboardOrder()
 
         combined.removeAll()
         selectFirst()
@@ -746,5 +784,26 @@ final class ClipboardStore {
     private func stopWatching() {
         fileWatch?.cancel()
         fileWatch = nil
+    }
+
+    private func reconcilePinboardOrder() {
+        pinboardOrder.reconcile(existingIDs: pinboards.map(\.id))
+
+        var byID: [UUID: Pinboard] = [:]
+        for board in pinboards where byID[board.id] == nil {
+            byID[board.id] = board
+        }
+        let reordered = pinboardOrder.ids.compactMap { byID[$0] }
+        if reordered.map(\.id) != pinboards.map(\.id) {
+            pinboards = reordered
+        }
+        pinboardOrderPreference.save(pinboardOrder)
+    }
+
+    private func performPinboardMove(_ move: PinboardOrder.Move) -> Bool {
+        guard pinboardOrder.perform(move) else { return false }
+        reconcilePinboardOrder()
+        scheduleSave()
+        return true
     }
 }
