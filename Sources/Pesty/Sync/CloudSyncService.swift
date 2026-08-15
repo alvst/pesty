@@ -31,6 +31,7 @@ final class CloudSyncService {
     // MARK: Lifecycle
 
     func start() {
+        guard AppRuntime.current.allowsCloudSync else { return }
         guard engine == nil else { return }
         CKSchema.purgeTempAssets()
         try? FileManager.default.createDirectory(at: systemFieldsDir, withIntermediateDirectories: true,
@@ -63,6 +64,7 @@ final class CloudSyncService {
     /// Manual enable from Settings. Drops the shadow map first so the next
     /// diff re-uploads every local item (Amendment 7 full reconcile).
     func enable() {
+        guard AppRuntime.current.allowsCloudSync else { return }
         shadow = [:]
         try? FileManager.default.removeItem(at: shadowURL)
         if engine == nil { start() } else { diffAndEnqueue() }

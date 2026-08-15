@@ -64,7 +64,7 @@ enum HistoryRetentionMode: String, CaseIterable, Identifiable {
 final class Settings {
     static let shared = Settings()
 
-    @ObservationIgnored private let d = UserDefaults.standard
+    @ObservationIgnored private let d: any SettingsDefaultsStore
     @ObservationIgnored private var isLoaded = false
 
     enum Keys {
@@ -194,7 +194,8 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(cloudKitSync, forKey: Keys.cloudKitSync) }
     }
 
-    private init() {
+    private init(defaults: (any SettingsDefaultsStore)? = nil) {
+        d = defaults ?? AppRuntime.current.settingsDefaults
         d.register(defaults: [
             Keys.historyLimit: 500,
             Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
