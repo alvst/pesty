@@ -8,6 +8,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     let store = ClipboardStore.shared
     let monitor = ClipboardMonitor()
+    private let copyToast = CopyToastController()
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
@@ -324,9 +325,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func copyItem(_ item: ClipItem) {
+        let previousChange = NSPasteboard.general.changeCount
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
+        if change != previousChange {
+            store.promoteCopiedItem(item)
+        }
         hideBar()
+        copyToast.show()
+    }
+
+    func copySelected() {
+        guard let item = store.selectedItem else { return }
+        copyItem(item)
     }
 
     var pasteMenuTitle: String {
@@ -550,6 +561,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case kVK_ForwardDelete:
             deleteEffectiveSelection()
             return nil
+        case kVK_ANSI_C:
+            if cmd { copySelected(); return nil }
         default:
             break
         }
