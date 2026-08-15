@@ -17,6 +17,9 @@ final class ClipboardStore {
 
     private(set) var history: [ClipItem] = []
     private(set) var pinboards: [Pinboard] = []
+    private var deletionLedger = ClipDeletionLedger()
+    private(set) var hasUndoableDeletion = false
+    private var undoExpirationWorkItem: DispatchWorkItem?
 
     var source: BarSource = .history {
         didSet { if source != oldValue { clearMultiSelection() } }
@@ -190,11 +193,18 @@ final class ClipboardStore {
     /// Deleting exactly what was removed also closes an image-file leak: the
     /// old cross-container removal deleted entries under two file names but
     /// cleaned up only one of them.
-    func delete(_ item: ClipItem) { delete(items: [item]) }
+    func delete(_ item: ClipItem, at date: Date = .now, permanently: Bool = false) {
+        delete(items: [item], at: date, permanently: permanently)
+    }
 
-    func delete(items: [ClipItem]) {
+    /// `permanently` skips the Undo ledger entirely, so the deleted content
+    /// never sits recoverable in `store.json` even for the five-minute
+    /// window — either because the user turned that off globally in
+    /// Settings, or held Option for this one deletion.
+    func delete(items: [ClipItem], at date: Date = .now, permanently: Bool = false) {
         let ids = Set(items.map(\.id))
         guard !ids.isEmpty else { return }
+        let permanently = permanently || Settings.shared.deletePermanently
         // Captured before removal so repeated deletes walk down the list
         // instead of snapping back to the newest clip every time.
         let deletedIndex = visibleItems.firstIndex(where: { ids.contains($0.id) })
@@ -202,12 +212,50 @@ final class ClipboardStore {
         let removed: [ClipItem]
         switch source {
         case .history:
-            removed = history.filter { ids.contains($0.id) }
+            let placements: [HistoryClipPlacement] = history.enumerated().compactMap { index, existing in
+                guard ids.contains(existing.id) else { return nil }
+                return HistoryClipPlacement(
+                    index: index,
+                    item: existing,
+                    predecessorID: index > 0 ? history[index - 1].id : nil,
+                    successorID: index + 1 < history.count ? history[index + 1].id : nil
+                )
+            }
+            removed = placements.map(\.item)
             history.removeAll { ids.contains($0.id) }
+            if !permanently {
+                for placement in placements {
+                    deletionLedger.recordDeletion(
+                        id: placement.item.id,
+                        payload: ClipDeletionPayload(history: [placement], pinboards: []),
+                        at: date
+                    )
+                }
+            }
         case .pinboard(let boardID):
             guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
-            removed = pinboards[boardIndex].items.filter { ids.contains($0.id) }
+            let items = pinboards[boardIndex].items
+            let placements: [PinboardClipPlacement] = items.enumerated().compactMap { index, existing in
+                guard ids.contains(existing.id) else { return nil }
+                return PinboardClipPlacement(
+                    pinboardID: boardID,
+                    index: index,
+                    item: existing,
+                    predecessorID: index > 0 ? items[index - 1].id : nil,
+                    successorID: index + 1 < items.count ? items[index + 1].id : nil
+                )
+            }
+            removed = placements.map(\.item)
             pinboards[boardIndex].items.removeAll { ids.contains($0.id) }
+            if !permanently {
+                for placement in placements {
+                    deletionLedger.recordDeletion(
+                        id: placement.item.id,
+                        payload: ClipDeletionPayload(history: [], pinboards: [placement]),
+                        at: date
+                    )
+                }
+            }
         }
         for entry in removed { deleteImageFile(entry) }
         multiSelectedIDs.subtract(ids)
@@ -222,7 +270,112 @@ final class ClipboardStore {
             selectionAnchorID = selectedID
         }
         reconcileMultiSelection()
+        _ = refreshDeletionState(at: date)
         scheduleSave()
+    }
+
+    /// Restores the newest deletion whose five-minute window is still open.
+    /// A newer active marker remains in the ledger so an older synced snapshot
+    /// cannot immediately remove the clip again. Older independent deletions
+    /// stay available, so repeated Undo presses walk backward in order.
+    @discardableResult
+    func undoLastDelete(at date: Date = .now) -> Bool {
+        let finalizedExpiredDeletion = refreshDeletionState(at: date)
+        guard let deletion = deletionLedger.undoMostRecent(at: date) else {
+            if finalizedExpiredDeletion { saveNow() }
+            return false
+        }
+
+        var restoredSomewhere = history.contains(where: { $0.id == deletion.id })
+            || pinboards.contains { $0.items.contains(where: { $0.id == deletion.id }) }
+        for placement in deletion.payload.history.sorted(by: { $0.index < $1.index }) {
+            guard !history.contains(where: { $0.id == placement.item.id }) else { continue }
+            let index = restorationIndex(
+                originalIndex: placement.index,
+                predecessorID: placement.predecessorID,
+                successorID: placement.successorID,
+                in: history
+            )
+            history.insert(placement.item, at: index)
+            restoredSomewhere = true
+        }
+        for placement in deletion.payload.pinboards {
+            guard let boardIndex = pinboards.firstIndex(where: { $0.id == placement.pinboardID }),
+                  !pinboards[boardIndex].items.contains(where: { $0.id == placement.item.id }) else {
+                continue
+            }
+            let index = restorationIndex(
+                originalIndex: placement.index,
+                predecessorID: placement.predecessorID,
+                successorID: placement.successorID,
+                in: pinboards[boardIndex].items
+            )
+            pinboards[boardIndex].items.insert(placement.item, at: index)
+            restoredSomewhere = true
+        }
+
+        // A clip that existed only in a Pinboard still needs a destination if
+        // that Pinboard was deleted during the Undo window.
+        if !restoredSomewhere, let fallback = deletion.payload.allItems.first {
+            history.insert(fallback, at: 0)
+        }
+
+        // Remove payload-only image copies for destinations that no longer
+        // exist; restored references remain protected by reachability checks.
+        for item in deletion.payload.allItems { deleteImageFile(item) }
+
+        _ = refreshDeletionState(at: date)
+        if visibleItems.contains(where: { $0.id == deletion.id }) {
+            selectedID = deletion.id
+        }
+        scheduleSave()
+        return true
+    }
+
+    private func restorationIndex(originalIndex: Int,
+                                  predecessorID: UUID?,
+                                  successorID: UUID?,
+                                  in items: [ClipItem]) -> Int {
+        if let predecessorID,
+           let index = items.firstIndex(where: { $0.id == predecessorID }) {
+            return index + 1
+        }
+        if let successorID,
+           let index = items.firstIndex(where: { $0.id == successorID }) {
+            return index
+        }
+        return min(max(0, originalIndex), items.count)
+    }
+
+    /// Recomputes observable Undo state from absolute timestamps, so sleep,
+    /// relaunch, and clock changes do not extend the five-minute window.
+    @discardableResult
+    private func refreshDeletionState(at date: Date) -> Bool {
+        let expiredPayloads = deletionLedger.finalizeExpired(at: date)
+        for payload in expiredPayloads {
+            for item in payload.allItems { deleteImageFile(item) }
+        }
+
+        hasUndoableDeletion = deletionLedger.hasUndoableDeletion(at: date)
+        scheduleNextUndoExpiration(after: date)
+        return !expiredPayloads.isEmpty
+    }
+
+    private func scheduleNextUndoExpiration(after date: Date) {
+        undoExpirationWorkItem?.cancel()
+        undoExpirationWorkItem = nil
+        guard let expiration = deletionLedger.nextExpirationDate(after: date) else { return }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let changed = self.refreshDeletionState(at: .now)
+            if changed { self.saveNow() }
+        }
+        undoExpirationWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + max(0, expiration.timeIntervalSince(date)),
+            execute: work
+        )
     }
 
     func clearHistory() {
@@ -500,6 +653,7 @@ final class ClipboardStore {
         guard let name = item.imageFileName else { return }
         let stillUsed = history.contains { $0.imageFileName == name }
             || pinboards.contains { $0.items.contains { $0.imageFileName == name } }
+            || deletionLedger.retainsImageFile(named: name)
         if stillUsed { return }
         if let url = imageURL(for: item) { try? FileManager.default.removeItem(at: url) }
     }
@@ -507,6 +661,7 @@ final class ClipboardStore {
     private struct Snapshot: Codable {
         var history: [ClipItem]
         var pinboards: [Pinboard]
+        var deletionLedger: ClipDeletionLedger?
     }
 
     private func load() {
@@ -514,7 +669,26 @@ final class ClipboardStore {
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         history = snap.history
         pinboards = snap.pinboards
+        deletionLedger = snap.deletionLedger ?? ClipDeletionLedger()
+        applyDeletionTombstones()
+        _ = refreshDeletionState(at: .now)
         selectFirst()
+    }
+
+    /// Applies durable presence markers to every location after decoding a
+    /// snapshot. This is deliberately independent of deletion-by-absence: an
+    /// older payload may coexist with its tombstone after a merge conflict.
+    private func applyDeletionTombstones() {
+        let deletedIDs = deletionLedger.deletedIDs
+        guard !deletedIDs.isEmpty else { return }
+        let isDeleted: (ClipItem) -> Bool = { deletedIDs.contains($0.id) }
+        let removed = history.filter(isDeleted)
+            + pinboards.flatMap { $0.items.filter(isDeleted) }
+        history.removeAll(where: isDeleted)
+        for index in pinboards.indices {
+            pinboards[index].items.removeAll(where: isDeleted)
+        }
+        for item in removed { deleteImageFile(item) }
     }
 
     private func scheduleSave() {
@@ -525,7 +699,7 @@ final class ClipboardStore {
     }
 
     func saveNow() {
-        let snap = Snapshot(history: history, pinboards: pinboards)
+        let snap = Snapshot(history: history, pinboards: pinboards, deletionLedger: deletionLedger)
         guard let data = try? JSONEncoder().encode(snap) else { return }
         ignoreWatchUntil = Date().addingTimeInterval(1.5)
         try? data.write(to: storeURL, options: .atomic)
@@ -697,7 +871,13 @@ final class ClipboardStore {
 
     private func mergeExternal(_ snap: Snapshot) {
         let before = history.count
-        var combined = (history + snap.history).sorted { $0.createdAt > $1.createdAt }
+        deletionLedger.merge(snap.deletionLedger ?? ClipDeletionLedger())
+        let deletedIDs = deletionLedger.deletedIDs
+        let isDeleted: (ClipItem) -> Bool = { deletedIDs.contains($0.id) }
+
+        var combined = (history + snap.history)
+            .filter { !isDeleted($0) }
+            .sorted { $0.createdAt > $1.createdAt }
         var seen = Set<String>()
         var merged: [ClipItem] = []
         for it in combined where seen.insert(contentKey(it)).inserted { merged.append(it) }
@@ -707,18 +887,23 @@ final class ClipboardStore {
         var byID: [UUID: Pinboard] = Dictionary(uniqueKeysWithValues: pinboards.map { ($0.id, $0) })
         for b in snap.pinboards {
             if var existing = byID[b.id] {
-                for it in b.items where !existing.items.contains(where: { $0.sameContent(as: it) }) {
+                for it in b.items
+                where !isDeleted(it) && !existing.items.contains(where: { $0.sameContent(as: it) }) {
                     existing.items.append(it)
                 }
+                existing.items.removeAll(where: isDeleted)
                 byID[b.id] = existing
             } else {
-                byID[b.id] = b
+                var filtered = b
+                filtered.items.removeAll(where: isDeleted)
+                byID[b.id] = filtered
             }
         }
         pinboards = pinboards.map { byID[$0.id] ?? $0 }
             + byID.values.filter { b in !pinboards.contains(where: { $0.id == b.id }) }
 
         combined.removeAll()
+        _ = refreshDeletionState(at: .now)
         selectFirst()
         if history.count != before || !snap.history.isEmpty { saveNow() }
     }

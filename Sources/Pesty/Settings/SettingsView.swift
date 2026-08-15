@@ -200,6 +200,10 @@ private struct GeneralSettings: View {
             #endif
 
             Section("Data") {
+                Toggle("Delete permanently", isOn: $settings.deletePermanently)
+                Text("Skips the five-minute Undo window — deleted clips are removed immediately and can't be recovered. Hold Option while deleting to bypass Undo for just one deletion, regardless of this setting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("Clear Clipboard History", role: .destructive) {
                     ClipboardStore.shared.clearHistory()
                 }
