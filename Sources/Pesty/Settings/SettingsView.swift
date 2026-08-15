@@ -137,9 +137,10 @@ private struct GeneralSettings: View {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
                 VStack(alignment: .leading) {
-                    LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
+                    LabeledContent("Bar height", value: "\(Int(settings.barHeight)) pt")
                     Slider(value: $settings.barHeight, in: 300...720, step: 10)
                 }
+                Toggle("Show resize handle on the Paste Bar", isOn: $settings.showBarResizeHandle)
                 #if MAS
                 Text("Select a clip to copy it, then press ⌘V to paste it into your app.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -206,6 +207,9 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: settings.barHeight) { _, _ in
+            AppController.shared.updateConfiguredBarHeight()
+        }
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
