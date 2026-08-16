@@ -140,6 +140,7 @@ struct BarView: View {
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.92).combined(with: .opacity),
                                 removal: .opacity))
+                            .modifier(PinboardItemReorderTarget(item: item, source: store.source))
                     }
                 }
                 .padding(.horizontal, Theme.cardStripHorizontalPadding)
@@ -214,4 +215,60 @@ struct RectCorner: OptionSet {
     static let topRight = RectCorner(rawValue: 1 << 1)
     static let bottomLeft = RectCorner(rawValue: 1 << 2)
     static let bottomRight = RectCorner(rawValue: 1 << 3)
+}
+
+/// Lets a pinned clip's card be dropped onto another card within the same
+/// Pinboard to reorder them. History stays chronological — this only
+/// activates while viewing a Pinboard, where the stored item order is the
+/// only thing determining display order in the first place.
+private struct PinboardItemReorderTarget: ViewModifier {
+    let item: ClipItem
+    let source: BarSource
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        if case .pinboard(let boardID) = source {
+            content
+                .overlay(alignment: .leading) {
+                    if isTargeted {
+                        CardInsertionCaret(color: Theme.selection)
+                            .offset(x: -Theme.cardSpacing / 2 - 1.5)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onDrop(of: [ClipDragProvider.clipIdentifierType], isTargeted: $isTargeted) { providers in
+                    guard let provider = providers.first else { return false }
+                    _ = provider.loadDataRepresentation(forTypeIdentifier: ClipDragProvider.clipIdentifierType) { data, _ in
+                        guard let data, let idString = String(data: data, encoding: .utf8),
+                              let draggedID = UUID(uuidString: idString) else { return }
+                        DispatchQueue.main.async {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
+                                _ = ClipboardStore.shared.movePinboardItem(draggedID, in: boardID, before: item.id)
+                            }
+                        }
+                    }
+                    return true
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// A text-cursor-style "I-beam" sized to a card's height, shown at the
+/// leading edge of whichever card a dragged clip is currently over — the
+/// same visual language as the Pinboard tab row's own insertion caret.
+private struct CardInsertionCaret: View {
+    var color: Color
+    var capWidth: CGFloat = 12
+    var lineWidth: CGFloat = 3
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule().fill(color).frame(width: capWidth, height: lineWidth)
+            Rectangle().fill(color).frame(width: lineWidth)
+            Capsule().fill(color).frame(width: capWidth, height: lineWidth)
+        }
+        .frame(maxHeight: .infinity)
+    }
 }

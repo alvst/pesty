@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -267,6 +268,23 @@ struct PinboardTabs: View {
         Button { beginRenaming(board) } label: {
             Label("Rename…", systemImage: "pencil")
         }
+        Menu {
+            ForEach(PinboardColorOption.all) { color in
+                Button {
+                    store.setPinboardColor(board.id, to: color.hex)
+                } label: {
+                    let isCurrent = board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame
+                    Label {
+                        Text(isCurrent ? "\(color.name) ✓" : color.name)
+                    } icon: {
+                        Image(nsImage: Self.colorSwatchIcon(hex: color.hex))
+                            .renderingMode(.original)
+                    }
+                }
+            }
+        } label: {
+            Label("Color", systemImage: "paintpalette")
+        }
         Divider()
         Button { store.movePinboard(board.id, by: -1) } label: {
             Label("Move Left", systemImage: "arrow.left")
@@ -476,6 +494,40 @@ struct PinboardTabs: View {
         renameSession = nil
         if focusedRenameID == boardID { focusedRenameID = nil }
     }
+
+    /// SwiftUI shapes (e.g. `Circle().fill(...)`) don't render inside a
+    /// native NSMenu item's label — the menu bridge only draws image
+    /// content. Rasterize the swatch as a real, non-template `NSImage`
+    /// instead.
+    private static func colorSwatchIcon(hex: String) -> NSImage {
+        let color = NSColor(Color(hex: hex) ?? .accentColor)
+        let size = NSSize(width: 12, height: 12)
+        let image = NSImage(size: size, flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+}
+
+private struct PinboardColorOption: Identifiable {
+    let name: String
+    let hex: String
+
+    var id: String { hex }
+
+    static let all = [
+        Self(name: "Red", hex: "#FF3B5C"),
+        Self(name: "Orange", hex: "#FF8A2B"),
+        Self(name: "Yellow", hex: "#F5B700"),
+        Self(name: "Green", hex: "#34C759"),
+        Self(name: "Blue", hex: "#0A84FF"),
+        Self(name: "Purple", hex: "#BF3BE0"),
+        Self(name: "Pink", hex: "#FF2D55"),
+        Self(name: "Gray", hex: "#98989F")
+    ]
 }
 
 private struct PinboardMoveAccessibilityActions: ViewModifier {

@@ -252,6 +252,12 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    func setPinboardColor(_ id: UUID, to colorHex: String) {
+        guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
+        pinboards[i].colorHex = colorHex
+        scheduleSave()
+    }
+
     func deletePinboard(_ id: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         if case .pinboard(let cur) = source, cur == id { source = .history }
@@ -312,6 +318,25 @@ final class ClipboardStore {
     func item(withID id: UUID) -> ClipItem? {
         if let item = history.first(where: { $0.id == id }) { return item }
         return pinboards.lazy.flatMap(\.items).first(where: { $0.id == id })
+    }
+
+    /// Reorders a pinned clip within its own Pinboard. Unlike history, a
+    /// Pinboard's display order is just its stored item order — there's no
+    /// separate order-tracking layer to keep in sync, since nothing else
+    /// derives meaning from a Pinboard's array order.
+    @discardableResult
+    func movePinboardItem(_ itemID: UUID, in boardID: UUID, before targetID: UUID) -> Bool {
+        guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }),
+              itemID != targetID,
+              let sourceIndex = pinboards[boardIndex].items.firstIndex(where: { $0.id == itemID }) else { return false }
+        var items = pinboards[boardIndex].items
+        let item = items.remove(at: sourceIndex)
+        guard let targetIndex = items.firstIndex(where: { $0.id == targetID }) else { return false }
+        items.insert(item, at: targetIndex)
+        guard items.map(\.id) != pinboards[boardIndex].items.map(\.id) else { return false }
+        pinboards[boardIndex].items = items
+        scheduleSave()
+        return true
     }
 
     @discardableResult
