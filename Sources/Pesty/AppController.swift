@@ -377,6 +377,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         // the source app. Escape/click dismissal keeps its slide-out motion.
         hideBar(immediately: true)
         PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
+        if Settings.shared.promoteOnPaste {
+            store.promoteCopiedItem(item)
+        }
     }
 
     func copyItem(_ item: ClipItem) {
@@ -665,6 +668,27 @@ final class AppController: NSObject, NSApplicationDelegate {
                 barController?.bringToFront()
             }
             suppressAutoHide = false
+        }
+    }
+
+    private var warnedAccessibilityThisLaunch = false
+
+    /// Direct paste silently degrading to copy-only reads as "paste is
+    /// broken". Explain once per launch, with a shortcut to the grant.
+    func reportMissingAccessibilityForDirectPaste() {
+        guard !warnedAccessibilityThisLaunch else { return }
+        warnedAccessibilityThisLaunch = true
+        suppressAutoHide = true
+        defer { suppressAutoHide = false }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Pesty-Alvie can\u{2019}t paste directly"
+        alert.informativeText = "The clip was copied, but macOS is blocking the automatic \u{2318}V because Accessibility permission isn\u{2019}t granted (a rebuilt app needs re-granting). Paste manually with \u{2318}V, or grant access in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "OK")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -1063,6 +1087,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         case kVK_DownArrow:
             moveBarSelection(by: 1); return nil
         case kVK_Delete:
+            // ⌘⌫ during an active search means "delete to line start" in the
+            // field — never "destroy the selected clip". Text-field semantics
+            // win the whole time a query is being edited.
+            if cmd, store.barInputMode == .search || barController?.searchOwnsFirstResponder == true {
+                return event
+            }
             // Backspace edits the query before it can remove a filtered stack
             // entry. This matches the existing Clipboard search behavior.
             if !cmd, !store.searchText.isEmpty {

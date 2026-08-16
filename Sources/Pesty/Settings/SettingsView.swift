@@ -181,6 +181,8 @@ private struct GeneralSettings: View {
                             settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
                             Divider()
                             #endif
+                            settingToggle("Move pasted clips to the top of history", isOn: $settings.promoteOnPaste)
+                            Divider()
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
                             settingToggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                             Divider()

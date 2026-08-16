@@ -245,6 +245,7 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let playSoundOnCopy = "playSoundOnCopy"
+        static let promoteOnPaste = "promoteOnPaste"
         static let ignoreConcealed = "ignoreConcealed"
         static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
@@ -361,6 +362,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(playSoundOnCopy, forKey: Keys.playSoundOnCopy) }
     }
 
+    var promoteOnPaste: Bool {
+        didSet { guard isLoaded else { return }; d.set(promoteOnPaste, forKey: Keys.promoteOnPaste) }
+    }
+
     var ignoreConcealed: Bool {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
@@ -462,6 +467,7 @@ final class Settings {
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.playSoundOnCopy: true,
+            Keys.promoteOnPaste: true,
             Keys.ignoreConcealed: true,
             Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
@@ -496,6 +502,7 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
+        promoteOnPaste = d.bool(forKey: Keys.promoteOnPaste)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
