@@ -79,6 +79,7 @@ final class Settings {
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
+        static let promoteOnPaste = "promoteOnPaste"
         static let ignoreConcealed = "ignoreConcealed"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
@@ -154,6 +155,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(playSound, forKey: Keys.playSound) }
     }
 
+    var promoteOnPaste: Bool {
+        didSet { guard isLoaded else { return }; d.set(promoteOnPaste, forKey: Keys.promoteOnPaste) }
+    }
+
     var ignoreConcealed: Bool {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
@@ -207,6 +212,7 @@ final class Settings {
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
+            Keys.promoteOnPaste: true,
             Keys.ignoreConcealed: true,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
@@ -227,6 +233,7 @@ final class Settings {
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
+        promoteOnPaste = d.bool(forKey: Keys.promoteOnPaste)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
