@@ -28,6 +28,17 @@ struct BarView: View {
             guard store.inlinePreviewVisible else { return }
             DispatchQueue.main.async { updateFloatingPreview() }
         }
+        .overlay(alignment: .top) {
+            if settings.showBarResizeHandle {
+                BarResizeHandle(
+                    accessibilityValue: CGFloat(settings.barHeight),
+                    onBegin: AppController.shared.beginBarResize,
+                    onChange: AppController.shared.updateBarResize,
+                    onEnd: AppController.shared.endBarResize,
+                    onCancel: AppController.shared.cancelBarResize,
+                    onAccessibilityAdjustment: AppController.shared.adjustBarHeight)
+            }
+        }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
     }
