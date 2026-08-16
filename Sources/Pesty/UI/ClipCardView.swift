@@ -44,8 +44,22 @@ struct ClipCardView: View {
         .onTapGesture { store.select(item.id) }
         .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { store.extendSelection(to: item.id) })
         .highPriorityGesture(TapGesture().modifiers(.command).onEnded { store.toggleSelection(item.id) })
-        .onDrag { ClipDragProvider.make(for: item) }
         .contextMenu { menu }
+        .overlay {
+            // Writers are built lazily at drag start: constructing them here
+            // would re-encode every image clip on every card render, and a
+            // hover re-renders constantly.
+            if ClipDragProvider.canDrag(item) {
+                ClipDragSource(
+                    makeWriters: { ClipDragProvider.pasteboardWriters(for: item) },
+                    onSelect: { store.select(item.id) },
+                    onToggleSelect: { store.toggleSelection(item.id) },
+                    onExtendSelect: { store.extendSelection(to: item.id) },
+                    onOpen: { AppController.shared.pasteItem(item) },
+                    onDragExitedBar: { AppController.shared.hideBar() }
+                )
+            }
+        }
     }
 
     private var header: some View {

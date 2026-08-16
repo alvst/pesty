@@ -3,65 +3,105 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum ClipDragProvider {
-    private static let colorTypeIdentifier = "com.apple.cocoa.pasteboard.color"
+    static func fileURLs(for item: ClipItem) -> [URL] {
+        guard item.type == .file else { return [] }
+        return item.fileURLs.compactMap { value in
+            guard let url = URL(string: value), url.isFileURL else { return nil }
+            return url
+        }
+    }
 
-    static func make(for item: ClipItem) -> NSItemProvider {
-        let provider = NSItemProvider()
+    /// A cheap draggability test for view code. This is deliberately not
+    /// `!pasteboardWriters(for:).isEmpty`: building writers reads and
+    /// re-encodes an image clip's full bitmap, far too heavy for something
+    /// SwiftUI evaluates on every card render. Views gate on this and build
+    /// the writers only once a drag actually starts.
+    static func canDrag(_ item: ClipItem) -> Bool {
         switch item.type {
-        case .image:
-            registerImage(item, on: provider)
         case .file:
-            let urls = item.fileURLs.compactMap(URL.init(string:)).filter(\.isFileURL)
-            if urls.count == 1, let url = urls.first {
-                provider.registerObject(url as NSURL, visibility: .all)
-                provider.suggestedName = url.lastPathComponent
-            } else {
-                registerText(item.text ?? item.displayTitle, on: provider)
-            }
-        case .link:
-            if let text = item.text, let url = URL(string: text) {
-                provider.registerObject(url as NSURL, visibility: .all)
-            }
-            registerText(item.text ?? "", on: provider)
-        case .color:
-            if let hex = item.colorHex, let color = NSColor(hex: hex),
-               let data = try? NSKeyedArchiver.archivedData(withRootObject: color, requiringSecureCoding: true) {
-                register(data, as: colorTypeIdentifier, on: provider)
-            }
-            registerText(item.colorHex ?? "", on: provider)
+            return !fileURLs(for: item).isEmpty
+        case .image:
+            return item.imageFileName != nil
         case .richText:
-            if let rtf = item.rtfData {
-                register(rtf, as: UTType.rtf.identifier, on: provider)
-            }
-            registerText(item.text ?? "", on: provider)
+            return item.rtfData != nil || item.text != nil
+        case .link, .text:
+            return item.text != nil
+        case .color:
+            return item.colorHex != nil
+        }
+    }
+
+    /// The full set of pasteboard writers for dragging this clip out - one
+    /// per file for `.file` clips (so a multi-file clip drags as that many
+    /// items, matching how Finder itself hands off a multi-selection), or a
+    /// single `NSPasteboardItem` for everything else. Empty when the clip has
+    /// nothing draggable.
+    ///
+    /// `NSDraggingItem` needs an `NSPasteboardWriting` conformer, which
+    /// `NSItemProvider` doesn't satisfy - SwiftUI's `.onDrag` bridges that
+    /// gap privately, but a native `NSDraggingSession` has to build its own
+    /// `NSPasteboardItem` instead.
+    static func pasteboardWriters(for item: ClipItem) -> [NSPasteboardWriting] {
+        switch item.type {
+        case .file:
+            return fileURLs(for: item).map { $0 as NSURL }
+        default:
+            guard let writer = pasteboardItem(for: item) else { return [] }
+            return [writer]
+        }
+    }
+
+    private static func pasteboardItem(for item: ClipItem) -> NSPasteboardItem? {
+        let pbItem = NSPasteboardItem()
+
+        switch item.type {
         case .text:
-            registerText(item.text ?? "", on: provider)
-        }
-        if provider.suggestedName == nil { provider.suggestedName = item.displayTitle }
-        return provider
-    }
+            guard let text = item.text else { return nil }
+            pbItem.setString(text, forType: .string)
 
-    private static func registerImage(_ item: ClipItem, on provider: NSItemProvider) {
-        guard let url = ClipboardStore.shared.imageURL(for: item) else { return }
-        provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
-            do {
-                completion(try Data(contentsOf: url), nil)
-            } catch {
-                completion(nil, error)
+        case .richText:
+            guard item.rtfData != nil || item.text != nil else { return nil }
+            if let rtfData = item.rtfData {
+                pbItem.setData(rtfData, forType: .rtf)
             }
+            if let text = item.text {
+                pbItem.setString(text, forType: .string)
+            }
+
+        case .link:
+            guard let text = item.text, let url = linkURL(from: text) else { return nil }
+            pbItem.setString(url.absoluteString, forType: .URL)
+            pbItem.setString(text, forType: .string)
+
+        case .color:
+            guard let hex = item.colorHex, let color = NSColor(hex: hex) else { return nil }
+            guard let data = try? NSKeyedArchiver.archivedData(
+                withRootObject: color, requiringSecureCoding: true
+            ) else { return nil }
+            pbItem.setData(data, forType: .color)
+            pbItem.setString(hex, forType: .string)
+
+        case .image:
+            guard let imageURL = ClipboardStore.shared.imageURL(for: item),
+                  let data = try? Data(contentsOf: imageURL, options: .mappedIfSafe) else { return nil }
+            pbItem.setData(data, forType: NSPasteboard.PasteboardType(UTType.png.identifier))
+            if let image = NSImage(contentsOf: imageURL), let tiff = image.tiffRepresentation {
+                pbItem.setData(tiff, forType: .tiff)
+            }
+
+        case .file:
             return nil
         }
-        provider.suggestedName = "Pesty Image \(item.id.uuidString.prefix(8)).png"
+
+        return pbItem
     }
 
-    private static func registerText(_ text: String, on provider: NSItemProvider) {
-        register(Data(text.utf8), as: UTType.utf8PlainText.identifier, on: provider)
-    }
-
-    private static func register(_ data: Data, as identifier: String, on provider: NSItemProvider) {
-        provider.registerDataRepresentation(forTypeIdentifier: identifier, visibility: .all) { completion in
-            completion(data, nil)
-            return nil
-        }
+    private static func linkURL(from text: String) -> URL? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else { return nil }
+        return url
     }
 }

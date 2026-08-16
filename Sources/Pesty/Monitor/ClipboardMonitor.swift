@@ -38,6 +38,19 @@ final class ClipboardMonitor {
         ClipboardStore.shared.addCaptured(item)
     }
 
+    /// Every file in a multi-file copy, not just the first. Some sources put
+    /// each file in its own pasteboard item, others only fill the legacy
+    /// filenames array and leave a single URL item behind — reading both and
+    /// keeping the longer list captures the whole selection either way.
+    private func copiedFileURLs() -> [URL]? {
+        let fromItems = (pasteboard.readObjects(forClasses: [NSURL.self],
+                                                options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        let legacy = pasteboard.propertyList(forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+        let fromFilenames = (legacy as? [String])?.map { URL(fileURLWithPath: $0) } ?? []
+        let urls = fromFilenames.count > fromItems.count ? fromFilenames : fromItems
+        return urls.isEmpty ? nil : urls
+    }
+
     private func makeItem() -> ClipItem? {
         let types = pasteboard.types ?? []
 
