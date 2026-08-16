@@ -111,6 +111,37 @@ private struct GeneralSettings: View {
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     #endif
 
+    @State private var storageBytes: Int64?
+
+    private var storageSummary: String {
+        let count = ClipboardStore.shared.history.count
+        let clips = "\(count) clip\(count == 1 ? "" : "s")"
+        guard let storageBytes else { return clips }
+        return "\(clips) · \(ByteCountFormatter.string(fromByteCount: storageBytes, countStyle: .file))"
+    }
+
+    private func refreshStorageSize() async {
+        let dir = ClipboardStore.shared.dataDirectory
+        storageBytes = await Task.detached(priority: .utility) {
+            Self.directorySize(at: dir)
+        }.value
+    }
+
+    /// Walks the store directory off the main actor; images can make it
+    /// large enough that a synchronous walk would hitch the Settings window.
+    nonisolated private static func directorySize(at url: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(at: url,
+                                                              includingPropertiesForKeys: Array(keys)) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            guard let values = try? file.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
+        }
+        return total
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -156,6 +187,16 @@ private struct GeneralSettings: View {
                                 Text(settings.historyRetention.description)
                                     .font(.caption).foregroundStyle(.secondary)
                             }
+                            Divider()
+                            HStack {
+                                Text("Currently storing")
+                                    .font(.system(size: 14))
+                                Spacer()
+                                Text(storageSummary)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 10)
                             Divider()
                             settingToggle("Delete permanently", isOn: $settings.deletePermanently)
                             Text("Skips the five-minute Undo window — deleted clips are removed immediately and can't be recovered. Hold Option while deleting to bypass Undo for just one deletion, regardless of this setting.")
@@ -353,6 +394,7 @@ private struct GeneralSettings: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color.clear)
+        .task { await refreshStorageSize() }
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in

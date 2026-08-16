@@ -74,6 +74,10 @@ final class ClipboardStore {
         if Settings.shared.iCloudSync { startWatching() }
     }
 
+    /// The on-disk store root (history JSON plus saved images), exposed so
+    /// Settings can report how much space history actually uses.
+    var dataDirectory: URL { baseDir }
+
     private func prepareDirectories() {
         let fm = FileManager.default
         try? fm.createDirectory(at: imagesDir, withIntermediateDirectories: true,
