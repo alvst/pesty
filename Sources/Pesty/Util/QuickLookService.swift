@@ -10,6 +10,7 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     private var orderedStartIndexes: [(index: Int, id: UUID)] = []
     private var indexObservation: NSKeyValueObservation?
     private var closeObservation: NSObjectProtocol?
+    private var resizeObservation: NSObjectProtocol?
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("Pesty-QuickLook", isDirectory: true)
 
@@ -18,14 +19,19 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     /// This is how the bar's selection (and its highlight) stays in sync with
     /// whatever the panel is currently showing.
     var onSelectionChange: ((UUID) -> Void)?
+    /// The panel left the screen — via `dismiss()`, or natively through its
+    /// own Space/Esc handling, which never calls into this service at all.
+    /// `willClose` is the one signal common to every path.
+    var onPanelDidClose: (() -> Void)?
 
     private override init() {}
 
     var isVisible: Bool { QLPreviewPanel.shared()?.isVisible ?? false }
 
     func dismiss() {
-        QLPreviewPanel.shared()?.orderOut(nil)
-        purgeTemporaryFiles()
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible else { return }
+        panel.orderOut(nil)
+        panelDidClose()
     }
 
     func toggle(items: [ClipItem], selectedID: UUID?) {
@@ -54,16 +60,18 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
         panel.makeKeyAndOrderFront(nil)
-        observeIndexChanges(panel)
+        recenterPanel()
+        observePanel(panel)
     }
 
     func updateSelection(selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared(), panel.isVisible,
-              let selectedID, let index = startIndexByClipID[selectedID] else { return }
+              let selectedID, let index = startIndexByClipID[selectedID],
+              panel.currentPreviewItemIndex != index else { return }
         panel.currentPreviewItemIndex = index
     }
 
-    private func observeIndexChanges(_ panel: QLPreviewPanel) {
+    private func observePanel(_ panel: QLPreviewPanel) {
         indexObservation = panel.observe(\.currentPreviewItemIndex, options: [.new]) { [weak self] _, change in
             guard let index = change.newValue, index >= 0 else { return }
             DispatchQueue.main.async {
@@ -71,16 +79,43 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
                 self.onSelectionChange?(id)
             }
         }
+        if resizeObservation == nil {
+            // The panel resizes itself to each item's natural size, keeping a
+            // corner anchored. Re-centering on every content resize keeps the
+            // preview's center fixed instead; live user resizes are left alone.
+            resizeObservation = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResizeNotification, object: panel, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { QuickLookService.shared.recenterPanel() }
+            }
+        }
         if closeObservation == nil {
             // Space/Esc inside the panel close it natively without going
-            // through dismiss(); willClose is the signal common to every
-            // such path, so the preview files never linger past the panel.
+            // through dismiss(); willClose is the one signal common to every
+            // such path.
             closeObservation = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification, object: panel, queue: .main
             ) { _ in
-                MainActor.assumeIsolated { QuickLookService.shared.purgeTemporaryFiles() }
+                MainActor.assumeIsolated { QuickLookService.shared.panelDidClose() }
             }
         }
+    }
+
+    /// Keeps the panel's center on the screen's center. setFrameOrigin only
+    /// moves the window, so this cannot re-trigger the resize notification.
+    private func recenterPanel() {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
+              let screen = panel.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let frame = panel.frame
+        panel.setFrameOrigin(NSPoint(x: visible.midX - frame.width / 2,
+                                     y: visible.midY - frame.height / 2))
+    }
+
+    private func panelDidClose() {
+        indexObservation = nil
+        purgeTemporaryFiles()
+        onPanelDidClose?()
     }
 
     /// A clip can own more than one preview item (e.g. multiple files), so

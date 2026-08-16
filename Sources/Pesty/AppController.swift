@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+@preconcurrency import QuickLookUI
 
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -48,6 +49,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         QuickLookService.shared.onSelectionChange = { [weak self] id in
             self?.store.selectedID = id
+        }
+        QuickLookService.shared.onPanelDidClose = { [weak self] in
+            self?.quickLookDidClose()
         }
 
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
@@ -274,6 +278,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// RegisterEventHotKey failure during display churn would leave the app with no
     /// hotkey at all until the next relaunch - the exact bug this is meant to fix.
     @objc private func screenParametersChanged() {
+        // Quick Look never outlives the bar — including when a screen change
+        // force-hides it directly, bypassing hideBar()'s own dismiss.
+        QuickLookService.shared.dismiss()
         barController?.forceHide()
         stopKeyMonitor()
     }
@@ -301,6 +308,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         stopKeyMonitor()
         QuickLookService.shared.dismiss()
         barController?.hide()
+    }
+
+    /// Quick Look is a companion surface to the bar: when it closes — by its
+    /// own Space/Esc handling, its close button, or `dismiss()` — the bar is
+    /// normally still up and simply retakes key focus on its own. The one
+    /// case that needs help is the bar having gone away too (e.g. a screen
+    /// change tore it down while the panel stayed up): hand focus back to
+    /// the app the user came from, unless another Pesty window like Settings
+    /// is exactly what now holds key — stealing focus back from a window the
+    /// user just clicked would make it unusable.
+    private func quickLookDidClose() {
+        guard NSApp.isActive, barController?.isPresented != true else { return }
+        if let key = NSApp.keyWindow, key === settingsWindow { return }
+        guard let target = previousApp ?? lastActiveApp, !target.isTerminated else { return }
+        target.activate()
     }
 
     func pasteSelected() {
@@ -495,6 +517,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        // While Quick Look is key its native arrows/Space/Esc run untouched —
+        // that's how its selection stays in the same event turn as its own
+        // panel. Clipboard shortcuts still belong to the bar's selection
+        // though, since the panel's own responder chain has no idea what
+        // "Copy" means here.
+        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared()?.isKeyWindow == true {
+            if Int(event.keyCode) == kVK_ANSI_C, event.modifierFlags.contains(.command) {
+                if let item = store.selectedItem { copyItem(item) }
+                return nil
+            }
+            return event
+        }
+
         // Events belonging to a native context menu, editor, alert, or the
         // Settings window must stay with their own responder chain. The bar
         // monitor is only responsible for keys delivered to the panel itself.
