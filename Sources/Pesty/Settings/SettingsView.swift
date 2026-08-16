@@ -146,6 +146,33 @@ private struct GeneralSettings: View {
                 #endif
             }
 
+            Section("Clip Previews") {
+                Picker("Preview style", selection: $settings.clipPreviewStyle) {
+                    ForEach(ClipPreviewStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                Text(settings.clipPreviewStyle.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Open Clips With") {
+                previewApplicationRow(for: .text)
+                previewApplicationRow(for: .image)
+                previewApplicationRow(for: .link)
+                HStack {
+                    Text("Restore Apple defaults")
+                    Spacer()
+                    Button("Restore") {
+                        settings.restorePreviewApplicationDefaults()
+                    }
+                }
+                Text("These set the one-click app in Inline Pesty previews. Use its arrow to choose a different app just once.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             #if MAS
             Section("Sync") {
                 Toggle("Sync history with iCloud", isOn: Binding(
@@ -232,6 +259,51 @@ private struct GeneralSettings: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .frame(minWidth: 118)
+    }
+
+    private func previewApplicationRow(for target: PreviewOpenTarget) -> some View {
+        let bundleID = settings.previewApplicationBundleID(for: target)
+        return HStack(spacing: 10) {
+            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(target.title)
+                Text(applicationName(for: bundleID))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("Change…") {
+                choosePreviewApplication(for: target)
+            }
+        }
+    }
+
+    private func choosePreviewApplication(for target: PreviewOpenTarget) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Default App for \(target.title)"
+        panel.message = "Pesty will use this app when opening \(target.title.lowercased()) from an inline preview."
+        panel.prompt = "Choose App"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
+        settings.setPreviewApplicationBundleID(bundleID, for: target)
+    }
+
+    private func applicationName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let bundle = Bundle(url: url) else { return bundleID }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? bundleID
     }
 }
 

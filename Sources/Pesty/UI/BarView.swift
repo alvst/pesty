@@ -3,6 +3,7 @@ import SwiftUI
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @State private var cardFrames: [UUID: CGRect] = [:]
 
     var body: some View {
         ZStack {
@@ -14,8 +15,29 @@ struct BarView: View {
                 strip
             }
         }
+        .coordinateSpace(name: "PestyBar")
+        .onPreferenceChange(ClipCardFramePreferenceKey.self) {
+            cardFrames = $0
+            updateFloatingPreview()
+        }
+        .onChange(of: store.inlinePreviewVisible) { _, visible in
+            guard visible else { return }
+            DispatchQueue.main.async { updateFloatingPreview() }
+        }
+        .onChange(of: store.selectedID) { _, _ in
+            guard store.inlinePreviewVisible else { return }
+            DispatchQueue.main.async { updateFloatingPreview() }
+        }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+    }
+
+    private func updateFloatingPreview() {
+        guard settings.clipPreviewStyle == .inlinePesty,
+              store.inlinePreviewVisible,
+              let item = store.selectedItem,
+              let frame = cardFrames[item.id] else { return }
+        AppController.shared.updateInlinePreview(item: item, cardFrame: frame)
     }
 
     @ViewBuilder
@@ -42,6 +64,7 @@ struct BarView: View {
             PinboardTabs()
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if settings.clipPreviewStyle == .inlinePesty { previewButton }
             if store.multiSelectedIDs.count > 1 {
                 bulkDeleteButton
             }
@@ -87,6 +110,17 @@ struct BarView: View {
         .fixedSize(horizontal: true, vertical: false)
         .background(store.searchText.isEmpty ? Color.clear : Theme.fieldBG, in: Capsule())
         .animation(.easeOut(duration: 0.15), value: store.searchText.isEmpty)
+    }
+
+    private var previewButton: some View {
+        Button { AppController.shared.toggleInlinePreview() } label: {
+            Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.chromeTextSecondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .help(store.inlinePreviewVisible ? "Hide clip preview" : "Show clip preview")
     }
 
     private var bulkDeleteButton: some View {
@@ -136,6 +170,13 @@ struct BarView: View {
                         ClipCardView(item: item,
                                      index: index,
                                      selected: store.isSelected(item.id))
+                            .background {
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: ClipCardFramePreferenceKey.self,
+                                        value: [item.id: proxy.frame(in: .named("PestyBar"))])
+                                }
+                            }
                             .id(item.id)
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.92).combined(with: .opacity),
@@ -177,6 +218,14 @@ struct BarView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.chromeTextSecondary)
         }
+    }
+}
+
+private struct ClipCardFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
     }
 }
 

@@ -2,6 +2,51 @@ import AppKit
 import Carbon.HIToolbox
 import Observation
 
+enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
+    case nativeQuickLook
+    case inlinePesty
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .nativeQuickLook: "Native Quick Look"
+        case .inlinePesty: "Inline Pesty preview"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .nativeQuickLook: "Open a macOS Quick Look panel with Space."
+        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty."
+        }
+    }
+}
+
+enum PreviewOpenTarget: CaseIterable, Identifiable {
+    case text
+    case image
+    case link
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .text: "Text & rich text"
+        case .image: "Images"
+        case .link: "Links"
+        }
+    }
+
+    var defaultApplicationBundleID: String {
+        switch self {
+        case .text: "com.apple.TextEdit"
+        case .image: "com.apple.Preview"
+        case .link: "com.apple.Safari"
+        }
+    }
+}
+
 enum ShortcutModifier: CaseIterable, Identifiable {
     case command
     case option
@@ -80,6 +125,10 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
+        static let clipPreviewStyle = "clipPreviewStyle"
+        static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
+        static let previewImageApplicationBundleID = "previewImageApplicationBundleID"
+        static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showMenuBarIcon = "showMenuBarIcon"
@@ -158,6 +207,26 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
 
+    var clipPreviewStyle: ClipPreviewStyle {
+        didSet {
+            guard isLoaded else { return }
+            d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle)
+            if clipPreviewStyle != .inlinePesty { AppController.shared.hideInlinePreview() }
+        }
+    }
+
+    var previewTextApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewTextApplicationBundleID, forKey: Keys.previewTextApplicationBundleID) }
+    }
+
+    var previewImageApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewImageApplicationBundleID, forKey: Keys.previewImageApplicationBundleID) }
+    }
+
+    var previewLinkApplicationBundleID: String {
+        didSet { guard isLoaded else { return }; d.set(previewLinkApplicationBundleID, forKey: Keys.previewLinkApplicationBundleID) }
+    }
+
     /// Applications whose copied content should never be recorded in history.
     /// Store bundle identifiers rather than paths so the choice continues to work
     /// when an app is updated or moved.
@@ -208,6 +277,10 @@ final class Settings {
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
+            Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
+            Keys.previewImageApplicationBundleID: PreviewOpenTarget.image.defaultApplicationBundleID,
+            Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showMenuBarIcon: true,
@@ -228,6 +301,13 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
+        clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)
+            ?? PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = d.string(forKey: Keys.previewImageApplicationBundleID)
+            ?? PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = d.string(forKey: Keys.previewLinkApplicationBundleID)
+            ?? PreviewOpenTarget.link.defaultApplicationBundleID
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
@@ -259,5 +339,28 @@ final class Settings {
 
     func removeIgnoredSourceApp(_ bundleID: String) {
         ignoredSourceAppBundleIDs.removeAll { $0 == bundleID }
+    }
+
+    func previewApplicationBundleID(for target: PreviewOpenTarget) -> String {
+        switch target {
+        case .text: previewTextApplicationBundleID
+        case .image: previewImageApplicationBundleID
+        case .link: previewLinkApplicationBundleID
+        }
+    }
+
+    func setPreviewApplicationBundleID(_ bundleID: String, for target: PreviewOpenTarget) {
+        guard !bundleID.isEmpty else { return }
+        switch target {
+        case .text: previewTextApplicationBundleID = bundleID
+        case .image: previewImageApplicationBundleID = bundleID
+        case .link: previewLinkApplicationBundleID = bundleID
+        }
+    }
+
+    func restorePreviewApplicationDefaults() {
+        previewTextApplicationBundleID = PreviewOpenTarget.text.defaultApplicationBundleID
+        previewImageApplicationBundleID = PreviewOpenTarget.image.defaultApplicationBundleID
+        previewLinkApplicationBundleID = PreviewOpenTarget.link.defaultApplicationBundleID
     }
 }
