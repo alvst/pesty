@@ -53,6 +53,9 @@ struct SettingsView: View {
                         .padding(.vertical, 8)
                         .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        // A plain button only hit-tests its drawn pixels;
+                        // the whole row is the target, not just the glyphs.
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -179,6 +182,7 @@ private struct GeneralSettings: View {
                             Divider()
                             #endif
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
+                            settingToggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                             Divider()
                             settingToggle("Hide Pesty-Alvie when clicking outside", isOn: $settings.hideOnClickOutside)
                             Divider()
@@ -194,6 +198,70 @@ private struct GeneralSettings: View {
                                 Slider(value: $settings.barHeight, in: 300...720, step: 10)
                             }
                             .padding(.vertical, 12)
+                        }
+                    }
+                }
+
+                settingsGroup("Clip Colors") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("Color theme", selection: $settings.clipColorTheme) {
+                                ForEach(ClipColorTheme.allCases) { theme in
+                                    Text(theme.title).tag(theme)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .padding(.vertical, 9)
+                            Divider()
+                            Text(settings.clipColorTheme.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 9)
+                            if settings.clipColorTheme == .accentShades {
+                                Divider()
+                                HStack(spacing: 12) {
+                                    ColorPicker("Base color",
+                                                selection: clipColorAccent,
+                                                supportsOpacity: false)
+                                        .font(.system(size: 14))
+                                    Spacer(minLength: 8)
+                                    HStack(spacing: 4) {
+                                        ForEach(Array(SourceColor.accentShades(for: settings.clipColorAccentHex).enumerated()),
+                                                id: \.offset) { _, color in
+                                            Circle()
+                                                .fill(color)
+                                                .frame(width: 13, height: 13)
+                                        }
+                                    }
+                                    .accessibilityLabel("Ten stable shades of the selected base color")
+                                }
+                                .padding(.vertical, 10)
+                                Text("Each source app keeps one of ten deterministic shades, so its cards stay recognizable without drifting too far from your chosen color.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.bottom, 9)
+                            }
+                        }
+                    }
+                }
+
+                settingsGroup("Clip Navigation") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("Selected clip position", selection: $settings.selectedClipPosition) {
+                                ForEach(SelectedClipPosition.allCases) { position in
+                                    Text(position.title).tag(position)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .padding(.vertical, 9)
+                            Divider()
+                            Text(settings.selectedClipPosition.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 9)
                         }
                     }
                 }
@@ -300,15 +368,15 @@ private struct GeneralSettings: View {
     }
     #endif
 
+    private var clipColorAccent: Binding<Color> {
+        Binding(
+            get: { Color(hex: settings.clipColorAccentHex) ?? .pink },
+            set: { settings.clipColorAccentHex = NSColor($0).hexString }
+        )
+    }
+
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .font(.system(size: 14))
-            Spacer(minLength: 16)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-        }
+        SettingSwitchRow(title: title, isOn: isOn)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity)
     }
@@ -431,9 +499,7 @@ private struct PrivacySettings: View {
 
                 SettingsFormGroup("Concealed Clips") {
                     SettingsSurface {
-                        Toggle("Ignore concealed clipboard content", isOn: $settings.ignoreConcealed)
-                            .font(.system(size: 14))
-                            .toggleStyle(.switch)
+                        SettingSwitchRow(title: "Ignore concealed clipboard content", isOn: $settings.ignoreConcealed)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Pesty-Alvie also respects the standard macOS concealed-clipboard marker used by password managers.")
@@ -517,50 +583,6 @@ private struct ShortcutsSettings: View {
                     }
                 }
 
-                SettingsFormGroup("Paste Stack") {
-                    SettingsSurface {
-                        Toggle("Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
-                            .font(.system(size: 14))
-                            .toggleStyle(.switch)
-                            .padding(.vertical, 10)
-                        if settings.pasteStacksEnabled {
-                            Divider()
-                            LabeledContent("Paste next stack item") {
-                                HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
-                                                   modifiers: $settings.sequenceHotkeyModifiers)
-                            }
-                            .font(.system(size: 14))
-                            .padding(.vertical, 9)
-                            Divider()
-                            Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
-                                .font(.system(size: 14))
-                                .toggleStyle(.switch)
-                                .padding(.vertical, 10)
-                            Divider()
-                            Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
-                                .font(.system(size: 14))
-                                .toggleStyle(.switch)
-                                .padding(.vertical, 10)
-                            Divider()
-                            Toggle("Remove saved stacks with clipboard history", isOn: $settings.pasteStacksFollowHistory)
-                                .font(.system(size: 14))
-                                .toggleStyle(.switch)
-                                .padding(.vertical, 10)
-                            Text("Start a Paste Stack, then copy clips in any app to add them automatically. Keep pasted items enabled to re-add completed clips later.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 5)
-                                .padding(.bottom, 8)
-                        } else {
-                            Text("Paste Stack tabs, cards, collection, and its global shortcut are off. Existing stacks are kept and return if you enable the feature again.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 5)
-                                .padding(.bottom, 8)
-                        }
-                    }
-                }
-
                 SettingsFormGroup("Quick Paste") {
                     SettingsSurface {
                         VStack(spacing: 0) {
@@ -586,6 +608,43 @@ private struct ShortcutsSettings: View {
                             .padding(.bottom, 8)
                     }
                 }
+
+                SettingsFormGroup("Paste Stack") {
+                    SettingsSurface {
+                        SettingSwitchRow(title: "Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
+                            .padding(.vertical, 10)
+                        if settings.pasteStacksEnabled {
+                            Divider()
+                            LabeledContent("Paste next stack item") {
+                                HotkeyRecorderView(keyCode: $settings.sequenceHotkeyKeyCode,
+                                                   modifiers: $settings.sequenceHotkeyModifiers)
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 9)
+                            Divider()
+                            SettingSwitchRow(title: "Paste newest stack item first", isOn: $settings.stackPasteInReverse)
+                                .padding(.vertical, 10)
+                            Divider()
+                            SettingSwitchRow(title: "Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
+                                .padding(.vertical, 10)
+                            Divider()
+                            SettingSwitchRow(title: "Remove saved stacks with clipboard history", isOn: $settings.pasteStacksFollowHistory)
+                                .padding(.vertical, 10)
+                            Text("Start a Paste Stack, then copy clips in any app to add them automatically. Keep pasted items enabled to re-add completed clips later.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 5)
+                                .padding(.bottom, 8)
+                        } else {
+                            Text("Paste Stack tabs, cards, collection, and its global shortcut are off. Existing stacks are kept and return if you enable the feature again.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 5)
+                                .padding(.bottom, 8)
+                        }
+                    }
+                }
+
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
@@ -602,11 +661,9 @@ private struct SyncSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("iCloud Drive") {
                     SettingsSurface {
-                    Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
+                    SettingSwitchRow(title: "Sync clipboard via iCloud Drive", isOn: Binding(
                             get: { settings.iCloudSync },
                             set: { _ in AppController.shared.toggleICloudSync() }))
-                        .font(.system(size: 14))
-                        .toggleStyle(.switch)
                         .padding(.vertical, 10)
                         Text(ClipboardStore.shared.iCloudAvailable
                              ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
@@ -702,5 +759,24 @@ private struct AboutView: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A switch row whose label text is as clickable as the switch itself.
+private struct SettingSwitchRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { isOn.toggle() }
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
     }
 }

@@ -347,14 +347,11 @@ struct BarView: View {
                         }
                         return
                     }
-                    // Keyboard selection must be visible in the same event turn.
-                    // Leaving the anchor unspecified preserves the current viewport
-                    // until the selected card would otherwise be off-screen.
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        proxy.scrollTo(id)
-                    }
+                    scrollToSelected(id, proxy: proxy)
+                }
+                .onChange(of: settings.selectedClipPosition) { _, _ in
+                    guard let id = store.selectedID else { return }
+                    scrollToSelected(id, proxy: proxy)
                 }
                 .overlay {
                     if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
@@ -403,6 +400,15 @@ struct BarView: View {
     private var isPinboardSource: Bool {
         if case .pinboard = store.source { return true }
         return false
+    }
+
+    /// Keyboard selection must land visibly in the same event turn; the
+    /// anchor preference decides whether the strip parks the selected card
+    /// centered or against the right edge, Paste-style.
+    private func scrollToSelected(_ id: UUID, proxy: ScrollViewProxy) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+            proxy.scrollTo(id, anchor: settings.selectedClipPosition == .rightEdge ? .trailing : .center)
+        }
     }
 
     /// The visible cards left-to-right with their live frames. Both the

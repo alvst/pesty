@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+@preconcurrency import QuickLookUI
 import os.log
 
 private let dragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
@@ -63,6 +64,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
+
+        QuickLookService.shared.onSelectionChange = { [weak self] id in
+            guard let self, store.source != .pasteStack else { return }
+            store.selectedID = id
+        }
+        QuickLookService.shared.onPanelDidClose = { [weak self] in
+            self?.quickLookDidClose()
+        }
 
         setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
@@ -288,6 +297,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         barController?.resignSearch()
         barController?.show()
+        // An open Settings window rises with the bar instead of staying
+        // buried behind whatever app the user summoned Pesty over.
+        if let settings = settingsWindow, settings.isVisible {
+            settings.orderFrontRegardless()
+        }
         startKeyMonitor()
     }
 
@@ -297,15 +311,29 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.barInputMode = .cards
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
+        // Quick Look is a companion surface to the bar; it never outlives it.
+        QuickLookService.shared.dismiss()
         barController?.hide(immediately: immediately)
-        // The bar itself never activates Pesty, but an alert, Settings, or a
-        // drag ending inside the bar can. Hiding while Pesty is active would
-        // strand keyboard focus with no visible window — hand it back to the
-        // app the user came from.
-        if NSApp.isActive, let target = previousApp ?? lastActiveApp, !target.isTerminated {
-            NSApp.yieldActivation(to: target)
-            target.activate()
+        // The bar itself never activates Pesty, but an alert, a drop, or a
+        // click on Settings can. Hiding while Pesty is active would strand
+        // keyboard focus with no visible window — hand it back, unless a
+        // Pesty window like Settings is exactly what the user focused.
+        yieldActivationToPreviousApp()
+    }
+
+    /// Returns focus to the app the user came from — but never while another
+    /// Pesty window (Settings, the editor) holds key: stealing focus back
+    /// from a window the user just clicked would make it unusable.
+    @discardableResult
+    private func yieldActivationToPreviousApp() -> Bool {
+        guard NSApp.isActive else { return false }
+        if let key = NSApp.keyWindow, key !== barController?.window, !(key is QLPreviewPanel) {
+            return false
         }
+        guard let target = previousApp ?? lastActiveApp, !target.isTerminated else { return false }
+        NSApp.yieldActivation(to: target)
+        target.activate()
+        return true
     }
 
     func toggleInlinePreview() {
@@ -358,6 +386,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         if change != previousChange {
             store.promoteCopiedItem(item)
         }
+        // Tink, not Pop: copy and paste stay audibly distinct.
+        if Settings.shared.playSoundOnCopy { NSSound(named: "Tink")?.play() }
         hideBar()
         copyToast.show()
     }
@@ -606,12 +636,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         // First hop: let AppKit finish the drop-triggered activation.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
-            guard NSApp.isActive, let target = previousApp ?? lastActiveApp, !target.isTerminated else {
+            guard yieldActivationToPreviousApp() else {
                 suppressAutoHide = false
                 return
             }
-            NSApp.yieldActivation(to: target)
-            target.activate()
             // Second hop: once the target is active again, take key back the
             // nonactivating way the panel normally holds it, then re-arm
             // click-outside hiding.
@@ -620,6 +648,23 @@ final class AppController: NSObject, NSApplicationDelegate {
                 barController?.bringToFront()
                 suppressAutoHide = false
             }
+        }
+    }
+
+    /// Opening Quick Look activates Pesty (the panel must be able to become
+    /// key). When it closes, focus goes back to the app the user came from,
+    /// and the bar — if still up — retakes key the nonactivating way, so
+    /// arrows and Return work again immediately.
+    private func quickLookDidClose() {
+        guard NSApp.isActive else { return }
+        suppressAutoHide = true
+        yieldActivationToPreviousApp()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            if barController?.isPresented == true {
+                barController?.bringToFront()
+            }
+            suppressAutoHide = false
         }
     }
 
@@ -916,6 +961,18 @@ final class AppController: NSObject, NSApplicationDelegate {
         // drag instead of cancelling it).
         if isDragSessionActive {
             dragLog.debug("key \(event.keyCode) passed through during drag")
+            return event
+        }
+
+        // While Quick Look is key its native arrows/Space/Esc run untouched,
+        // but clipboard shortcuts still belong to the bar's selection — the
+        // panel's own responder chain has no idea what "Copy" means here.
+        if QLPreviewPanel.sharedPreviewPanelExists(),
+           QLPreviewPanel.shared()?.isKeyWindow == true {
+            if Int(event.keyCode) == kVK_ANSI_C, event.modifierFlags.contains(.command) {
+                commandCopy()
+                return nil
+            }
             return event
         }
 

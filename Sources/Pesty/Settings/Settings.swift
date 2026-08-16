@@ -64,6 +64,54 @@ enum ShortcutModifier: CaseIterable, Identifiable {
     }
 }
 
+enum SelectedClipPosition: Int, CaseIterable, Identifiable {
+    case center
+    case rightEdge
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .center: "Center"
+        case .rightEdge: "Right edge"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .center: "Keep the selected clip centered with surrounding context visible."
+        case .rightEdge: "Place the selected clip at the far right, like Paste."
+        }
+    }
+}
+
+enum ClipColorTheme: Int, CaseIterable, Identifiable {
+    case `default`
+    case vibrant
+    case accentShades
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .default: "Default"
+        case .vibrant: "Vibrant"
+        case .accentShades: "Accent shades"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .default:
+            "Match each clip to its source app\u{2019}s familiar card color."
+        case .vibrant:
+            "Use a stronger, higher-contrast version of each source app color."
+        case .accentShades:
+            "Give each source app a stable lighter or darker shade of one color."
+        }
+    }
+}
+
 enum HistoryRetention: Int, CaseIterable, Identifiable {
     case day
     case week
@@ -196,12 +244,16 @@ final class Settings {
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
+        static let playSoundOnCopy = "playSoundOnCopy"
         static let ignoreConcealed = "ignoreConcealed"
         static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let clipPreviewStyle = "clipPreviewStyle"
+        static let clipColorTheme = "clipColorTheme"
+        static let selectedClipPosition = "selectedClipPosition"
+        static let clipColorAccentHex = "clipColorAccentHex"
         static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
         static let previewImageApplicationBundleID = "previewImageApplicationBundleID"
         static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
@@ -305,6 +357,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(playSound, forKey: Keys.playSound) }
     }
 
+    var playSoundOnCopy: Bool {
+        didSet { guard isLoaded else { return }; d.set(playSoundOnCopy, forKey: Keys.playSoundOnCopy) }
+    }
+
     var ignoreConcealed: Bool {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
     }
@@ -342,6 +398,18 @@ final class Settings {
             d.set(clipPreviewStyle.rawValue, forKey: Keys.clipPreviewStyle)
             if clipPreviewStyle != .inlinePesty { AppController.shared.hideInlinePreview() }
         }
+    }
+
+    var selectedClipPosition: SelectedClipPosition {
+        didSet { guard isLoaded else { return }; d.set(selectedClipPosition.rawValue, forKey: Keys.selectedClipPosition) }
+    }
+
+    var clipColorTheme: ClipColorTheme {
+        didSet { guard isLoaded else { return }; d.set(clipColorTheme.rawValue, forKey: Keys.clipColorTheme) }
+    }
+
+    var clipColorAccentHex: String {
+        didSet { guard isLoaded else { return }; d.set(clipColorAccentHex, forKey: Keys.clipColorAccentHex) }
     }
 
     var previewTextApplicationBundleID: String {
@@ -393,12 +461,16 @@ final class Settings {
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
+            Keys.playSoundOnCopy: true,
             Keys.ignoreConcealed: true,
             Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
+            Keys.clipColorTheme: ClipColorTheme.default.rawValue,
+            Keys.selectedClipPosition: SelectedClipPosition.center.rawValue,
+            Keys.clipColorAccentHex: "#FF5A9F",
             Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
             Keys.previewImageApplicationBundleID: PreviewOpenTarget.image.defaultApplicationBundleID,
             Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
@@ -423,6 +495,7 @@ final class Settings {
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
+        playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
@@ -435,6 +508,12 @@ final class Settings {
         }
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
+        clipColorTheme = ClipColorTheme(rawValue: d.integer(forKey: Keys.clipColorTheme)) ?? .default
+        selectedClipPosition = SelectedClipPosition(rawValue: d.integer(forKey: Keys.selectedClipPosition)) ?? .center
+        clipColorAccentHex = d.string(forKey: Keys.clipColorAccentHex) ?? "#FF5A9F"
+        clipColorTheme = ClipColorTheme(rawValue: d.integer(forKey: Keys.clipColorTheme)) ?? .default
+        selectedClipPosition = SelectedClipPosition(rawValue: d.integer(forKey: Keys.selectedClipPosition)) ?? .center
+        clipColorAccentHex = d.string(forKey: Keys.clipColorAccentHex) ?? "#FF5A9F"
         previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)
             ?? PreviewOpenTarget.text.defaultApplicationBundleID
         previewImageApplicationBundleID = d.string(forKey: Keys.previewImageApplicationBundleID)

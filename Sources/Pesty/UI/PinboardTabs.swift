@@ -246,7 +246,7 @@ struct PinboardTabs: View {
                 TextField("Pinboard name", text: $draftName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.pillText)
                     .frame(minWidth: 92, idealWidth: 120)
                     .focused($focusedBoardID, equals: board.id)
                     .onSubmit(finishEditing)
@@ -254,6 +254,7 @@ struct PinboardTabs: View {
             .padding(.horizontal, 12)
             .frame(height: 29)
             .background(Theme.pillSelected, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.pillStroke, lineWidth: 1))
             .fixedSize()
         } else {
             pill(title: board.name,
@@ -365,10 +366,11 @@ struct PinboardTabs: View {
                     .background(selected ? Theme.selection : Theme.selection.opacity(0.14), in: Capsule())
             }
         }
-        .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+        .foregroundStyle(selected ? Theme.pillText : Theme.pillTextMuted)
         .padding(.horizontal, 12)
         .frame(height: 29)
         .background(selected ? Theme.pillSelected : Theme.pillBG, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.pillStroke, lineWidth: selected ? 1 : 0.5))
         .fixedSize()
         .animation(.easeOut(duration: 0.15), value: selected)
     }

@@ -47,8 +47,14 @@ enum Theme {
     static let headerSubText = Color.white.opacity(0.78)
 
     static let fieldBG = Color.white.opacity(0.09)
-    static let pillBG = Color.white.opacity(0.10)
-    static let pillSelected = Color.white.opacity(0.18)
+    // Tab pills sit directly on the glass over arbitrary desktop content, so
+    // they get stronger fills and explicit light text instead of relying on
+    // vibrancy to find contrast.
+    static let pillBG = Color.white.opacity(0.16)
+    static let pillSelected = Color.white.opacity(0.34)
+    static let pillStroke = Color.white.opacity(0.22)
+    static let pillText = Color.white.opacity(0.96)
+    static let pillTextMuted = Color.white.opacity(0.74)
 }
 
 extension Date {

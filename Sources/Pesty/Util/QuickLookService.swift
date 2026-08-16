@@ -1,5 +1,8 @@
 import AppKit
 @preconcurrency import QuickLookUI
+import os.log
+
+private let qlLog = Logger(subsystem: "com.greycorelabs.pesty", category: "QuickLook")
 
 @MainActor
 final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource {
@@ -7,21 +10,38 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     private var previewItems: [PreviewItem] = []
     private var startIndexByClipID: [UUID: Int] = [:]
+    private var orderedStartIndexes: [(index: Int, id: UUID)] = []
+    private var indexObservation: NSKeyValueObservation?
+    private var closeObservation: NSObjectProtocol?
+    private var resizeObservation: NSObjectProtocol?
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(AppIdentity.quickLookDirectoryName, isDirectory: true)
+
+    /// Quick Look's own arrow keys moved its selection; the bar's highlight
+    /// should follow.
+    var onSelectionChange: ((UUID) -> Void)?
+    /// The panel left the screen — by its own Space/Esc handling, its close
+    /// button, or dismiss(). Focus restoration lives with AppController.
+    var onPanelDidClose: (() -> Void)?
 
     private override init() {}
 
     var isVisible: Bool { QLPreviewPanel.shared()?.isVisible ?? false }
 
     func dismiss() {
-        QLPreviewPanel.shared()?.orderOut(nil)
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible else { return }
+        qlLog.debug("dismiss()")
+        panel.orderOut(nil)
+        panelDidClose()
     }
 
     func toggle(items: [ClipItem], selectedID: UUID?) {
-        guard let panel = QLPreviewPanel.shared() else { return }
+        guard let panel = QLPreviewPanel.shared() else {
+            qlLog.debug("toggle: no shared panel")
+            return
+        }
         if panel.isVisible {
-            panel.orderOut(nil)
+            dismiss()
             return
         }
 
@@ -35,20 +55,87 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
             if startIndex < newItems.count { newStartIndexes[clip.id] = startIndex }
             if clip.id == selectedID, startIndex < newItems.count { selectedIndex = startIndex }
         }
-        guard !newItems.isEmpty else { return }
+        guard !newItems.isEmpty else {
+            qlLog.debug("toggle: no previewable items")
+            return
+        }
 
         previewItems = newItems
         startIndexByClipID = newStartIndexes
+        orderedStartIndexes = newStartIndexes.map { (index: $0.value, id: $0.key) }
+            .sorted { $0.index < $1.index }
         panel.dataSource = self
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
+        qlLog.debug("toggle: presenting \(newItems.count) items at \(selectedIndex), appActive=\(NSApp.isActive)")
+        // A window can only become key while its app is active, and the bar
+        // deliberately never activates this accessory app. Quick Look must
+        // take focus to own Space/arrows — exactly like Finder's preview —
+        // and AppController hands focus back when the panel closes.
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        recenterPanel()
+        observePanel(panel)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            qlLog.debug("post-present: visible=\(panel.isVisible) key=\(panel.isKeyWindow) appActive=\(NSApp.isActive)")
+        }
     }
 
     func updateSelection(selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared(), panel.isVisible,
-              let selectedID, let index = startIndexByClipID[selectedID] else { return }
+              let selectedID, let index = startIndexByClipID[selectedID],
+              panel.currentPreviewItemIndex != index else { return }
         panel.currentPreviewItemIndex = index
+    }
+
+    private func observePanel(_ panel: QLPreviewPanel) {
+        indexObservation = panel.observe(\.currentPreviewItemIndex, options: [.new]) { [weak self] _, change in
+            guard let index = change.newValue, index >= 0 else { return }
+            DispatchQueue.main.async {
+                guard let self, let id = self.clipID(forPreviewIndex: index) else { return }
+                self.onSelectionChange?(id)
+            }
+        }
+        if resizeObservation == nil {
+            // The panel resizes itself to each item's natural size, keeping a
+            // corner anchored. Re-centering on every content resize keeps the
+            // preview's center fixed instead; live user resizes are left alone.
+            resizeObservation = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResizeNotification, object: panel, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { QuickLookService.shared.recenterPanel() }
+            }
+        }
+        if closeObservation == nil {
+            // Space/Esc inside the panel close it without going through
+            // dismiss(); willClose is the one signal common to every path.
+            closeObservation = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: panel, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { QuickLookService.shared.panelDidClose() }
+            }
+        }
+    }
+
+    /// Keeps the panel's center on the screen's center. setFrameOrigin only
+    /// moves the window, so this cannot re-trigger the resize notification.
+    private func recenterPanel() {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
+              let screen = panel.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let frame = panel.frame
+        panel.setFrameOrigin(NSPoint(x: visible.midX - frame.width / 2,
+                                     y: visible.midY - frame.height / 2))
+    }
+
+    private func panelDidClose() {
+        qlLog.debug("panel closed")
+        indexObservation = nil
+        onPanelDidClose?()
+    }
+
+    private func clipID(forPreviewIndex index: Int) -> UUID? {
+        orderedStartIndexes.last { $0.index <= index }?.id
     }
 
     func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { previewItems.count }
