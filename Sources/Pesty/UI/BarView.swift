@@ -237,7 +237,8 @@ private struct PinboardItemReorderTarget: ViewModifier {
                     }
                 }
                 .onDrop(of: [ClipDragProvider.clipIdentifierType], isTargeted: $isTargeted) { providers in
-                    guard let provider = providers.first else { return false }
+                    guard !AppController.shared.cardDragCancelled,
+                          let provider = providers.first else { return false }
                     _ = provider.loadDataRepresentation(forTypeIdentifier: ClipDragProvider.clipIdentifierType) { data, _ in
                         guard let data, let idString = String(data: data, encoding: .utf8),
                               let draggedID = UUID(uuidString: idString) else { return }
@@ -248,6 +249,12 @@ private struct PinboardItemReorderTarget: ViewModifier {
                         }
                     }
                     return true
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .pestyCardDragEnded)) { _ in
+                    // A cancelled or abandoned drag may never call dropExited
+                    // on this card; sweep the caret regardless of why the
+                    // drag ended.
+                    isTargeted = false
                 }
         } else {
             content

@@ -2,6 +2,14 @@ import AppKit
 import SwiftUI
 import Carbon.HIToolbox
 
+extension Notification.Name {
+    /// Posted when a clip-card drag (drag-to-pin onto a Pinboard tab, or
+    /// in-Pinboard reorder) ends - by drop, Escape-cancel, or just letting go
+    /// over nothing - so drop targets can clear hover chrome that their own
+    /// SwiftUI dropExited callback might not reliably deliver on a cancel.
+    static let pestyCardDragEnded = Notification.Name("PestyCardDragEnded")
+}
+
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     static let shared = AppController()
@@ -16,6 +24,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var previewWindow: NSWindow?
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
+    private var cardDragTimer: Timer?
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -295,6 +304,39 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func hideBar() {
         stopKeyMonitor()
         barController?.hide()
+    }
+
+    /// True once Escape has been sampled during the card drag this tracking
+    /// session is watching. Card-drop handlers check this and refuse to act
+    /// even if a cancelled drag somehow still reaches them.
+    private(set) var cardDragCancelled = false
+
+    /// Starts a short poll while a clip card is being dragged onto a
+    /// Pinboard tab or reordered within one. Drag sessions run their tracking
+    /// loop in `.eventTrackingRunLoopMode`, so the app's own key-down monitor
+    /// never sees Escape mid-drag - it is sampled directly here instead - and
+    /// this is also the only reliable signal that the drag is over at all,
+    /// since a cancelled or abandoned drag may never call a drop target's own
+    /// dropExited.
+    func beginCardDragTracking() {
+        cardDragCancelled = false
+        cardDragTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated { self?.pollCardDrag(timer) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        cardDragTimer = timer
+    }
+
+    private func pollCardDrag(_ timer: Timer) {
+        if !cardDragCancelled,
+           CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(kVK_Escape)) {
+            cardDragCancelled = true
+        }
+        guard NSEvent.pressedMouseButtons == 0 else { return }
+        timer.invalidate()
+        cardDragTimer = nil
+        NotificationCenter.default.post(name: .pestyCardDragEnded, object: nil)
     }
 
     func pasteSelected() {

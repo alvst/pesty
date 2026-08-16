@@ -7,6 +7,12 @@ struct ClipCardView: View {
     let selected: Bool
 
     @State private var hovering = false
+    /// Pinned clips are kept deliberately, so "when it was copied" is noise
+    /// on a Pinboard card - the timestamp is history-only.
+    private var isPinboardCard: Bool {
+        if case .pinboard = store.source { return true }
+        return false
+    }
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
@@ -44,7 +50,10 @@ struct ClipCardView: View {
         .onTapGesture { store.select(item.id) }
         .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { store.extendSelection(to: item.id) })
         .highPriorityGesture(TapGesture().modifiers(.command).onEnded { store.toggleSelection(item.id) })
-        .onDrag { ClipDragProvider.make(for: item) }
+        .onDrag {
+            AppController.shared.beginCardDragTracking()
+            return ClipDragProvider.make(for: item)
+        }
         .contextMenu { menu }
     }
 
@@ -56,9 +65,11 @@ struct ClipCardView: View {
                     Text(item.type.label)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
-                    Text(item.createdAt.clipRelativeLong)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.headerSubText)
+                    if !isPinboardCard {
+                        Text(item.createdAt.clipRelativeLong)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.headerSubText)
+                    }
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)

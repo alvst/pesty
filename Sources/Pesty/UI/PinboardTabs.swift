@@ -82,6 +82,7 @@ struct PinboardTabs: View {
     // dragged over, so dropping to pin reads as a distinct target from the
     // row-wide Pinboard-reordering drop zone underneath it.
     @State private var pinDropTargetID: UUID?
+    @State private var chromeWatchdog: Task<Void, Never>?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -137,6 +138,7 @@ struct PinboardTabs: View {
             .onDrop(of: [UTType.pestyPinboard], delegate: PinboardRowDropDelegate(
                 onHover: { x in
                     insertionX = x.flatMap { snappedInsertionX(forHoverX: $0) }
+                    watchForDragEnd()
                 },
                 onDrop: { draggedID, x in
                     let index = insertionIndex(forX: x)
@@ -166,6 +168,11 @@ struct PinboardTabs: View {
                   session.boardID == oldValue else { return }
             // Clicking away commits a valid draft and cancels a blank draft.
             resolveRename(session.focusLost(), for: oldValue)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pestyCardDragEnded)) { _ in
+            // A trailing dropUpdated after a cancelled or abandoned drag can
+            // otherwise leave the pin-target ring stuck lit.
+            pinDropTargetID = nil
         }
     }
 
@@ -367,10 +374,31 @@ struct PinboardTabs: View {
         }
     }
 
+    /// A drop target can miss its final `dropExited` when the drag ends
+    /// somewhere else, stranding the caret on screen with no drag in
+    /// progress. Watching for the mouse button's release clears the chrome in
+    /// every one of those cases, while leaving it alone during a live drag
+    /// that simply pauses over the row. Clip-card drags get this for free
+    /// from `.pestyCardDragEnded`, but a Pinboard *tab* drag starts no such
+    /// tracking, so the row's own caret needs its own watch.
+    private func watchForDragEnd() {
+        chromeWatchdog?.cancel()
+        chromeWatchdog = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                guard NSEvent.pressedMouseButtons == 0 else { continue }
+                insertionX = nil
+                return
+            }
+        }
+    }
+
     /// Dropping a dragged clip card directly onto a Pinboard tab pins it
     /// there — a shortcut for the same "Pin to…" context-menu action.
     private func pinClip(from providers: [NSItemProvider], ontoBoardID boardID: UUID) -> Bool {
-        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(ClipDragProvider.clipIdentifierType) })
+        guard !AppController.shared.cardDragCancelled,
+              let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(ClipDragProvider.clipIdentifierType) })
         else { return false }
         _ = provider.loadDataRepresentation(forTypeIdentifier: ClipDragProvider.clipIdentifierType) { data, _ in
             guard let data,
