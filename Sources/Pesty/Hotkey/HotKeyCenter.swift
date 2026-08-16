@@ -1,13 +1,21 @@
 import AppKit
 import Carbon.HIToolbox
 
+private enum HotKeySlot: UInt32 {
+    case main = 1
+    case pasteStackNext = 2
+}
+
 @MainActor
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
 
+    /// Fires for the main show/hide hotkey.
     var onTrigger: (() -> Void)?
+    /// Fires for the "paste next stack item" hotkey.
+    var onPasteStackTrigger: (() -> Void)?
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [HotKeySlot: EventHotKeyRef] = [:]
     private var handlerRef: EventHandlerRef?
     private let signature: OSType = 0x50535459
 
@@ -22,13 +30,25 @@ final class HotKeyCenter {
         guard handlerRef == nil else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: OSType(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ -> OSStatus in
-            DispatchQueue.main.async { HotKeyCenter.shared.onTrigger?() }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
+            guard let event else { return noErr }
+            var hkID = EventHotKeyID()
+            let status = GetEventParameter(event, EventParamName(kEventParamDirectObject),
+                                           EventParamType(typeEventHotKeyID), nil,
+                                           MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+            guard status == noErr else { return noErr }
+            DispatchQueue.main.async {
+                switch hkID.id {
+                case HotKeySlot.main.rawValue: HotKeyCenter.shared.onTrigger?()
+                case HotKeySlot.pasteStackNext.rawValue: HotKeyCenter.shared.onPasteStackTrigger?()
+                default: break
+                }
+            }
             return noErr
         }, 1, &spec, nil, &handlerRef)
     }
 
-    /// Re-registers the global hotkey.
+    /// Re-registers both global hotkeys.
     ///
     /// The old registration has to be released before the new one can take the same
     /// combination, so a failed `RegisterEventHotKey` leaves the app with no hotkey at
@@ -37,43 +57,56 @@ final class HotKeyCenter {
     /// during login or a display change, so retry a few times before giving up, and put
     /// the old registration back if the new one will not take.
     func reload() {
-        let previous = hotKeyRef
-        unregister()
-
-        let keyCode = UInt32(Settings.shared.hotkeyKeyCode)
-        let modifiers = UInt32(Settings.shared.hotkeyModifiers)
-        guard keyCode != 0 else { return }
-
-        if register(keyCode: keyCode, modifiers: modifiers) { return }
-
-        // Put the old one back so the user is never left without a hotkey, then retry.
-        hotKeyRef = previous
-        retryRegister(keyCode: keyCode, modifiers: modifiers, attemptsLeft: 5)
+        reload(slot: .main,
+               keyCode: Settings.shared.hotkeyKeyCode,
+               modifiers: Settings.shared.hotkeyModifiers,
+               enabled: true)
+        // Paste Stacks off means: no capture, no hotkey - the second hotkey
+        // only ever occupies its combination while the feature is enabled.
+        reload(slot: .pasteStackNext,
+               keyCode: Settings.shared.sequenceHotkeyKeyCode,
+               modifiers: Settings.shared.sequenceHotkeyModifiers,
+               enabled: Settings.shared.pasteStacksEnabled)
     }
 
-    private func register(keyCode: UInt32, modifiers: UInt32) -> Bool {
-        let id = EventHotKeyID(signature: signature, id: 1)
+    private func reload(slot: HotKeySlot, keyCode: Int, modifiers: Int, enabled: Bool) {
+        let previous = hotKeyRefs[slot]
+        unregister(slot: slot)
+
+        guard enabled, keyCode != 0 else { return }
+        let code = UInt32(keyCode)
+        let mods = UInt32(modifiers)
+
+        if register(slot: slot, keyCode: code, modifiers: mods) { return }
+
+        // Put the old one back so the user is never left without a hotkey, then retry.
+        hotKeyRefs[slot] = previous
+        retryRegister(slot: slot, keyCode: code, modifiers: mods, attemptsLeft: 5)
+    }
+
+    private func register(slot: HotKeySlot, keyCode: UInt32, modifiers: UInt32) -> Bool {
+        let id = EventHotKeyID(signature: signature, id: slot.rawValue)
         var ref: EventHotKeyRef?
         guard RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &ref) == noErr
         else { return false }
-        hotKeyRef = ref
+        hotKeyRefs[slot] = ref
         return true
     }
 
-    private func retryRegister(keyCode: UInt32, modifiers: UInt32, attemptsLeft: Int) {
+    private func retryRegister(slot: HotKeySlot, keyCode: UInt32, modifiers: UInt32, attemptsLeft: Int) {
         guard attemptsLeft > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self else { return }
-            let stale = self.hotKeyRef
-            self.unregister()
-            if self.register(keyCode: keyCode, modifiers: modifiers) { return }
-            self.hotKeyRef = stale
-            self.retryRegister(keyCode: keyCode, modifiers: modifiers, attemptsLeft: attemptsLeft - 1)
+            let stale = self.hotKeyRefs[slot]
+            self.unregister(slot: slot)
+            if self.register(slot: slot, keyCode: keyCode, modifiers: modifiers) { return }
+            self.hotKeyRefs[slot] = stale
+            self.retryRegister(slot: slot, keyCode: keyCode, modifiers: modifiers, attemptsLeft: attemptsLeft - 1)
         }
     }
 
-    private func unregister() {
-        if let ref = hotKeyRef { UnregisterEventHotKey(ref); hotKeyRef = nil }
+    private func unregister(slot: HotKeySlot) {
+        if let ref = hotKeyRefs[slot] { UnregisterEventHotKey(ref); hotKeyRefs[slot] = nil }
     }
 
     static func describe(keyCode: Int, modifiers: Int) -> String {

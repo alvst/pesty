@@ -47,6 +47,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         monitor.start()
 
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
+        HotKeyCenter.shared.onPasteStackTrigger = { [weak self] in self?.pasteNextStackItem() }
         HotKeyCenter.shared.start()
 
         setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
@@ -327,6 +328,28 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+    }
+
+    /// Starts or stops collecting into the active Paste Stack, driven by the
+    /// bar's overflow menu. The floating panel that will replace this in a
+    /// later PR reuses the same PasteSequence calls.
+    func togglePasteStackCollecting() {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        if PasteSequence.shared.isCollecting {
+            PasteSequence.shared.finishCollecting()
+        } else {
+            PasteSequence.shared.begin()
+        }
+    }
+
+    /// Pastes the oldest pending Paste Stack entry into the last active app,
+    /// the same handoff `pasteItem` uses for a regular clip.
+    func pasteNextStackItem() {
+        guard Settings.shared.pasteStacksEnabled,
+              let entry = PasteSequence.shared.next() else { return }
+        let target = pasteTarget
+        hideBar()
+        PasteService.paste(entry.item, into: target, monitor: monitor)
     }
 
     var pasteMenuTitle: String {

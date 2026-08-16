@@ -3,6 +3,7 @@ import SwiftUI
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @Bindable private var pasteSequence = PasteSequence.shared
 
     var body: some View {
         ZStack {
@@ -108,6 +109,16 @@ struct BarView: View {
         Menu {
             Button("Settings…") { AppController.shared.showSettings() }
             Button("Clear History") { store.clearHistory() }
+            if settings.pasteStacksEnabled {
+                Divider()
+                Button(pasteSequence.isCollecting ? "Stop Collecting" : "Start Paste Stack") {
+                    AppController.shared.togglePasteStackCollecting()
+                }
+                Button("Paste Next") {
+                    AppController.shared.pasteNextStackItem()
+                }
+                .disabled(pasteSequence.pendingCount == 0)
+            }
             Divider()
             Button("About Pesty") { AppController.shared.showAbout() }
             Button("Quit Pesty") { NSApp.terminate(nil) }

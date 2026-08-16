@@ -86,6 +86,9 @@ final class Settings {
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
         static let cloudKitSync = "cloudKitSync"
+        static let pasteStacksEnabled = "pasteStacksEnabled"
+        static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
+        static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
     }
 
     var historyLimit: Int {
@@ -194,6 +197,26 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(cloudKitSync, forKey: Keys.cloudKitSync) }
     }
 
+    /// Off means: no capture into a stack, and the second hotkey does not register.
+    var pasteStacksEnabled: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(pasteStacksEnabled, forKey: Keys.pasteStacksEnabled)
+            if !pasteStacksEnabled { PasteSequence.shared.finishCollecting() }
+            HotKeyCenter.shared.reload()
+        }
+    }
+
+    var sequenceHotkeyKeyCode: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyKeyCode, forKey: Keys.sequenceHotkeyKeyCode); HotKeyCenter.shared.reload() }
+    }
+
+    var sequenceHotkeyModifiers: Int {
+        didSet { guard isLoaded else { return }
+            d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
     private init() {
         d.register(defaults: [
             Keys.historyLimit: 500,
@@ -213,7 +236,10 @@ final class Settings {
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false,
-            Keys.cloudKitSync: true
+            Keys.cloudKitSync: true,
+            Keys.pasteStacksEnabled: false,
+            Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
+            Keys.sequenceHotkeyModifiers: cmdKey | optionKey
         ])
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.string(forKey: Keys.historyRetentionMode) ?? "")
@@ -235,11 +261,18 @@ final class Settings {
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
         cloudKitSync = d.bool(forKey: Keys.cloudKitSync)
+        pasteStacksEnabled = d.bool(forKey: Keys.pasteStacksEnabled)
+        sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
+        sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
         isLoaded = true
     }
 
     var hotkeyDisplay: String {
         HotKeyCenter.describe(keyCode: hotkeyKeyCode, modifiers: hotkeyModifiers)
+    }
+
+    var sequenceHotkeyDisplay: String {
+        HotKeyCenter.describe(keyCode: sequenceHotkeyKeyCode, modifiers: sequenceHotkeyModifiers)
     }
 
     var quickPasteModifierDisplay: String {

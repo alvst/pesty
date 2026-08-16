@@ -2,16 +2,30 @@ import SwiftUI
 import AppKit
 import Carbon.HIToolbox
 
+enum HotkeyRecorderKind {
+    case main
+    case pasteStackNext
+}
+
 struct HotkeyRecorderView: View {
+    var kind: HotkeyRecorderKind = .main
+
     @Bindable private var settings = Settings.shared
     @State private var recording = false
     @State private var monitor: Any?
+
+    private var display: String {
+        switch kind {
+        case .main: return settings.hotkeyDisplay
+        case .pasteStackNext: return settings.sequenceHotkeyDisplay
+        }
+    }
 
     var body: some View {
         Button {
             recording ? stop() : start()
         } label: {
-            Text(recording ? "Press keys…" : settings.hotkeyDisplay)
+            Text(recording ? "Press keys…" : display)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .frame(minWidth: 90)
                 .padding(.horizontal, 12).padding(.vertical, 5)
@@ -34,8 +48,14 @@ struct HotkeyRecorderView: View {
             if mods & (cmdKey | controlKey | optionKey) == 0 {
                 NSSound.beep(); return nil
             }
-            settings.hotkeyKeyCode = Int(event.keyCode)
-            settings.hotkeyModifiers = mods
+            switch kind {
+            case .main:
+                settings.hotkeyKeyCode = Int(event.keyCode)
+                settings.hotkeyModifiers = mods
+            case .pasteStackNext:
+                settings.sequenceHotkeyKeyCode = Int(event.keyCode)
+                settings.sequenceHotkeyModifiers = mods
+            }
             stop()
             return nil
         }

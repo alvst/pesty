@@ -199,6 +199,16 @@ private struct GeneralSettings: View {
             }
             #endif
 
+            Section("Paste Stack") {
+                Toggle("Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
+                if settings.pasteStacksEnabled {
+                    LabeledContent("Paste Next") { HotkeyRecorderView(kind: .pasteStackNext) }
+                }
+                Text("Collect copies into a queue while you work, then paste them out one at a time in order. Start collecting, stop, and paste the next queued item from the ⋯ menu in the bar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Data") {
                 Button("Clear Clipboard History", role: .destructive) {
                     ClipboardStore.shared.clearHistory()
