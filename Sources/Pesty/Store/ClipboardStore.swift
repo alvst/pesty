@@ -25,6 +25,7 @@ final class ClipboardStore {
         didSet { if searchText != oldValue { clearMultiSelection() } }
     }
     var selectedID: UUID?
+    var inlinePreviewVisible = false
     private(set) var multiSelectedIDs: Set<UUID> = []
     private var selectionAnchorID: UUID?
 

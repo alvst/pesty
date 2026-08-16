@@ -10,6 +10,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let monitor = ClipboardMonitor()
 
     private var barController: BarWindowController?
+    private var inlinePreviewController: InlinePreviewWindowController?
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
@@ -299,7 +300,33 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func hideBar() {
         stopKeyMonitor()
         QuickLookService.shared.dismiss()
+        hideInlinePreview()
         barController?.hide()
+    }
+
+    func toggleInlinePreview() {
+        guard Settings.shared.clipPreviewStyle == .inlinePesty,
+              store.selectedItem != nil else { return }
+        if store.inlinePreviewVisible {
+            hideInlinePreview()
+        } else {
+            store.inlinePreviewVisible = true
+        }
+    }
+
+    func hideInlinePreview() {
+        store.inlinePreviewVisible = false
+        inlinePreviewController?.hide()
+    }
+
+    func updateInlinePreview(item: ClipItem, cardFrame: CGRect) {
+        guard store.inlinePreviewVisible,
+              let barWindow = barController?.window,
+              barWindow.isVisible else { return }
+        if inlinePreviewController == nil {
+            inlinePreviewController = InlinePreviewWindowController()
+        }
+        inlinePreviewController?.show(item: item, anchoredTo: cardFrame, in: barWindow)
     }
 
     func pasteSelected() {
@@ -520,7 +547,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         switch code {
         case kVK_Space:
-            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            if Settings.shared.clipPreviewStyle == .inlinePesty, store.selectedItem != nil {
+                toggleInlinePreview()
+            } else {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            }
             return nil
         case kVK_Escape:
             if !store.multiSelectedIDs.isEmpty {
