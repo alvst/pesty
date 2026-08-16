@@ -123,6 +123,12 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    func promoteCopiedItem(_ item: ClipItem, at date: Date = .now) {
+        var copied = item
+        copied.createdAt = date
+        addCaptured(copied)
+    }
+
     func applyRetentionPolicy() { trimHistory(); scheduleSave() }
 
     func retentionRemovalCount(mode: HistoryRetentionMode, limit: Int, days: Int) -> Int {
