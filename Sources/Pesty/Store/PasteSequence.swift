@@ -71,6 +71,15 @@ final class PasteSequence {
     private(set) var savedStacks: [SavedPasteStack] = []
     private(set) var activeStackID: UUID?
     private(set) var selectedEntryID: UUID?
+    /// Live filter text for the floating panel's own search field. Distinct
+    /// from Clipboard's bar search - filtering only changes what's displayed,
+    /// never the underlying queue or paste order.
+    var searchText: String = "" {
+        didSet {
+            guard searchText != oldValue else { return }
+            reconcileSelection()
+        }
+    }
 
     var pendingCount: Int { entries.count(where: { !$0.isPasted }) }
     var pastedCount: Int { entries.count - pendingCount }
@@ -88,6 +97,15 @@ final class PasteSequence {
         let pending = entries.filter { !$0.isPasted }
         let queued = Settings.shared.stackPasteInReverse ? Array(pending.reversed()) : pending
         return queued + entries.filter(\.isPasted)
+    }
+
+    /// Filters `displayEntries` by the panel's search text. The underlying
+    /// queue and paste order remain untouched - this only changes what the
+    /// panel shows.
+    func visibleEntries(matching query: String? = nil) -> [PasteStackEntry] {
+        let trimmed = (query ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return displayEntries }
+        return displayEntries.filter { $0.item.searchableText.contains(trimmed) }
     }
 
     @ObservationIgnored private var saveWorkItem: DispatchWorkItem?
@@ -195,20 +213,34 @@ final class PasteSequence {
     // MARK: - Selection
 
     /// Selects the first entry in the panel's display order (pending items,
-    /// respecting `stackPasteInReverse`, ahead of already-pasted ones).
+    /// respecting `stackPasteInReverse`, ahead of already-pasted ones),
+    /// honoring the current search filter.
     func selectFirst() {
-        selectedEntryID = displayEntries.first?.id
+        selectedEntryID = visibleEntries().first?.id
     }
 
     func select(_ entry: PasteStackEntry) {
         selectedEntryID = entry.id
     }
 
-    /// Moves the selection by `delta` positions through `displayEntries`,
-    /// clamped to the ends of the list. Used for arrow-key navigation in the
-    /// floating panel.
+    /// Keeps the current selection when it still appears in the filtered
+    /// list, otherwise falls back to the first visible entry (or clears the
+    /// selection when nothing matches). Called whenever `searchText` or the
+    /// underlying entries change so selection always tracks what's on screen.
+    func reconcileSelection() {
+        let displayed = visibleEntries()
+        guard !displayed.isEmpty else { selectedEntryID = nil; return }
+        guard let selectedEntryID, displayed.contains(where: { $0.id == selectedEntryID }) else {
+            self.selectedEntryID = displayed.first?.id
+            return
+        }
+    }
+
+    /// Moves the selection by `delta` positions through the filtered display
+    /// order, clamped to the ends of the list. Used for arrow-key navigation
+    /// in the floating panel.
     func moveSelection(by delta: Int) {
-        let displayed = displayEntries
+        let displayed = visibleEntries()
         guard !displayed.isEmpty else { selectedEntryID = nil; return }
         guard let selectedEntryID,
               let index = displayed.firstIndex(where: { $0.id == selectedEntryID }) else {
@@ -217,6 +249,21 @@ final class PasteSequence {
         }
         let next = max(0, min(displayed.count - 1, index + delta))
         self.selectedEntryID = displayed[next].id
+    }
+
+    /// Reorders one pending entry to sit directly before another within the
+    /// active stack - the floating panel's drag-to-reorder. No-op for
+    /// unknown IDs or dragging an entry onto itself.
+    func moveEntry(_ id: UUID, before targetID: UUID) {
+        guard id != targetID,
+              let sourceIndex = entries.firstIndex(where: { $0.id == id }) else { return }
+        var updated = entries
+        let entry = updated.remove(at: sourceIndex)
+        guard let targetIndex = updated.firstIndex(where: { $0.id == targetID }) else { return }
+        updated.insert(entry, at: targetIndex)
+        guard updated.map(\.id) != entries.map(\.id) else { return }
+        entries = updated
+        persistActiveStack()
     }
 
     /// After one clip is pasted, selection advances to the next pending clip,

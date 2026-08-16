@@ -91,11 +91,21 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let sequence = PasteSequence.shared
+        // Left/Right double as text-cursor movement while the search field
+        // is focused, so only Up/Down (and Enter-to-paste) stay global list
+        // navigation in that case - matching Spotlight-style search fields.
+        let isEditingText = window?.firstResponder is NSTextView
         switch Int(event.keyCode) {
-        case kVK_UpArrow, kVK_LeftArrow:
+        case kVK_UpArrow:
             sequence.moveSelection(by: -1)
             return nil
-        case kVK_DownArrow, kVK_RightArrow:
+        case kVK_DownArrow:
+            sequence.moveSelection(by: 1)
+            return nil
+        case kVK_LeftArrow where !isEditingText:
+            sequence.moveSelection(by: -1)
+            return nil
+        case kVK_RightArrow where !isEditingText:
             sequence.moveSelection(by: 1)
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:

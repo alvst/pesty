@@ -2,20 +2,23 @@ import AppKit
 import SwiftUI
 
 /// The floating Paste Stack panel: shows the queue as browsable cards while
-/// the user copies elsewhere, and lets them jump the queue or drop an entry
-/// without leaving whatever app they're currently working in.
-///
-/// Drag-to-reorder and in-panel search are deliberately out of scope here -
-/// this is the minimal browsing surface on top of the PasteSequence engine.
+/// the user copies elsewhere, and lets them jump the queue, search it, drag
+/// an entry to reorder it, or drop an entry, all without leaving whatever
+/// app they're currently working in.
 struct PasteStackView: View {
     @Bindable private var stack = PasteSequence.shared
     private var settings: Settings { Settings.shared }
+    /// Vertical gap between entry rows - shared with `PasteStackInsertionCaret`'s
+    /// offset so the drag caret always centers in the actual gap between rows.
+    fileprivate static let entryRowSpacing: CGFloat = 6
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.45)
             deckStrip
+            Divider().opacity(0.45)
+            searchField
             Divider().opacity(0.45)
             controls
             Divider().opacity(0.45)
@@ -88,6 +91,33 @@ struct PasteStackView: View {
         .padding(.vertical, 8)
     }
 
+    /// Filters the visible entry list live as the user types. Purely a
+    /// display filter - it never touches the underlying queue or paste
+    /// order, which `PasteSequence.moveEntry` and `next()` still act on.
+    private var searchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            TextField("Search this stack", text: $stack.searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+            if !stack.searchText.isEmpty {
+                Button { stack.searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(.horizontal, 15)
+        .padding(.vertical, 8)
+    }
+
     private var controls: some View {
         HStack(spacing: 8) {
             Button {
@@ -121,15 +151,18 @@ struct PasteStackView: View {
     private var entries: some View {
         if stack.entries.isEmpty {
             emptyState
+        } else if visibleEntries.isEmpty {
+            searchEmptyState
         } else {
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 6) {
-                        ForEach(Array(stack.displayEntries.enumerated()), id: \.element.id) { index, entry in
+                    LazyVStack(spacing: Self.entryRowSpacing) {
+                        ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
                             PasteStackEntryRow(entry: entry,
                                                index: index + 1,
                                                selected: stack.selectedEntryID == entry.id)
                                 .id(entry.id)
+                                .modifier(PasteStackEntryReorderTarget(entry: entry))
                         }
                     }
                     .padding(.horizontal, 12)
@@ -145,12 +178,30 @@ struct PasteStackView: View {
         }
     }
 
+    private var visibleEntries: [PasteStackEntry] {
+        stack.visibleEntries()
+    }
+
     private var emptyState: some View {
         VStack(spacing: 9) {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(Theme.selection)
             Text("Copy text, images, or files in any app to add them here")
+                .font(.system(size: 12, weight: .medium))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 190)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var searchEmptyState: some View {
+        VStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(.secondary)
+            Text("No matches for “\(stack.searchText)”")
                 .font(.system(size: 12, weight: .medium))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -258,7 +309,8 @@ private struct PasteStackEntryRow: View {
         .opacity(entry.isPasted ? 0.48 : 1)
         .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .onTapGesture { stack.select(entry) }
-        .help(entry.isPasted ? "Pasted clip" : "Select this stack clip")
+        .help(entry.isPasted ? "Pasted clip" : "Select this stack clip - drag to reorder")
+        .modifier(PasteStackEntryDragSource(entry: entry))
     }
 
     private var rowBackground: Color {
@@ -306,6 +358,90 @@ private struct PasteStackEntryRow: View {
             .frame(width: 19, height: 19)
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             .help(entry.item.sourceAppName ?? "Source app")
+    }
+}
+
+/// Identifies which stack entry a drag inside the panel originated from, so
+/// a drop target elsewhere in the list can reorder by ID. Scoped to Paste
+/// Stack's own in-panel reordering - unrelated to ClipDragProvider, which
+/// carries a clip's exported content out to other apps.
+private let pasteStackEntryIdentifierType = "com.greycorelabs.pesty.paste-stack-entry-id"
+
+/// Makes a pending entry row draggable within the panel. Pasted entries
+/// (already at the bottom of the list, no longer affecting paste order in
+/// any meaningful way) are left non-draggable.
+private struct PasteStackEntryDragSource: ViewModifier {
+    let entry: PasteStackEntry
+
+    func body(content: Content) -> some View {
+        if entry.isPasted {
+            content
+        } else {
+            content.onDrag {
+                let provider = NSItemProvider()
+                provider.registerDataRepresentation(forTypeIdentifier: pasteStackEntryIdentifierType,
+                                                     visibility: .all) { completion in
+                    completion(Data(entry.id.uuidString.utf8), nil)
+                    return nil
+                }
+                return provider
+            }
+        }
+    }
+}
+
+/// Lets a pending entry be dropped onto another to reorder the active stack.
+/// Mirrors BarView's `PinboardItemReorderTarget`/`CardInsertionCaret` for a
+/// vertical list: a horizontal insertion caret above the row being dragged
+/// over, rather than a box highlight.
+private struct PasteStackEntryReorderTarget: ViewModifier {
+    let entry: PasteStackEntry
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        if entry.isPasted {
+            content
+        } else {
+            content
+                .overlay(alignment: .top) {
+                    if isTargeted {
+                        PasteStackInsertionCaret(color: Theme.selection)
+                            .offset(y: -PasteStackView.entryRowSpacing / 2 - 1.5)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onDrop(of: [pasteStackEntryIdentifierType], isTargeted: $isTargeted) { providers in
+                    guard let provider = providers.first else { return false }
+                    _ = provider.loadDataRepresentation(forTypeIdentifier: pasteStackEntryIdentifierType) { data, _ in
+                        guard let data, let idString = String(data: data, encoding: .utf8),
+                              let draggedID = UUID(uuidString: idString) else { return }
+                        DispatchQueue.main.async {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
+                                PasteSequence.shared.moveEntry(draggedID, before: entry.id)
+                            }
+                        }
+                    }
+                    return true
+                }
+        }
+    }
+}
+
+/// A horizontal, capsule-capped insertion line shown above whichever row a
+/// dragged stack entry is currently over - the vertical-list counterpart to
+/// the Pinboard card strip's I-beam insertion caret.
+private struct PasteStackInsertionCaret: View {
+    var color: Color
+    var capWidth: CGFloat = 12
+    var lineWidth: CGFloat = 3
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Capsule().fill(color).frame(width: capWidth, height: lineWidth)
+            Rectangle().fill(color).frame(height: lineWidth)
+            Capsule().fill(color).frame(width: capWidth, height: lineWidth)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
