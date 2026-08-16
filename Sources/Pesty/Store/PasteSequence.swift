@@ -137,8 +137,7 @@ final class PasteSequence {
         ensureActiveStack()
         guard isCollecting,
               !entries.contains(where: { $0.item.id == item.id }) else { return false }
-        let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
-        entries.append(PasteStackEntry(item: item, imagePreview: preview))
+        entries.append(makeEntry(for: item))
         if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
         return true
@@ -161,6 +160,35 @@ final class PasteSequence {
         guard changed else { return }
         persistActiveStack()
         scheduleSave()
+    }
+
+    /// Moves a clip the user explicitly chose from Clipboard history straight
+    /// into the active Paste Stack, without requiring collection to already
+    /// be on. Unlike passive clipboard capture, this also resumes collection
+    /// so the stack keeps growing if the user copies more clips afterward.
+    @discardableResult
+    func addHistoryItem(_ item: ClipItem) -> Bool {
+        ensureActiveStack()
+        guard !containsHistoryItemID(item.id) else { return false }
+        isCollecting = true
+        entries.append(makeEntry(for: item))
+        if selectedEntryID == nil { selectFirst() }
+        persistActiveStack()
+        return true
+    }
+
+    /// Whether a clip already sits in any saved stack (active or not) - used
+    /// to grey out "Move to Paste Stack" once a clip has already been queued.
+    func containsHistoryItemID(_ id: UUID) -> Bool {
+        savedStacks.contains { stack in stack.entries.contains { $0.item.id == id } }
+    }
+
+    /// Captures the rendered image while the original clip is still readily
+    /// available. The entry keeps the ClipItem itself for persistence; the
+    /// in-memory preview just keeps the active session visually stable.
+    private func makeEntry(for item: ClipItem) -> PasteStackEntry {
+        let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
+        return PasteStackEntry(item: item, imagePreview: preview)
     }
 
     // MARK: - Selection
@@ -271,6 +299,28 @@ final class PasteSequence {
             isCollecting = false
         }
         scheduleSave()
+    }
+
+    // MARK: - Deck switching
+
+    /// Switches the active stack to a different saved deck, e.g. from the
+    /// panel's deck switcher. No-op if `id` isn't a known saved stack.
+    func selectStack(_ id: UUID) {
+        guard let target = savedStacks.first(where: { $0.id == id }) else { return }
+        activate(target)
+    }
+
+    /// Deletes a saved deck outright. Deleting the active deck falls back to
+    /// the next non-empty saved stack, matching `cancel()`; deleting any
+    /// other deck leaves the active stack untouched.
+    func deleteStack(_ id: UUID) {
+        guard savedStacks.contains(where: { $0.id == id }) else { return }
+        if activeStackID == id {
+            cancel()
+        } else {
+            savedStacks.removeAll { $0.id == id }
+            scheduleSave()
+        }
     }
 
     // MARK: - Active stack bookkeeping

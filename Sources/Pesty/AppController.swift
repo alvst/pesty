@@ -385,6 +385,38 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updatePasteStackPanelVisibility()
     }
 
+    /// Starts a brand-new, empty saved stack, keeping the current one around
+    /// as a deck to switch back to. Distinct from `togglePasteStackCollecting`,
+    /// which resumes/pauses collecting into whichever stack is already active.
+    func newPasteStack() {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        PasteSequence.shared.newStack()
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Switches the floating panel to a different saved deck, driven by the
+    /// panel's deck switcher.
+    func selectPasteStack(_ id: UUID) {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        PasteSequence.shared.selectStack(id)
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Deletes a saved deck from the panel's deck switcher.
+    func deletePasteStack(_ id: UUID) {
+        PasteSequence.shared.deleteStack(id)
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Moves a Clipboard-history clip straight into the active Paste Stack,
+    /// without requiring the user to already be collecting - the history
+    /// card's own context-menu action.
+    func moveHistoryItemToPasteStack(_ item: ClipItem) {
+        guard Settings.shared.pasteStacksEnabled,
+              PasteSequence.shared.addHistoryItem(item) else { return }
+        updatePasteStackPanelVisibility()
+    }
+
     /// Shows the floating Paste Stack panel, creating it on first use.
     func showPasteStack() {
         guard Settings.shared.pasteStacksEnabled else { return }

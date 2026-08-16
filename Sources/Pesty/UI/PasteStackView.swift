@@ -5,9 +5,8 @@ import SwiftUI
 /// the user copies elsewhere, and lets them jump the queue or drop an entry
 /// without leaving whatever app they're currently working in.
 ///
-/// Deck switching between saved stacks, drag-to-reorder, and in-panel search
-/// are deliberately out of scope here - this is the minimal browsing surface
-/// on top of the PasteSequence engine.
+/// Drag-to-reorder and in-panel search are deliberately out of scope here -
+/// this is the minimal browsing surface on top of the PasteSequence engine.
 struct PasteStackView: View {
     @Bindable private var stack = PasteSequence.shared
     private var settings: Settings { Settings.shared }
@@ -16,13 +15,15 @@ struct PasteStackView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.45)
+            deckStrip
+            Divider().opacity(0.45)
             controls
             Divider().opacity(0.45)
             entries
             Divider().opacity(0.45)
             footer
         }
-        .frame(width: 318, height: 420)
+        .frame(width: 318, height: 464)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -61,6 +62,30 @@ struct PasteStackView: View {
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 12)
+    }
+
+    /// Saved decks the user can switch between - each pill is a past
+    /// `newStack()` call (or the current one), showing a "New Stack" action
+    /// alongside them so starting a fresh deck never requires losing this one.
+    private var deckStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(stack.savedStacks) { deck in
+                    PasteStackDeckPill(deck: deck, isActive: deck.id == stack.activeStackID)
+                }
+                Button { AppController.shared.newPasteStack() } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 27, height: 27)
+                        .background(Color.white.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("New Stack")
+            }
+            .padding(.horizontal, 15)
+        }
+        .padding(.vertical, 8)
     }
 
     private var controls: some View {
@@ -281,5 +306,57 @@ private struct PasteStackEntryRow: View {
             .frame(width: 19, height: 19)
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             .help(entry.item.sourceAppName ?? "Source app")
+    }
+}
+
+/// One saved deck in the switcher strip: a compact pill identifying the deck
+/// by its first clip (or, once empty, its creation date), its pending count,
+/// and a tap target to switch to it. Deleting lives in its context menu since
+/// the strip has no room for a dedicated close button per pill.
+private struct PasteStackDeckPill: View {
+    let deck: SavedPasteStack
+    let isActive: Bool
+
+    var body: some View {
+        Button {
+            guard !isActive else { return }
+            AppController.shared.selectPasteStack(deck.id)
+        } label: {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .lineLimit(1)
+                    .frame(maxWidth: 108, alignment: .leading)
+                Text("\(deck.pendingCount)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.white.opacity(0.16), in: Capsule())
+            }
+            .foregroundStyle(isActive ? Color.primary : Color.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 27)
+            .background(isActive ? Theme.selection.opacity(0.22) : Color.white.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(isActive ? Theme.selection : .clear, lineWidth: 1.4)
+            }
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .contextMenu {
+            Button(role: .destructive) {
+                AppController.shared.deletePasteStack(deck.id)
+            } label: {
+                Label("Delete Deck", systemImage: "trash")
+            }
+        }
+        .help(label)
+    }
+
+    private var label: String {
+        if let first = deck.entries.first {
+            return first.item.displayTitle
+        }
+        return deck.createdAt.clipRelative
     }
 }

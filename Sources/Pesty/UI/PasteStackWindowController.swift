@@ -18,7 +18,7 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
 
     init() {
         let panel = PasteStackPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 318, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 318, height: 464),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false)

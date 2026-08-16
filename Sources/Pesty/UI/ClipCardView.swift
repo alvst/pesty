@@ -206,6 +206,18 @@ struct ClipCardView: View {
             Label("Copy", systemImage: "doc.on.doc")
         }
 
+        if settings.pasteStacksEnabled {
+            Button {
+                AppController.shared.moveHistoryItemToPasteStack(item)
+            } label: {
+                Label(isInPasteStack ? "Already in Paste Stack" : "Add to Paste Stack",
+                      systemImage: isInPasteStack
+                        ? "checkmark.circle.fill"
+                        : "rectangle.stack.badge.plus")
+            }
+            .disabled(isInPasteStack)
+        }
+
         Divider()
 
         Button { AppController.shared.editItem(item) } label: {
@@ -266,6 +278,10 @@ struct ClipCardView: View {
         } label: {
             Label(deleteMenuTitle, systemImage: "trash")
         }
+    }
+
+    private var isInPasteStack: Bool {
+        PasteSequence.shared.containsHistoryItemID(item.id)
     }
 
     private var deleteMenuTitle: String {

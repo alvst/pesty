@@ -114,6 +114,9 @@ struct BarView: View {
                 Button(pasteSequence.isCollecting ? "Stop Collecting" : "Start Paste Stack") {
                     AppController.shared.togglePasteStackCollecting()
                 }
+                Button("New Stack") {
+                    AppController.shared.newPasteStack()
+                }
                 Button("Paste Next") {
                     AppController.shared.pasteNextStackItem()
                 }
