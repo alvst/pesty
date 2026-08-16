@@ -1,99 +1,189 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            PrivacySettings()
-                .tabItem { Label("Privacy", systemImage: "hand.raised") }
-            AboutView()
-                .tabItem { Label("About", systemImage: "info.circle") }
-        }
-        .frame(width: 520, height: 560)
-    }
-}
-
-private struct PrivacySettings: View {
-    @Bindable private var settings = Settings.shared
+    @State private var section: SettingsSection = .general
 
     var body: some View {
-        Form {
-            Section("Excluded Apps") {
-                Text("Pesty will not save anything copied while one of these apps is frontmost. Copies made from a browser extension are attributed to the browser, so add that too if you use one.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if settings.ignoredSourceAppBundleIDs.isEmpty {
-                    ContentUnavailableView("No apps excluded",
-                                           systemImage: "hand.raised",
-                                           description: Text("Add an app to keep its copied content out of Pesty."))
-                        .padding(.vertical, 12)
-                } else {
-                    ForEach(settings.ignoredSourceAppBundleIDs, id: \.self) { bundleID in
-                        ignoredAppRow(bundleID)
+        HStack(spacing: 0) {
+            settingsSidebar
+            Divider()
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title)
+                            .font(.system(size: 20, weight: .bold))
+                        Text(section.subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
                     }
+                    Spacer()
                 }
-
-                Button { chooseApps() } label: {
-                    Label("Add App…", systemImage: "plus")
-                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                Divider()
+                content
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
-        .formStyle(.grouped)
+        .frame(width: 760, height: 680)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func ignoredAppRow(_ bundleID: String) -> some View {
-        HStack(spacing: 10) {
-            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(applicationName(for: bundleID))
-                    .font(.system(size: 13, weight: .medium))
-                Text(bundleID)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 9) {
+                Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                    .resizable()
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text("Pesty")
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .padding(.bottom, 18)
+
+            ForEach(SettingsSection.allCases) { item in
+                Button { section = item } label: {
+                    Label(item.title, systemImage: item.symbol)
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
             Spacer()
-            Button { settings.removeIgnoredSourceApp(bundleID) } label: {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Allow clips from \(applicationName(for: bundleID))")
+            Text("Pesty \(Bundle.main.appVersion)")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .frame(width: 174)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private func chooseApps() {
-        let panel = NSOpenPanel()
-        panel.title = "Exclude Apps from Pesty"
-        panel.message = "Pesty will ignore copied content from the apps you choose."
-        panel.prompt = "Add Apps"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.applicationBundle]
-        guard panel.runModal() == .OK else { return }
-        for url in panel.urls {
-            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
-                  bundleID != Bundle.main.bundleIdentifier else { continue }
-            settings.addIgnoredSourceApp(bundleID)
+    @ViewBuilder
+    private var content: some View {
+        switch section {
+        case .general: GeneralSettings()
+        case .privacy: PrivacySettings()
+        case .shortcuts: ShortcutsSettings()
+        case .sync: SyncSettings()
+        case .about: AboutView()
         }
-    }
-
-    private func applicationName(for bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
-              let bundle = Bundle(url: url) else { return bundleID }
-        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? bundleID
     }
 }
+
+private enum SettingsSection: CaseIterable, Identifiable {
+    case general, privacy, shortcuts, sync, about
+    var id: Self { self }
+    var title: String {
+        switch self { case .general: "General"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .sync: "Sync"; case .about: "About" }
+    }
+    var subtitle: String {
+        switch self {
+        case .general: "History, behavior, and app preferences"
+        case .privacy: "Keep clips from selected apps out of Pesty"
+        case .shortcuts: "Keyboard controls for Pesty"
+        case .sync: "Keep your clipboard history available on every Mac"
+        case .about: "Pesty for macOS"
+        }
+    }
+    var symbol: String {
+        switch self { case .general: "gearshape"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .sync: "icloud"; case .about: "info.circle" }
+    }
+}
+
+// MARK: - Shared card components
+
+/// A titled group of settings, rendered as a heading above one or more
+/// `SettingsSurface` cards. Shared across every section so the whole window
+/// stays visually consistent.
+private struct SettingsFormGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title).font(.system(size: 17, weight: .semibold))
+            content
+        }
+    }
+}
+
+/// The rounded, bordered card that holds a group's actual controls.
+private struct SettingsSurface<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.08))
+            }
+    }
+}
+
+/// The scaffolding every section body shares: a scrollable, leading-aligned
+/// column of groups capped at a comfortable reading width.
+private struct SettingsPage<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                content
+            }
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+}
+
+private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+    HStack(spacing: 12) {
+        Text(title)
+            .font(.system(size: 14))
+        Spacer(minLength: 16)
+        Toggle("", isOn: isOn)
+            .labelsHidden()
+            .toggleStyle(.switch)
+    }
+    .padding(.vertical, 10)
+    .frame(maxWidth: .infinity)
+}
+
+private func applicationName(for bundleID: String) -> String {
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+          let bundle = Bundle(url: url) else { return bundleID }
+    return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+        ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+        ?? bundleID
+}
+
+// MARK: - General
 
 private struct GeneralSettings: View {
     @Bindable private var settings = Settings.shared
@@ -105,142 +195,147 @@ private struct GeneralSettings: View {
     #endif
 
     var body: some View {
-        Form {
-            Section("Activation") {
-                LabeledContent("Show Pesty") { HotkeyRecorderView() }
+        SettingsPage {
+            SettingsFormGroup("Keep History") {
+                SettingsSurface {
+                    HistoryRetentionSettings()
+                    Divider()
+                    settingToggle("Delete permanently", isOn: $settings.deletePermanently)
+                    Text("Skips the five-minute Undo window — deleted clips are removed immediately and can't be recovered. Hold Option while deleting to bypass Undo for just one deletion, regardless of this setting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 10)
+                    Divider()
+                    HStack {
+                        Text("Erase saved clips now")
+                            .font(.system(size: 14))
+                        Spacer()
+                        Button("Erase History…", role: .destructive) {
+                            ClipboardStore.shared.clearHistory()
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
             }
 
-            HistoryRetentionSettings()
-
-            Section("Quick Paste") {
-                LabeledContent("Paste items 1–9") {
-                    HStack(spacing: 6) {
-                        modifierPicker(selection: $settings.quickPasteModifier)
-                        Text("+ 1…9").foregroundStyle(.secondary)
+            SettingsFormGroup("Behavior") {
+                SettingsSurface {
+                    VStack(alignment: .leading, spacing: 0) {
+                        #if !MAS
+                        settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
+                        Divider()
+                        #endif
+                        settingToggle("Play sound on paste", isOn: $settings.playSound)
+                        Divider()
+                        settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
+                        Divider()
+                        settingToggle("Launch at login", isOn: $settings.launchAtLogin)
+                        Divider()
+                        settingToggle("Show resize handle on the Paste Bar", isOn: $settings.showBarResizeHandle)
+                        Divider()
+                        settingToggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
+                        Divider()
+                        VStack(alignment: .leading, spacing: 8) {
+                            LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
+                                .font(.system(size: 14))
+                            Slider(value: $settings.barHeight, in: 300...720, step: 10)
+                        }
+                        .padding(.vertical, 12)
+                        #if MAS
+                        Text("Select a clip to copy it, then press ⌘V to paste it into your app.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                            .padding(.bottom, 8)
+                        #endif
                     }
                 }
-                LabeledContent("Paste as plain text") {
-                    modifierPicker(selection: $settings.plainTextModifier)
-                }
-                Text("Hold the plain-text modifier while using Quick Paste to strip formatting — with the defaults, ⌘⇧1 pastes the first clip as plain text. The two roles can never share a modifier; picking one that is taken swaps them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+            .onChange(of: settings.barHeight) { _, _ in
+                AppController.shared.updateConfiguredBarHeight()
             }
 
-            Section("Behavior") {
-                #if !MAS
-                Toggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
-                #endif
-                Toggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
-                Toggle("Play sound on paste", isOn: $settings.playSound)
-                Toggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
-                Toggle("Launch at login", isOn: $settings.launchAtLogin)
-                Toggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
-                VStack(alignment: .leading) {
-                    LabeledContent("Bar height", value: "\(Int(settings.barHeight)) pt")
-                    Slider(value: $settings.barHeight, in: 300...720, step: 10)
-                }
-                Toggle("Show resize handle on the Paste Bar", isOn: $settings.showBarResizeHandle)
-                #if MAS
-                Text("Select a clip to copy it, then press ⌘V to paste it into your app.")
-                    .font(.caption).foregroundStyle(.secondary)
-                #endif
-            }
-
-            Section("Clip Previews") {
-                Picker("Preview style", selection: $settings.clipPreviewStyle) {
-                    ForEach(ClipPreviewStyle.allCases) { style in
-                        Text(style.title).tag(style)
+            SettingsFormGroup("Clip Previews") {
+                SettingsSurface {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent("Preview style") {
+                            Picker("", selection: $settings.clipPreviewStyle) {
+                                ForEach(ClipPreviewStyle.allCases) { style in
+                                    Text(style.title).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                        Divider()
+                        Text(settings.clipPreviewStyle.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 10)
                     }
                 }
-                Text(settings.clipPreviewStyle.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
-            Section("Open Clips With") {
-                previewApplicationRow(for: .text)
-                previewApplicationRow(for: .image)
-                previewApplicationRow(for: .link)
-                HStack {
-                    Text("Restore Apple defaults")
-                    Spacer()
-                    Button("Restore") {
-                        settings.restorePreviewApplicationDefaults()
+            SettingsFormGroup("Open Clips With") {
+                SettingsSurface {
+                    VStack(alignment: .leading, spacing: 0) {
+                        previewApplicationRow(for: .text)
+                        Divider()
+                        previewApplicationRow(for: .image)
+                        Divider()
+                        previewApplicationRow(for: .link)
+                        Divider()
+                        HStack {
+                            Text("Restore Apple defaults")
+                                .font(.system(size: 14))
+                            Spacer()
+                            Button("Restore") {
+                                settings.restorePreviewApplicationDefaults()
+                            }
+                        }
+                        .padding(.vertical, 10)
                     }
+                    Text("These set the one-click app in Inline Pesty previews. Use its arrow to choose a different app just once.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
                 }
-                Text("These set the one-click app in Inline Pesty previews. Use its arrow to choose a different app just once.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-
-            #if MAS
-            Section("Sync") {
-                Toggle("Sync history with iCloud", isOn: Binding(
-                    get: { settings.cloudKitSync },
-                    set: { on in
-                        settings.cloudKitSync = on
-                        if on { CloudSyncService.shared.enable() } else { CloudSyncService.shared.stop() }
-                    }))
-                Text(CloudSyncService.shared.status)
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            #else
-            Section("Sync") {
-                Toggle("Sync clipboard via iCloud Drive", isOn: Binding(
-                    get: { settings.iCloudSync },
-                    set: { _ in AppController.shared.toggleICloudSync() }))
-                Text(ClipboardStore.shared.iCloudAvailable
-                     ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
-                     : "Sign in to iCloud and enable iCloud Drive to use sync.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            #endif
 
             #if !MAS
-            Section("Permissions") {
-                HStack(spacing: 10) {
-                    Image(systemName: accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(accessibilityGranted ? .green : .orange)
-                        .font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Accessibility")
-                        Text(accessibilityGranted
-                             ? "Granted — direct paste is enabled."
-                             : (requestedGrant
-                                ? "Waiting… toggle Pesty on in System Settings."
-                                : "Required to paste directly into other apps."))
-                            .font(.caption)
-                            .foregroundStyle(accessibilityGranted ? .green : .secondary)
-                    }
-                    Spacer()
-                    if !accessibilityGranted {
-                        Button("Open Settings") {
-                            requestedGrant = true
-                            PasteService.ensureAccessibility(prompt: true)
-                            openAccessibilityPane()
+            SettingsFormGroup("Accessibility") {
+                SettingsSurface {
+                    HStack(spacing: 12) {
+                        Image(systemName: accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(accessibilityGranted ? .green : .orange)
+                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(accessibilityGranted ? "Accessibility enabled" : "Accessibility required")
+                                .font(.system(size: 14, weight: .medium))
+                            Text(accessibilityGranted
+                                 ? "Direct paste is ready to use."
+                                 : (requestedGrant ? "Waiting for approval in System Settings." : "Required to paste directly into other apps."))
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                    } else if requestedGrant {
-                        Button("Restart Pesty") { AppController.restart() }
+                        Spacer()
+                        if !accessibilityGranted {
+                            Button("Open Settings") {
+                                requestedGrant = true
+                                PasteService.ensureAccessibility(prompt: true)
+                                openAccessibilityPane()
+                            }
+                        } else if requestedGrant {
+                            Button("Restart Pesty") { AppController.restart() }
+                        }
                     }
+                    .padding(.vertical, 10)
                 }
             }
             #endif
-
-            Section("Data") {
-                Toggle("Delete permanently", isOn: $settings.deletePermanently)
-                Text("Skips the five-minute Undo window — deleted clips are removed immediately and can't be recovered. Hold Option while deleting to bypass Undo for just one deletion, regardless of this setting.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Clear Clipboard History", role: .destructive) {
-                    ClipboardStore.shared.clearHistory()
-                }
-            }
         }
-        .formStyle(.grouped)
-        .onChange(of: settings.barHeight) { _, _ in
-            AppController.shared.updateConfiguredBarHeight()
-        }
+        .background(Color.clear)
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
@@ -258,27 +353,17 @@ private struct GeneralSettings: View {
     }
     #endif
 
-    private func modifierPicker(selection: Binding<Int>) -> some View {
-        Picker("", selection: selection) {
-            ForEach(ShortcutModifier.allCases) { modifier in
-                Text("\(modifier.symbol) \(modifier.title)").tag(modifier.carbonValue)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(minWidth: 118)
-    }
-
     private func previewApplicationRow(for target: PreviewOpenTarget) -> some View {
         let bundleID = settings.previewApplicationBundleID(for: target)
         return HStack(spacing: 10) {
             Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(target.title)
+                    .font(.system(size: 14, weight: .medium))
                 Text(applicationName(for: bundleID))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -288,6 +373,7 @@ private struct GeneralSettings: View {
                 choosePreviewApplication(for: target)
             }
         }
+        .padding(.vertical, 9)
     }
 
     private func choosePreviewApplication(for target: PreviewOpenTarget) {
@@ -305,16 +391,11 @@ private struct GeneralSettings: View {
               let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
         settings.setPreviewApplicationBundleID(bundleID, for: target)
     }
-
-    private func applicationName(for bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
-              let bundle = Bundle(url: url) else { return bundleID }
-        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? bundleID
-    }
 }
 
+/// The "Keep History" card's mode picker plus either the item-count stepper
+/// or the age-based preset slider - drafts changes and confirms before
+/// applying anything that would actually remove clips.
 private struct HistoryRetentionSettings: View {
     private var settings = Settings.shared
     @State private var draftMode = Settings.shared.historyRetentionMode
@@ -333,50 +414,33 @@ private struct HistoryRetentionSettings: View {
     }
 
     var body: some View {
-        Section {
-            Picker("Limit history by", selection: $draftMode) {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("Keep history by", selection: $draftMode) {
                 ForEach(HistoryRetentionMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
+            // A segmented Picker stretches to fill whatever width its
+            // container proposes by default - Alvie's Pesty keeps this
+            // compact, hugging just its two labels, not the full card.
+            .fixedSize()
             if draftMode == .itemCount {
                 Stepper(value: $draftLimit, in: 50...5000, step: 50) {
-                    LabeledContent("Keep at most", value: "\(draftLimit) clips")
+                    LabeledContent("Number of clips", value: "\(draftLimit) items")
+                        .font(.system(size: 14))
                 }
-            }
-        } header: {
-            Text("History")
-        } footer: {
-            // On macOS, Form(.formStyle(.grouped)) lays out every row placed
-            // in a Section's *body* on a shared two-column label/control grid
-            // (backed by NSGridView), sized from the widest label anywhere in
-            // that Section - here "Limit history by". Any native AppKit
-            // control dropped into that body (Slider, Picker, Stepper, ...)
-            // gets clamped and shifted into the trailing "control column" of
-            // that grid, even with no visible label of its own and even with
-            // an explicit SwiftUI .frame() on it, because the constraint is
-            // applied by the grid to the control's AppKit host view *after*
-            // SwiftUI layout runs - which is why .frame(maxWidth: .infinity),
-            // an HStack wrapper, and a GeometryReader forcing an exact width
-            // all had zero effect (confirmed by dumping the live NSView tree:
-            // the same Slider measured ~253pt wide starting at x≈217 in a
-            // 480pt-wide row when placed in the body, vs. ~460pt wide
-            // starting at x≈30 when placed here). A Section's footer is
-            // rendered as plain full-width content below that grid, not as a
-            // grid row, so it never gets pulled into the label/control
-            // layout - which is why moving this block here (rather than
-            // tweaking the Slider itself yet again) actually fixes the width
-            // and alignment, and also guarantees the three rows below line
-            // up with each other since they're now plain VStack siblings
-            // sharing one container instead of being split across the grid.
-            if draftMode != .itemCount {
+                Text("Pesty keeps the most recent \(draftLimit) clips.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack {
-                        Text("Remove clips older than")
+                        Text("Keep clips for")
+                            .font(.system(size: 14))
                         Spacer()
                         Text(draftPreset.title)
-                            .fontWeight(.semibold)
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Color.accentColor)
                     }
                     Slider(value: draftPresetSliderValue,
@@ -391,13 +455,11 @@ private struct HistoryRetentionSettings: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                Text(footnote)
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            Text(footnote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, draftMode == .itemCount ? 0 : 4)
         }
+        .padding(.top, 4)
         .onChange(of: draftMode) { evaluateDraft() }
         .onChange(of: draftLimit) { evaluateDraft() }
         .onChange(of: draftDays) { evaluateDraft() }
@@ -441,6 +503,194 @@ private struct HistoryRetentionSettings: View {
         draftDays = settings.historyRetentionDays
     }
 }
+
+// MARK: - Privacy
+
+private struct PrivacySettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        SettingsPage {
+            SettingsFormGroup("Excluded Apps") {
+                SettingsSurface {
+                    Text("Pesty will not save anything copied while one of these apps is frontmost. Copies made from a browser extension are attributed to the browser, so add that too if you use one.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                        .padding(.bottom, settings.ignoredSourceAppBundleIDs.isEmpty ? 12 : 8)
+
+                    if settings.ignoredSourceAppBundleIDs.isEmpty {
+                        ContentUnavailableView("No apps excluded",
+                                               systemImage: "hand.raised",
+                                               description: Text("Add an app to keep its copied content out of Pesty."))
+                            .font(.system(size: 12))
+                            .padding(.vertical, 14)
+                    } else {
+                        ForEach(settings.ignoredSourceAppBundleIDs, id: \.self) { bundleID in
+                            Divider()
+                            ignoredAppRow(bundleID)
+                        }
+                    }
+
+                    Divider()
+                    Button { chooseApps() } label: {
+                        Label("Add App…", systemImage: "plus")
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+
+            SettingsFormGroup("Concealed Clips") {
+                SettingsSurface {
+                    settingToggle("Ignore passwords (concealed clips)", isOn: $settings.ignoreConcealed)
+                    Text("Pesty also respects the standard macOS concealed-clipboard marker used by password managers.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 8)
+                }
+            }
+        }
+    }
+
+    private func ignoredAppRow(_ bundleID: String) -> some View {
+        HStack(spacing: 10) {
+            Image(nsImage: AppIconProvider.icon(forBundleID: bundleID))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(applicationName(for: bundleID))
+                    .font(.system(size: 13, weight: .medium))
+                Text(bundleID)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { settings.removeIgnoredSourceApp(bundleID) } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Allow clips from \(applicationName(for: bundleID))")
+        }
+        .padding(.vertical, 7)
+    }
+
+    private func chooseApps() {
+        let panel = NSOpenPanel()
+        panel.title = "Exclude Apps from Pesty"
+        panel.message = "Pesty will ignore copied content from the apps you choose."
+        panel.prompt = "Add Apps"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.applicationBundle]
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                  bundleID != Bundle.main.bundleIdentifier else { continue }
+            settings.addIgnoredSourceApp(bundleID)
+        }
+    }
+}
+
+// MARK: - Shortcuts
+
+private struct ShortcutsSettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        SettingsPage {
+            SettingsFormGroup("Open Pesty") {
+                SettingsSurface {
+                    LabeledContent("Show the Pesty bar") { HotkeyRecorderView() }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 9)
+                }
+            }
+
+            SettingsFormGroup("Quick Paste") {
+                SettingsSurface {
+                    VStack(spacing: 0) {
+                        LabeledContent("Paste items 1–9") {
+                            HStack(spacing: 6) {
+                                modifierPicker(selection: $settings.quickPasteModifier)
+                                Text("+ 1…9").foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                        Divider()
+                        LabeledContent("Paste as plain text") {
+                            modifierPicker(selection: $settings.plainTextModifier)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                    }
+                    Text("Hold the plain-text modifier while using Quick Paste to strip formatting — with the defaults, ⌘⇧1 pastes the first clip as plain text. The two roles can never share a modifier; picking one that is taken swaps them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                }
+            }
+        }
+    }
+
+    private func modifierPicker(selection: Binding<Int>) -> some View {
+        Picker("", selection: selection) {
+            ForEach(ShortcutModifier.allCases) { modifier in
+                Text("\(modifier.symbol) \(modifier.title)").tag(modifier.carbonValue)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 118)
+    }
+}
+
+// MARK: - Sync
+
+private struct SyncSettings: View {
+    @Bindable private var settings = Settings.shared
+
+    var body: some View {
+        SettingsPage {
+            #if MAS
+            SettingsFormGroup("iCloud") {
+                SettingsSurface {
+                    settingToggle("Sync history with iCloud", isOn: Binding(
+                        get: { settings.cloudKitSync },
+                        set: { on in
+                            settings.cloudKitSync = on
+                            if on { CloudSyncService.shared.enable() } else { CloudSyncService.shared.stop() }
+                        }))
+                    Text(CloudSyncService.shared.status)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.bottom, 8)
+                }
+            }
+            #else
+            SettingsFormGroup("iCloud Drive") {
+                SettingsSurface {
+                    settingToggle("Sync clipboard via iCloud Drive", isOn: Binding(
+                        get: { settings.iCloudSync },
+                        set: { _ in AppController.shared.toggleICloudSync() }))
+                    Text(ClipboardStore.shared.iCloudAvailable
+                         ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
+                         : "Sign in to iCloud and enable iCloud Drive to use sync.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 8)
+                }
+            }
+            #endif
+        }
+    }
+}
+
+// MARK: - About
 
 private struct AboutView: View {
     var body: some View {
