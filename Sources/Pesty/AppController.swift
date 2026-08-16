@@ -48,11 +48,6 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         monitor.start()
 
-        QuickLookService.shared.onSelectionChange = { [weak self] id in
-            guard let self, self.store.source != .pasteStack else { return }
-            self.store.selectedID = id
-        }
-
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
@@ -290,7 +285,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.barInputMode = .cards
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
-        QuickLookService.shared.dismiss()
         barController?.hide(immediately: immediately)
     }
 
