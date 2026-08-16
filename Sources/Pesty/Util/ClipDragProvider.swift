@@ -4,9 +4,15 @@ import UniformTypeIdentifiers
 @MainActor
 enum ClipDragProvider {
     private static let colorTypeIdentifier = "com.apple.cocoa.pasteboard.color"
+    /// Identifies which clip a drag originated from, alongside its normal
+    /// content representations, so an in-app drop target (e.g. a Pinboard
+    /// tab) can recover the exact clip instead of just its exported content.
+    /// An external app that doesn't recognize this type simply ignores it.
+    static let clipIdentifierType = "com.greycorelabs.pesty.clip-id"
 
     static func make(for item: ClipItem) -> NSItemProvider {
         let provider = NSItemProvider()
+        register(Data(item.id.uuidString.utf8), as: clipIdentifierType, on: provider)
         switch item.type {
         case .image:
             registerImage(item, on: provider)

@@ -75,6 +75,12 @@ struct PinboardTabs: View {
     // Visible confirmation that a reorder actually landed, since the tabs
     // themselves reordering can be easy to miss in the moment.
     @State private var moveConfirmationText: String?
+    @State private var renameSession: PinboardRenameSession?
+    @FocusState private var focusedRenameID: UUID?
+    // Highlights whichever Pinboard tab a clip card is currently being
+    // dragged over, so dropping to pin reads as a distinct target from the
+    // row-wide Pinboard-reordering drop zone underneath it.
+    @State private var pinDropTargetID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -87,8 +93,7 @@ struct PinboardTabs: View {
                 }
 
                 ForEach(store.pinboards) { board in
-                    draggableBoardTab(board)
-                        .contextMenu { pinboardContextMenu(board) }
+                    boardTab(board)
                         .background(
                             GeometryReader { geo in
                                 Color.clear.preference(
@@ -154,6 +159,26 @@ struct PinboardTabs: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: moveConfirmationText)
+        .onChange(of: focusedRenameID) { oldValue, newValue in
+            guard let oldValue, oldValue != newValue,
+                  let session = renameSession,
+                  session.boardID == oldValue else { return }
+            // Clicking away commits a valid draft and cancels a blank draft.
+            resolveRename(session.focusLost(), for: oldValue)
+        }
+    }
+
+    @ViewBuilder
+    private func boardTab(_ board: Pinboard) -> some View {
+        if renameSession?.boardID == board.id {
+            inlineRenameField(for: board)
+        } else {
+            draggableBoardTab(board)
+                .contextMenu { pinboardContextMenu(board) }
+                .onChange(of: board.name) { _, newName in
+                    receiveRemoteName(newName, for: board.id)
+                }
+        }
     }
 
     private func draggableBoardTab(_ board: Pinboard) -> some View {
@@ -188,11 +213,60 @@ struct PinboardTabs: View {
             moveLeft: { _ = store.movePinboard(board.id, by: -1) },
             moveRight: { _ = store.movePinboard(board.id, by: 1) }
         ))
+        .overlay {
+            if pinDropTargetID == board.id {
+                RoundedRectangle(cornerRadius: 100, style: .continuous)
+                    .strokeBorder(Theme.selection, lineWidth: 2)
+            }
+        }
+        .onDrop(of: [ClipDragProvider.clipIdentifierType],
+                isTargeted: Binding(
+                    get: { pinDropTargetID == board.id },
+                    set: { targeted in
+                        if targeted {
+                            pinDropTargetID = board.id
+                        } else if pinDropTargetID == board.id {
+                            pinDropTargetID = nil
+                        }
+                    }
+                )
+        ) { providers in
+            pinClip(from: providers, ontoBoardID: board.id)
+        }
+    }
+
+    private func inlineRenameField(for board: Pinboard) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(board.color).frame(width: 7, height: 7)
+            TextField("Pinboard name", text: renameBinding(for: board.id))
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Theme.chromeTextPrimary)
+                .frame(width: 120)
+                .focused($focusedRenameID, equals: board.id)
+                .onSubmit {
+                    guard let session = renameSession,
+                          session.boardID == board.id else { return }
+                    resolveRename(session.returnPressed(), for: board.id)
+                }
+                .onExitCommand {
+                    guard let session = renameSession,
+                          session.boardID == board.id else { return }
+                    resolveRename(session.escapePressed(), for: board.id)
+                }
+                .accessibilityLabel("Pinboard name")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 29)
+        .background(Theme.pillSelected, in: Capsule())
+        .fixedSize()
     }
 
     @ViewBuilder
     private func pinboardContextMenu(_ board: Pinboard) -> some View {
-        Button("Rename…") { rename(board) }
+        Button { beginRenaming(board) } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
         Divider()
         Button { store.movePinboard(board.id, by: -1) } label: {
             Label("Move Left", systemImage: "arrow.left")
@@ -242,6 +316,8 @@ struct PinboardTabs: View {
     private func addPinboard() {
         let board = store.addPinboard(name: "New Pinboard")
         store.source = .pinboard(board.id)
+        store.selectFirst()
+        beginRenaming(board)
     }
 
     /// Resolves an x-position (in the row's own coordinate space) to "insert
@@ -271,6 +347,24 @@ struct PinboardTabs: View {
         } else {
             return (frames[index - 1].maxX + frames[index].minX) / 2
         }
+    }
+
+    /// Dropping a dragged clip card directly onto a Pinboard tab pins it
+    /// there — a shortcut for the same "Pin to…" context-menu action.
+    private func pinClip(from providers: [NSItemProvider], ontoBoardID boardID: UUID) -> Bool {
+        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(ClipDragProvider.clipIdentifierType) })
+        else { return false }
+        _ = provider.loadDataRepresentation(forTypeIdentifier: ClipDragProvider.clipIdentifierType) { data, _ in
+            guard let data,
+                  let idString = String(data: data, encoding: .utf8),
+                  let clipID = UUID(uuidString: idString) else { return }
+            DispatchQueue.main.async {
+                guard let item = (store.history + store.pinboards.flatMap(\.items))
+                    .first(where: { $0.id == clipID }) else { return }
+                store.saveToPinboard(item, boardID: boardID)
+            }
+        }
+        return true
     }
 
     private func performPinboardDrop(
@@ -321,12 +415,66 @@ struct PinboardTabs: View {
         }
     }
 
-    private func rename(_ board: Pinboard) {
-        if let name = TextPrompt.run(title: "Rename Pinboard",
-                                     message: "Enter a new name",
-                                     defaultValue: board.name) {
-            store.renamePinboard(board.id, to: name)
+    private func beginRenaming(_ board: Pinboard) {
+        if let active = renameSession, active.boardID != board.id {
+            resolveRename(active.focusLost(), for: active.boardID)
         }
+        renameSession = PinboardRenameSession(boardID: board.id, name: board.name)
+        // Driven directly here instead of the rendered field's .onAppear,
+        // which doesn't fire reliably in every AppKit-hosted SwiftUI context
+        // (e.g. right after a Button click is still settling its own
+        // key-window focus). One run-loop turn lets that settle first.
+        DispatchQueue.main.async {
+            guard renameSession?.boardID == board.id else { return }
+            focusedRenameID = board.id
+            DispatchQueue.main.async {
+                guard renameSession?.boardID == board.id,
+                      focusedRenameID == board.id else { return }
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            }
+        }
+    }
+
+    private func renameBinding(for boardID: UUID) -> Binding<String> {
+        Binding {
+            guard let session = renameSession, session.boardID == boardID else { return "" }
+            return session.draft
+        } set: { value in
+            guard renameSession?.boardID == boardID else { return }
+            renameSession?.updateDraft(value)
+        }
+    }
+
+    private func receiveRemoteName(_ name: String, for boardID: UUID) {
+        guard var session = renameSession,
+              session.receiveRemoteName(name, for: boardID) else { return }
+        renameSession = session
+    }
+
+    private func resolveRename(
+        _ outcome: PinboardRenameSession.Outcome,
+        for boardID: UUID
+    ) {
+        guard renameSession?.boardID == boardID else { return }
+        switch outcome {
+        case let .commit(name):
+            store.renamePinboard(boardID, to: name)
+            endRenaming(boardID)
+        case .cancel:
+            endRenaming(boardID)
+        case let .keepEditing(refocus):
+            guard refocus else { return }
+            DispatchQueue.main.async {
+                guard renameSession?.boardID == boardID else { return }
+                focusedRenameID = boardID
+            }
+        }
+    }
+
+    private func endRenaming(_ boardID: UUID) {
+        guard renameSession?.boardID == boardID else { return }
+        renameSession = nil
+        if focusedRenameID == boardID { focusedRenameID = nil }
     }
 }
 

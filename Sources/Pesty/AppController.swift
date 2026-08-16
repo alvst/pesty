@@ -492,7 +492,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Events belonging to a native context menu, editor, alert, or the
         // Settings window must stay with their own responder chain. The bar
         // monitor is only responsible for keys delivered to the panel itself.
-        guard event.window === barController?.window else { return event }
+        guard let barWindow = barController?.window,
+              event.window === barWindow else { return event }
+
+        // A real editable text field living inside the bar (e.g. the inline
+        // Pinboard rename field) owns its own keystrokes once it is first
+        // responder. Without this, the monitor's type-to-search fallback
+        // below steals every character before the field ever sees it.
+        if barWindow.firstResponder is NSText { return event }
 
         if handleBarCommandShortcut(event) { return nil }
 
