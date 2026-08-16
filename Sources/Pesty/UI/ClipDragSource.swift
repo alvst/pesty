@@ -9,7 +9,10 @@ import SwiftUI
 /// (e.g. dropping onto a Pinboard tab) and hide only once the drag has
 /// genuinely left the bar for whatever's underneath.
 struct ClipDragSource: NSViewRepresentable {
-    let writers: [NSPasteboardWriting]
+    /// Deferred: building writers re-encodes an image clip's full bitmap,
+    /// so it must only run when a drag actually starts — never as part of
+    /// evaluating the card's view body.
+    let makeWriters: () -> [NSPasteboardWriting]
     let onSelect: () -> Void
     let onOpen: () -> Void
     let onDragStarted: () -> Void
@@ -26,7 +29,7 @@ struct ClipDragSource: NSViewRepresentable {
     }
 
     private func update(_ view: DragSourceView) {
-        view.writers = writers
+        view.makeWriters = makeWriters
         view.onSelect = onSelect
         view.onOpen = onOpen
         view.onDragStarted = onDragStarted
@@ -35,7 +38,7 @@ struct ClipDragSource: NSViewRepresentable {
 }
 
 final class DragSourceView: NSView, NSDraggingSource {
-    var writers: [NSPasteboardWriting] = []
+    var makeWriters: () -> [NSPasteboardWriting] = { [] }
     var onSelect: () -> Void = {}
     var onOpen: () -> Void = {}
     var onDragStarted: () -> Void = {}
@@ -44,6 +47,7 @@ final class DragSourceView: NSView, NSDraggingSource {
     private var mouseDownLocation: NSPoint?
     private var mouseDownClickCount = 0
     private var startedDragging = false
+    private var dragAttemptFailed = false
     private var hasExitedBar = false
 
     override var isOpaque: Bool { false }
@@ -58,17 +62,27 @@ final class DragSourceView: NSView, NSDraggingSource {
         mouseDownLocation = convert(event.locationInWindow, from: nil)
         mouseDownClickCount = event.clickCount
         startedDragging = false
+        dragAttemptFailed = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard !startedDragging, let start = mouseDownLocation, !writers.isEmpty else { return }
+        guard !startedDragging, !dragAttemptFailed, let start = mouseDownLocation else { return }
         let current = convert(event.locationInWindow, from: nil)
         guard hypot(current.x - start.x, current.y - start.y) >= 4 else { return }
+
+        let writers = makeWriters()
+        guard !writers.isEmpty else {
+            // Nothing draggable after all (e.g. the backing image file is
+            // gone). Don't retry the expensive build on every drag pixel;
+            // the release still counts as a normal click.
+            dragAttemptFailed = true
+            return
+        }
 
         startedDragging = true
         hasExitedBar = false
         onDragStarted()
-        let preview = snapshot()
+        let preview = snapshot(writers: writers)
         let items = writers.map { writer -> NSDraggingItem in
             let item = NSDraggingItem(pasteboardWriter: writer)
             item.setDraggingFrame(bounds, contents: preview)
@@ -110,14 +124,14 @@ final class DragSourceView: NSView, NSDraggingSource {
         onDragExitedBar()
     }
 
-    private func snapshot() -> NSImage {
+    private func snapshot(writers: [NSPasteboardWriting]) -> NSImage {
         guard let contentView = window?.contentView else {
-            return fallbackPreview()
+            return fallbackPreview(writers: writers)
         }
         let rectInWindow = convert(bounds, to: nil)
         let rectInContent = contentView.convert(rectInWindow, from: nil)
         guard let representation = contentView.bitmapImageRepForCachingDisplay(in: rectInContent) else {
-            return fallbackPreview()
+            return fallbackPreview(writers: writers)
         }
         contentView.cacheDisplay(in: rectInContent, to: representation)
         representation.size = bounds.size
@@ -126,10 +140,12 @@ final class DragSourceView: NSView, NSDraggingSource {
         return roundedPreview(image)
     }
 
-    private func fallbackPreview() -> NSImage {
+    private func fallbackPreview(writers: [NSPasteboardWriting]) -> NSImage {
         let icon: NSImage
-        if let fileURL = writers.first as? NSURL, fileURL.isFileURL, let path = fileURL.path {
-            icon = NSWorkspace.shared.icon(forFile: path)
+        // File writers are NSPasteboardItems carrying a file URL string.
+        if let urlString = (writers.first as? NSPasteboardItem)?.string(forType: .fileURL),
+           let url = URL(string: urlString), url.isFileURL {
+            icon = NSWorkspace.shared.icon(forFile: url.path)
         } else {
             icon = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil) ?? NSImage()
         }

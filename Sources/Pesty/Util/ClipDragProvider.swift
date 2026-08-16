@@ -10,6 +10,26 @@ extension UTType {
 
 @MainActor
 enum ClipDragProvider {
+    /// A cheap draggability test for view code. This is deliberately not
+    /// `!pasteboardWriters(for:).isEmpty`: building writers loads and
+    /// re-encodes an image clip's full bitmap, far too heavy for something
+    /// SwiftUI evaluates on every card render. Views gate on this and build
+    /// the writers only once a drag actually starts.
+    static func canDrag(_ item: ClipItem) -> Bool {
+        switch item.type {
+        case .file:
+            return item.fileURLs.contains { URL(string: $0)?.isFileURL == true }
+        case .image:
+            return item.imageFileName != nil
+        case .richText:
+            return item.rtfData != nil || item.htmlData != nil || item.text != nil
+        case .link, .text:
+            return item.text != nil
+        case .color:
+            return item.colorHex != nil
+        }
+    }
+
     /// Builds the items for a native `NSDraggingSession`. Unlike the single
     /// `NSItemProvider` that `.onDrag` allowed, a multi-file clip becomes one
     /// dragging item per file, so every file arrives at the drop target.

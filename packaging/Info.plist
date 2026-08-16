@@ -34,5 +34,25 @@
     <string>public.app-category.productivity</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <!-- The in-process drag marker must be a declared UTType: conformance
+         matching for .onDrop/hasItemsConforming silently fails for
+         undeclared custom identifiers, which reads as "drops just don't
+         land" with no error anywhere. UTType(exportedAs:) covered the old
+         NSItemProvider path in-process, but the native dragging session
+         writes NSPasteboardItems, whose type matching goes through the
+         declared-types database. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.alvst.pesty-alvie.clip-id</string>
+            <key>UTTypeDescription</key>
+            <string>Pesty-Alvie Clip Identifier</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

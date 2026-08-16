@@ -77,11 +77,12 @@ struct ClipCardView: View {
             // drag out as real separate file items, and the session reports
             // its on-screen position so the bar hides exactly when the drag
             // leaves it. The overlay claims left-clicks, so it reproduces
-            // the select/open taps itself.
-            let writers = ClipDragProvider.pasteboardWriters(for: item)
-            if !writers.isEmpty {
+            // the select/open taps itself. The writers are built lazily at
+            // drag start - building them here would re-encode image clips
+            // on every card render.
+            if ClipDragProvider.canDrag(item) {
                 ClipDragSource(
-                    writers: writers,
+                    makeWriters: { ClipDragProvider.pasteboardWriters(for: item) },
                     onSelect: { selectCard() },
                     onOpen: { pasteCard() },
                     onDragStarted: { AppController.shared.beginDragOut(itemID: item.id) },

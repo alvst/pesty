@@ -69,16 +69,21 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let sequence = PasteSequence.shared
+        // The tray's list filters by the bar's shared search text, so
+        // navigation must use the same filter - arrowing with an empty
+        // query would walk entries the tray isn't even showing, and Return
+        // could paste one of them.
+        let query = ClipboardStore.shared.searchText
         switch Int(event.keyCode) {
         case kVK_UpArrow, kVK_LeftArrow:
-            sequence.moveSelection(by: -1, matching: "")
+            sequence.moveSelection(by: -1, matching: query)
             return nil
         case kVK_DownArrow, kVK_RightArrow:
-            sequence.moveSelection(by: 1, matching: "")
+            sequence.moveSelection(by: 1, matching: query)
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
             guard !event.isARepeat else { return nil }
-            if let entry = sequence.visibleEntries(matching: "")
+            if let entry = sequence.visibleEntries(matching: query)
                 .first(where: { $0.id == sequence.selectedEntryID }) {
                 AppController.shared.pasteStackEntry(entry)
             }

@@ -175,11 +175,16 @@ final class PasteSequence {
         guard !entries.contains(where: { $0.item.id == item.id }) else { return }
         let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
         let entry = PasteStackEntry(item: item, imagePreview: preview)
-        if toTop {
-            entries.insert(entry, at: entries.firstIndex(where: { !$0.isPasted }) ?? 0)
-        } else {
-            entries.append(entry)
-        }
+        // next() takes the FIRST pending entry normally but the LAST when
+        // stackPasteInReverse is on, so "pastes next" is a different array
+        // end depending on that setting - inserting purely by array position
+        // would silently invert Top and Bottom for reversed stacks.
+        let pendingIndexes = entries.indices.filter { !entries[$0].isPasted }
+        let insertAtFront = toTop != Settings.shared.stackPasteInReverse
+        let index = insertAtFront
+            ? (pendingIndexes.first ?? 0)
+            : (pendingIndexes.last.map { $0 + 1 } ?? 0)
+        entries.insert(entry, at: index)
         if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
     }
