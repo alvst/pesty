@@ -27,9 +27,9 @@ enum SourceColor {
     static func color(for bundleID: String?) -> Color {
         return switch Settings.shared.clipColorTheme {
         case .default:
-            sourceAppColor(for: bundleID)
-        case .vibrant:
             vibrantColor(for: bundleID)
+        case .classic:
+            sourceAppColor(for: bundleID)
         case .accentShades:
             accentShade(
                 for: bundleID?.isEmpty == false ? bundleID! : "unknown",

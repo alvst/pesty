@@ -71,11 +71,24 @@ struct ClipCardView: View {
         .onTapGesture {
             selectCard()
         }
-        .onDrag {
-            AppController.shared.beginDragOut(itemID: item.id)
-            return ClipDragProvider.make(for: item)
-        }
         .contextMenu { menu }
+        .overlay {
+            // A native dragging session instead of .onDrag: multi-file clips
+            // drag out as real separate file items, and the session reports
+            // its on-screen position so the bar hides exactly when the drag
+            // leaves it. The overlay claims left-clicks, so it reproduces
+            // the select/open taps itself.
+            let writers = ClipDragProvider.pasteboardWriters(for: item)
+            if !writers.isEmpty {
+                ClipDragSource(
+                    writers: writers,
+                    onSelect: { selectCard() },
+                    onOpen: { pasteCard() },
+                    onDragStarted: { AppController.shared.beginDragOut(itemID: item.id) },
+                    onDragExitedBar: { AppController.shared.dragSessionExitedBar() }
+                )
+            }
+        }
     }
 
     private var header: some View {
@@ -336,6 +349,18 @@ struct ClipCardView: View {
                 Label("Copy", systemImage: "doc.on.doc")
             }
             .keyboardShortcut("c", modifiers: .command)
+
+            if settings.pasteStacksEnabled {
+                Divider()
+
+                Button { AppController.shared.addToPasteStack(item, toTop: true) } label: {
+                    Label("Add to Top of Paste Stack", systemImage: "text.insert")
+                }
+
+                Button { AppController.shared.addToPasteStack(item, toTop: false) } label: {
+                    Label("Add to Bottom of Paste Stack", systemImage: "text.append")
+                }
+            }
 
             Divider()
 

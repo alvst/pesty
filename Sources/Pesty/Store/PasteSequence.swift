@@ -167,6 +167,23 @@ final class PasteSequence {
         persistActiveStack()
     }
 
+    /// Explicitly queues a clip from the bar's context menu, outside of
+    /// collection. "Top" means it pastes next; "bottom" means it pastes
+    /// last — paste order, independent of the reversed-display setting.
+    func add(_ item: ClipItem, toTop: Bool) {
+        ensureActiveStack()
+        guard !entries.contains(where: { $0.item.id == item.id }) else { return }
+        let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
+        let entry = PasteStackEntry(item: item, imagePreview: preview)
+        if toTop {
+            entries.insert(entry, at: entries.firstIndex(where: { !$0.isPasted }) ?? 0)
+        } else {
+            entries.append(entry)
+        }
+        if selectedEntryID == nil { selectFirst() }
+        persistActiveStack()
+    }
+
     @discardableResult
     func addIfNeeded(_ item: ClipItem) -> Bool {
         ensureActiveStack()

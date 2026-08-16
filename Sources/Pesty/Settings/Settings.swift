@@ -86,8 +86,12 @@ enum SelectedClipPosition: Int, CaseIterable, Identifiable {
 }
 
 enum ClipColorTheme: Int, CaseIterable, Identifiable {
+    // Vibrant is the app's actual default look now - it and the old "Default"
+    // (renamed Classic) were close enough to indistinguishable that having
+    // Default mean the muted option was the wrong choice. Classic keeps the
+    // plain, unmodified source-app color as the named alternative.
     case `default`
-    case vibrant
+    case classic
     case accentShades
 
     var id: Int { rawValue }
@@ -95,7 +99,7 @@ enum ClipColorTheme: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .default: "Default"
-        case .vibrant: "Vibrant"
+        case .classic: "Classic"
         case .accentShades: "Accent shades"
         }
     }
@@ -103,9 +107,9 @@ enum ClipColorTheme: Int, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .default:
-            "Match each clip to its source app\u{2019}s familiar card color."
-        case .vibrant:
             "Use a stronger, higher-contrast version of each source app color."
+        case .classic:
+            "Match each clip to its source app\u{2019}s familiar card color."
         case .accentShades:
             "Give each source app a stable lighter or darker shade of one color."
         }
@@ -334,11 +338,21 @@ final class Settings {
     }
 
     var quickPasteModifier: Int {
-        didSet { guard isLoaded else { return }; d.set(quickPasteModifier, forKey: Keys.quickPasteModifier) }
+        didSet {
+            guard isLoaded else { return }
+            d.set(quickPasteModifier, forKey: Keys.quickPasteModifier)
+            // The two modifiers must stay distinct: sharing one would make
+            // every Quick Paste a plain-text paste. Swap on collision.
+            if quickPasteModifier == plainTextModifier { plainTextModifier = oldValue }
+        }
     }
 
     var plainTextModifier: Int {
-        didSet { guard isLoaded else { return }; d.set(plainTextModifier, forKey: Keys.plainTextModifier) }
+        didSet {
+            guard isLoaded else { return }
+            d.set(plainTextModifier, forKey: Keys.plainTextModifier)
+            if plainTextModifier == quickPasteModifier { quickPasteModifier = oldValue }
+        }
     }
 
     var launchAtLogin: Bool {

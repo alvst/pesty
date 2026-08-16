@@ -138,14 +138,17 @@ final class AppController: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateStatusItemIcon(item)
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Pesty-Alvie   \(Settings.shared.hotkeyDisplay)",
-                     action: #selector(menuOpen), keyEquivalent: "").target = self
+        let open = menu.addItem(withTitle: "Open Pesty-Alvie   \(Settings.shared.hotkeyDisplay)",
+                                action: #selector(menuOpen), keyEquivalent: "")
+        open.target = self
+        open.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
         menu.addItem(.separator())
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
         settings.target = self
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         let pause = menu.addItem(withTitle: "Pause Pesty-Alvie", action: #selector(menuTogglePause), keyEquivalent: "")
         pause.target = self
+        pause.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
         pauseMenuItem = pause
         let clear = menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "")
         clear.target = self
@@ -570,7 +573,18 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func beginDragOut(itemID: UUID) {
         draggedClipID = itemID
-        beginDragTracking(hidesBarWhenLeaving: true)
+        // The native dragging session reports when the drag leaves the bar
+        // (dragSessionExitedBar), so the poll only handles Escape and
+        // drag-end bookkeeping.
+        beginDragTracking(hidesBarWhenLeaving: false)
+    }
+
+    /// The dragging session crossed out of the bar's window: it is headed
+    /// for another app, so the bar hides to uncover the drop target —
+    /// unless Escape already neutralized the drag.
+    func dragSessionExitedBar() {
+        guard !dragSessionCancelled else { return }
+        hideBar()
     }
 
     func beginTabDrag() {
@@ -690,6 +704,11 @@ final class AppController: NSObject, NSApplicationDelegate {
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    func addToPasteStack(_ item: ClipItem, toTop: Bool) {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        pasteSequence.add(item, toTop: toTop)
     }
 
     func pinClip(id: UUID, toBoard boardID: UUID) {

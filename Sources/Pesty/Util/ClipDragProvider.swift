@@ -10,56 +10,53 @@ extension UTType {
 
 @MainActor
 enum ClipDragProvider {
-    static func make(for item: ClipItem) -> NSItemProvider {
-        let provider = contentProvider(for: item)
-        // Deliberately NOT .ownProcess: SwiftUI drags travel through the
-        // system drag pasteboard even between views of the same app, and
-        // own-process representations never reach it — the bar's own drop
-        // targets would see no clip ID at all. Other apps just ignore the
-        // unknown type.
-        register(Data(item.id.uuidString.utf8), as: .pestyClipID, on: provider)
-        return provider
-    }
+    /// Builds the items for a native `NSDraggingSession`. Unlike the single
+    /// `NSItemProvider` that `.onDrag` allowed, a multi-file clip becomes one
+    /// dragging item per file, so every file arrives at the drop target.
+    /// The first item also carries the in-process clip-ID marker that the
+    /// bar's own drop targets (Pinboard tabs, reorder strip) key on.
+    static func pasteboardWriters(for item: ClipItem) -> [NSPasteboardWriting] {
+        let markerType = NSPasteboard.PasteboardType(UTType.pestyClipID.identifier)
 
-    private static func contentProvider(for item: ClipItem) -> NSItemProvider {
+        if item.type == .file {
+            let urls = item.fileURLs.compactMap(URL.init(string:)).filter(\.isFileURL)
+            let items: [NSPasteboardItem] = urls.map { url in
+                let pbItem = NSPasteboardItem()
+                pbItem.setString(url.absoluteString, forType: .fileURL)
+                return pbItem
+            }
+            items.first?.setString(item.id.uuidString, forType: markerType)
+            return items
+        }
+
+        let pbItem = NSPasteboardItem()
         switch item.type {
         case .image:
-            if let image = ClipboardStore.shared.loadImage(for: item),
-               let tiff = image.tiffRepresentation,
-               let bitmap = NSBitmapImageRep(data: tiff),
-               let png = bitmap.representation(using: .png, properties: [:]) {
-                let provider = NSItemProvider()
-                register(png, as: .png, on: provider)
-                register(tiff, as: .tiff, on: provider)
-                provider.suggestedName = item.displayTitle
-                return provider
-            }
-        case .file:
-            if let url = item.fileURLs.first.flatMap(URL.init(string:)), url.isFileURL {
-                return NSItemProvider(object: url as NSURL)
-            }
+            guard let image = ClipboardStore.shared.loadImage(for: item),
+                  let tiff = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:]) else { return [] }
+            pbItem.setData(png, forType: .png)
+            pbItem.setData(tiff, forType: .tiff)
         case .richText:
-            if let rtf = item.rtfData {
-                let provider = NSItemProvider()
-                register(rtf, as: .rtf, on: provider)
-                register(Data((item.text ?? "").utf8), as: .utf8PlainText, on: provider)
-                provider.suggestedName = item.displayTitle
-                return provider
-            }
-        case .text, .link, .color:
-            break
+            if let rtf = item.rtfData { pbItem.setData(rtf, forType: .rtf) }
+            if let html = item.htmlData { pbItem.setData(html, forType: .html) }
+            guard let text = item.text else { break }
+            pbItem.setString(text, forType: .string)
+        case .link:
+            guard let text = item.text else { return [] }
+            pbItem.setString(text, forType: .URL)
+            pbItem.setString(text, forType: .string)
+        case .color:
+            guard let hex = item.colorHex else { return [] }
+            pbItem.setString(hex, forType: .string)
+        case .text:
+            guard let text = item.text else { return [] }
+            pbItem.setString(text, forType: .string)
+        case .file:
+            return []
         }
-
-        let provider = NSItemProvider()
-        register(Data((item.text ?? item.colorHex ?? item.displayTitle).utf8), as: .utf8PlainText, on: provider)
-        provider.suggestedName = item.displayTitle
-        return provider
-    }
-
-    private static func register(_ data: Data, as type: UTType, on provider: NSItemProvider) {
-        provider.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .all) { completion in
-            completion(data, nil)
-            return nil
-        }
+        pbItem.setString(item.id.uuidString, forType: markerType)
+        return [pbItem]
     }
 }

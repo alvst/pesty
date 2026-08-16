@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 
 final class PasteStackPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -9,6 +10,7 @@ final class PasteStackPanel: NSPanel {
 @MainActor
 final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
     var isVisible: Bool { window?.isVisible == true }
+    private var keyMonitor: Any?
     init() {
         let panel = PasteStackPanel(
             contentRect: NSRect(x: 0, y: 0, width: 318, height: 420),
@@ -41,10 +43,52 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         panel.orderFrontRegardless()
         panel.makeKey()
+        startKeyMonitor()
     }
 
     func hide() {
+        stopKeyMonitor()
         window?.orderOut(nil)
+    }
+
+    /// The tray was mouse-only: the bar's central key monitor deliberately
+    /// ignores every non-bar window. A local monitor scoped to this panel
+    /// gives it arrow-key/Return navigation without touching bar handling.
+    private func startKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === window else { return event }
+            return handleKey(event)
+        }
+    }
+
+    private func stopKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+    }
+
+    private func handleKey(_ event: NSEvent) -> NSEvent? {
+        let sequence = PasteSequence.shared
+        switch Int(event.keyCode) {
+        case kVK_UpArrow, kVK_LeftArrow:
+            sequence.moveSelection(by: -1, matching: "")
+            return nil
+        case kVK_DownArrow, kVK_RightArrow:
+            sequence.moveSelection(by: 1, matching: "")
+            return nil
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            guard !event.isARepeat else { return nil }
+            if let entry = sequence.visibleEntries(matching: "")
+                .first(where: { $0.id == sequence.selectedEntryID }) {
+                AppController.shared.pasteStackEntry(entry)
+            }
+            return nil
+        case kVK_Escape:
+            AppController.shared.hidePasteStack()
+            return nil
+        default:
+            return event
+        }
     }
 
     func windowDidResignKey(_ notification: Notification) {

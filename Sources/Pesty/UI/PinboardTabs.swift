@@ -294,6 +294,12 @@ struct PinboardTabs: View {
             )
             .animation(.easeOut(duration: 0.1), value: clipDropBoardID == board.id)
             .help("Drag to reorder Pinboards")
+            // Drag-to-reorder is mouse-only; VoiceOver gets explicit actions.
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("\(board.name) Pinboard"))
+            .accessibilityAddTraits(store.source == .pinboard(board.id) ? .isSelected : [])
+            .accessibilityAction(named: Text("Move Left")) { moveBoard(board, by: -1) }
+            .accessibilityAction(named: Text("Move Right")) { moveBoard(board, by: 1) }
         }
     }
 
@@ -319,11 +325,11 @@ struct PinboardTabs: View {
             Label("Color", systemImage: "paintpalette")
         }
         Divider()
-        Button { store.movePinboard(board.id, by: -1) } label: {
+        Button { moveBoard(board, by: -1) } label: {
             Label("Move Left", systemImage: "arrow.left")
         }
         .disabled(store.pinboards.first?.id == board.id)
-        Button { store.movePinboard(board.id, by: 1) } label: {
+        Button { moveBoard(board, by: 1) } label: {
             Label("Move Right", systemImage: "arrow.right")
         }
         .disabled(store.pinboards.last?.id == board.id)
@@ -373,6 +379,18 @@ struct PinboardTabs: View {
         .overlay(Capsule().strokeBorder(Theme.pillStroke, lineWidth: selected ? 1 : 0.5))
         .fixedSize()
         .animation(.easeOut(duration: 0.15), value: selected)
+    }
+
+    /// Menu and VoiceOver moves get spoken confirmation; a sighted user
+    /// watches the tab slide, a VoiceOver user hears where it landed.
+    private func moveBoard(_ board: Pinboard, by offset: Int) {
+        let before = store.pinboards.firstIndex(where: { $0.id == board.id })
+        store.movePinboard(board.id, by: offset)
+        let after = store.pinboards.firstIndex(where: { $0.id == board.id })
+        guard let before, let after, before != after else { return }
+        AccessibilityNotification.Announcement(
+            "Moved \(board.name) to position \(after + 1) of \(store.pinboards.count)"
+        ).post()
     }
 
     private func addPinboard() {

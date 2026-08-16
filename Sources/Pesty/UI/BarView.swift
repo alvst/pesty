@@ -171,6 +171,17 @@ struct BarView: View {
                 }
         )
         .help("Drag to resize the Pesty-Alvie bar")
+        // The drag gesture is invisible to VoiceOver; expose the handle as an
+        // adjustable element so the bar height is controllable without a mouse.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Resize the Pesty-Alvie bar")
+        .accessibilityValue("\(Int(settings.barHeight)) points tall")
+        .accessibilityAdjustableAction { direction in
+            let step: Double = 20
+            let target = settings.barHeight + (direction == .increment ? step : -step)
+            settings.barHeight = min(720, max(300, target))
+            AppController.shared.resizeVisibleBar(to: settings.barHeight)
+        }
     }
 
     private func beginResizeIfNeeded() {
@@ -214,6 +225,7 @@ struct BarView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(searchIsActive ? Theme.textPrimary : Theme.textSecondary)
+                .accessibilityHidden(true)
 
             // Keep this native field mounted even in the compact state. The
             // key monitor can focus it synchronously and return the same first
@@ -233,6 +245,7 @@ struct BarView: View {
             .opacity(searchIsActive ? 1 : 0)
             .allowsHitTesting(searchIsActive)
             .accessibilityHidden(!searchIsActive)
+            .accessibilityLabel("Search clips")
 
             if searchIsActive {
                 Button { AppController.shared.clearBarSearch() } label: {
@@ -240,6 +253,7 @@ struct BarView: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, searchIsActive ? 10 : 0)
