@@ -53,6 +53,10 @@ struct SettingsView: View {
                         .padding(.vertical, 8)
                         .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        // A plain-style button only hit-tests its drawn
+                        // pixels (the icon and text glyphs) by default - the
+                        // whole pill is the intended target, not just those.
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -226,6 +230,8 @@ private struct GeneralSettings: View {
                         Divider()
                         #endif
                         settingToggle("Play sound on paste", isOn: $settings.playSound)
+                        Divider()
+                        settingToggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                         Divider()
                         settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
                         Divider()

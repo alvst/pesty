@@ -203,6 +203,7 @@ final class Settings {
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
+        static let playSoundOnCopy = "playSoundOnCopy"
         static let ignoreConcealed = "ignoreConcealed"
         static let clipPreviewStyle = "clipPreviewStyle"
         static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
@@ -285,6 +286,10 @@ final class Settings {
 
     var playSound: Bool {
         didSet { guard isLoaded else { return }; d.set(playSound, forKey: Keys.playSound) }
+    }
+
+    var playSoundOnCopy: Bool {
+        didSet { guard isLoaded else { return }; d.set(playSoundOnCopy, forKey: Keys.playSoundOnCopy) }
     }
 
     var ignoreConcealed: Bool {
@@ -374,6 +379,7 @@ final class Settings {
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
+            Keys.playSoundOnCopy: true,
             Keys.ignoreConcealed: true,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
             Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
@@ -400,6 +406,7 @@ final class Settings {
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
+        playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
         previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)
