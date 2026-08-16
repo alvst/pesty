@@ -366,17 +366,17 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.resize(to: CGFloat(height))
     }
 
-    func pasteSelected(asPlainText: Bool = false) {
+    func pasteSelected(format: PasteFormat = .original) {
         guard let item = store.selectedItem else { return }
-        pasteItem(item, asPlainText: asPlainText)
+        pasteItem(item, format: format)
     }
 
-    func pasteItem(_ item: ClipItem, asPlainText: Bool = false) {
+    func pasteItem(_ item: ClipItem, format: PasteFormat = .original) {
         let target = pasteTargetApp()
         // Release the non-activating panel before sending the paste event to
         // the source app. Escape/click dismissal keeps its slide-out motion.
         hideBar(immediately: true)
-        PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
+        PasteService.paste(item, into: target, monitor: monitor, format: format)
         if Settings.shared.promoteOnPaste {
             store.promoteCopiedItem(item)
         }
@@ -878,12 +878,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         performPasteStackEntry(entry)
     }
 
-    func pasteStackEntry(_ entry: PasteStackEntry, asPlainText: Bool = false) {
+    func pasteStackEntry(_ entry: PasteStackEntry, format: PasteFormat = .original) {
         guard Settings.shared.pasteStacksEnabled,
               ensureStackCanPaste() else { return }
         guard let entry = pasteSequence.next(entryID: entry.id) else { return }
         reconcilePasteStackSearchSelection()
-        performPasteStackEntry(entry, asPlainText: asPlainText)
+        performPasteStackEntry(entry, format: format)
     }
 
     func pasteSelectedStackEntry() {
@@ -892,7 +892,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         pasteStackEntry(entry)
     }
 
-    private func performPasteStackEntry(_ entry: PasteStackEntry, asPlainText: Bool = false) {
+    private func performPasteStackEntry(_ entry: PasteStackEntry, format: PasteFormat = .original) {
         // A global Paste Stack shortcut can fire while Pesty's floating
         // collector is key. Resolve the real foreground/last-used app at the
         // moment of the shortcut instead of relying on the app that first
@@ -902,7 +902,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         PasteService.paste(entry.item,
                            into: target,
                            monitor: monitor,
-                           asPlainText: asPlainText,
+                           format: format,
                            imageOverride: entry.imagePreview)
     }
 
@@ -1032,7 +1032,8 @@ final class AppController: NSObject, NSApplicationDelegate {
            let n = Int(chars), (1...9).contains(n) {
             let items = store.visibleItems
             if n <= items.count {
-                pasteItem(items[n - 1], asPlainText: includes(Settings.shared.plainTextModifier, in: flags))
+                pasteItem(items[n - 1],
+                          format: includes(Settings.shared.plainTextModifier, in: flags) ? .plainText : .original)
             }
             return nil
         }

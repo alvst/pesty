@@ -94,6 +94,10 @@ final class ClipboardMonitor {
         }
 
         let rtf = pasteboard.data(forType: .rtf)
+        // Browsers often provide HTML with no RTF; keep it for the Markdown
+        // and Clean Formatting paste conversions without changing how the
+        // clip is classified.
+        let html = pasteboard.data(forType: .html)
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             let type: ClipType
@@ -104,7 +108,7 @@ final class ClipboardMonitor {
             } else {
                 type = .text
             }
-            var item = ClipItem(type: type, text: string, rtfData: rtf)
+            var item = ClipItem(type: type, text: string, rtfData: rtf, htmlData: html)
             decorate(&item)
             return item
         }
