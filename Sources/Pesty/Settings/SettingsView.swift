@@ -203,6 +203,8 @@ private struct GeneralSettings: View {
                 Toggle("Enable Paste Stacks", isOn: $settings.pasteStacksEnabled)
                 if settings.pasteStacksEnabled {
                     LabeledContent("Paste Next") { HotkeyRecorderView(kind: .pasteStackNext) }
+                    Toggle("Paste newest stack item first", isOn: $settings.stackPasteInReverse)
+                    Toggle("Keep pasted items in the stack", isOn: $settings.keepPastedStackItems)
                 }
                 Text("Collect copies into a queue while you work, then paste them out one at a time in order. Start collecting, stop, and paste the next queued item from the ⋯ menu in the bar.")
                     .font(.caption)

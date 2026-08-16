@@ -10,6 +10,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let monitor = ClipboardMonitor()
 
     private var barController: BarWindowController?
+    private var pasteStackController: PasteStackWindowController?
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
@@ -331,8 +332,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     /// Starts or stops collecting into the active Paste Stack, driven by the
-    /// bar's overflow menu. The floating panel that will replace this in a
-    /// later PR reuses the same PasteSequence calls.
+    /// bar's overflow menu, and shows or raises the floating panel to match.
     func togglePasteStackCollecting() {
         guard Settings.shared.pasteStacksEnabled else { return }
         if PasteSequence.shared.isCollecting {
@@ -340,6 +340,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             PasteSequence.shared.begin()
         }
+        updatePasteStackPanelVisibility()
     }
 
     /// Pastes the oldest pending Paste Stack entry into the last active app,
@@ -350,10 +351,74 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func pasteNextStackItem() {
         guard Settings.shared.pasteStacksEnabled,
               let candidate = PasteSequence.shared.peekNext() else { return }
+        performPasteStackEntry(candidate)
+    }
+
+    /// Pastes a specific pending entry out of order - the panel's own "paste
+    /// this" click target and Enter-to-paste on the selected card.
+    func pasteStackEntry(_ entry: PasteStackEntry) {
+        guard Settings.shared.pasteStacksEnabled,
+              let candidate = PasteSequence.shared.peekEntry(id: entry.id) else { return }
+        performPasteStackEntry(candidate)
+    }
+
+    /// Consumes the entry only once its content actually reached the
+    /// pasteboard, so a stale entry neither pastes whatever was already on
+    /// the clipboard nor gets marked as pasted.
+    private func performPasteStackEntry(_ candidate: PasteStackEntry) {
         let target = pasteTarget
         hideBar()
         guard PasteService.paste(candidate.item, into: target, monitor: monitor) else { return }
         _ = PasteSequence.shared.next(entryID: candidate.id)
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Removes a queued clip the user does not want to paste after all.
+    func removePasteStackEntry(_ entry: PasteStackEntry) {
+        PasteSequence.shared.remove(entry)
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Discards the active Paste Stack entirely, driven by the panel's trash button.
+    func clearPasteStack() {
+        PasteSequence.shared.cancel()
+        updatePasteStackPanelVisibility()
+    }
+
+    /// Shows the floating Paste Stack panel, creating it on first use.
+    func showPasteStack() {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        if pasteStackController == nil {
+            pasteStackController = PasteStackWindowController()
+        }
+        pasteStackController?.show()
+    }
+
+    /// Explicit dismissal - the panel's own close button - which also stops
+    /// collecting, since there is no longer anywhere to show new clips.
+    func hidePasteStack() {
+        PasteSequence.shared.finishCollecting()
+        pasteStackController?.hide()
+    }
+
+    var isPasteStackVisible: Bool {
+        Settings.shared.pasteStacksEnabled && pasteStackController?.isVisible == true
+    }
+
+    /// The panel stays up while there's something to show it for: either the
+    /// user is actively collecting, or pending clips are still waiting to be
+    /// pasted. It disappears once the stack is drained and collecting stops.
+    func updatePasteStackPanelVisibility() {
+        guard Settings.shared.pasteStacksEnabled else {
+            pasteStackController?.hide()
+            return
+        }
+        let sequence = PasteSequence.shared
+        if sequence.isCollecting || sequence.pendingCount > 0 {
+            showPasteStack()
+        } else {
+            pasteStackController?.hide()
+        }
     }
 
     var pasteMenuTitle: String {

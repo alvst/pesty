@@ -89,6 +89,8 @@ final class Settings {
         static let pasteStacksEnabled = "pasteStacksEnabled"
         static let sequenceHotkeyKeyCode = "sequenceHotkeyKeyCode"
         static let sequenceHotkeyModifiers = "sequenceHotkeyModifiers"
+        static let stackPasteInReverse = "stackPasteInReverse"
+        static let keepPastedStackItems = "keepPastedStackItems"
     }
 
     var historyLimit: Int {
@@ -202,7 +204,7 @@ final class Settings {
         didSet {
             guard isLoaded else { return }
             d.set(pasteStacksEnabled, forKey: Keys.pasteStacksEnabled)
-            if !pasteStacksEnabled { PasteSequence.shared.finishCollecting() }
+            if !pasteStacksEnabled { AppController.shared.hidePasteStack() }
             HotKeyCenter.shared.reload()
         }
     }
@@ -215,6 +217,18 @@ final class Settings {
     var sequenceHotkeyModifiers: Int {
         didSet { guard isLoaded else { return }
             d.set(sequenceHotkeyModifiers, forKey: Keys.sequenceHotkeyModifiers); HotKeyCenter.shared.reload() }
+    }
+
+    /// When on, the panel's "paste next" and hotkey pop the newest collected
+    /// clip first instead of the oldest.
+    var stackPasteInReverse: Bool {
+        didSet { guard isLoaded else { return }; d.set(stackPasteInReverse, forKey: Keys.stackPasteInReverse) }
+    }
+
+    /// When off, a pasted stack item is dropped from the list immediately
+    /// instead of staying at the bottom, faded, as a record of what went out.
+    var keepPastedStackItems: Bool {
+        didSet { guard isLoaded else { return }; d.set(keepPastedStackItems, forKey: Keys.keepPastedStackItems) }
     }
 
     private init() {
@@ -240,7 +254,9 @@ final class Settings {
             Keys.pasteStacksEnabled: false,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
             // ⌃⌥V - deliberately not ⌘⌥V, which shadows Finder's "Move Item Here".
-            Keys.sequenceHotkeyModifiers: controlKey | optionKey
+            Keys.sequenceHotkeyModifiers: controlKey | optionKey,
+            Keys.stackPasteInReverse: false,
+            Keys.keepPastedStackItems: true
         ])
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.string(forKey: Keys.historyRetentionMode) ?? "")
@@ -265,6 +281,8 @@ final class Settings {
         pasteStacksEnabled = d.bool(forKey: Keys.pasteStacksEnabled)
         sequenceHotkeyKeyCode = d.integer(forKey: Keys.sequenceHotkeyKeyCode)
         sequenceHotkeyModifiers = d.integer(forKey: Keys.sequenceHotkeyModifiers)
+        stackPasteInReverse = d.bool(forKey: Keys.stackPasteInReverse)
+        keepPastedStackItems = d.bool(forKey: Keys.keepPastedStackItems)
         isLoaded = true
     }
 

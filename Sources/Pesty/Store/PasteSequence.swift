@@ -58,11 +58,9 @@ struct SavedPasteStack: Identifiable, Codable {
 
 /// Drives the "Paste Stacks" collect/paste workflow: while collecting is on,
 /// copies made elsewhere are queued in order; "paste next" pops the oldest
-/// pending entry, pastes it into the last active app, and marks it done.
-///
-/// This is the core engine only - selection state and search/filtering for a
-/// floating panel are intentionally not part of this type yet; a later PR
-/// reintroduces them alongside the UI that needs them.
+/// (or newest, with `stackPasteInReverse`) pending entry, pastes it into the
+/// last active app, and marks it done. Selection tracks which entry the
+/// floating panel highlights and pastes on Enter/click.
 @Observable
 @MainActor
 final class PasteSequence {
@@ -72,9 +70,25 @@ final class PasteSequence {
     private(set) var isCollecting = false
     private(set) var savedStacks: [SavedPasteStack] = []
     private(set) var activeStackID: UUID?
+    private(set) var selectedEntryID: UUID?
 
     var pendingCount: Int { entries.count(where: { !$0.isPasted }) }
+    var pastedCount: Int { entries.count - pendingCount }
     var hasEntries: Bool { !entries.isEmpty }
+
+    var selectedEntry: PasteStackEntry? {
+        guard let selectedEntryID else { return nil }
+        return entries.first(where: { $0.id == selectedEntryID })
+    }
+
+    /// Pending clips come first (in `stackPasteInReverse` order so the panel
+    /// always shows what "paste next" will pick up on top); clips already
+    /// pasted stay at the bottom of the list.
+    var displayEntries: [PasteStackEntry] {
+        let pending = entries.filter { !$0.isPasted }
+        let queued = Settings.shared.stackPasteInReverse ? Array(pending.reversed()) : pending
+        return queued + entries.filter(\.isPasted)
+    }
 
     @ObservationIgnored private var saveWorkItem: DispatchWorkItem?
 
@@ -92,6 +106,7 @@ final class PasteSequence {
         guard Settings.shared.pasteStacksEnabled else { return }
         ensureActiveStack()
         isCollecting = true
+        if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
     }
 
@@ -112,6 +127,7 @@ final class PasteSequence {
         savedStacks.insert(stack, at: 0)
         activeStackID = stack.id
         entries = []
+        selectedEntryID = nil
         isCollecting = true
         persistActiveStack()
     }
@@ -123,6 +139,7 @@ final class PasteSequence {
               !entries.contains(where: { $0.item.id == item.id }) else { return false }
         let preview = item.type == .image ? ClipboardStore.shared.loadImage(for: item) : nil
         entries.append(PasteStackEntry(item: item, imagePreview: preview))
+        if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
         return true
     }
@@ -146,23 +163,72 @@ final class PasteSequence {
         scheduleSave()
     }
 
-    // MARK: - Pasting
+    // MARK: - Selection
 
-    /// The oldest pending entry, without consuming it. Callers paste the
-    /// clip first and only consume via `next(entryID:)` once the pasteboard
-    /// write actually succeeded.
-    func peekNext() -> PasteStackEntry? {
-        entries.first(where: { !$0.isPasted })
+    /// Selects the first entry in the panel's display order (pending items,
+    /// respecting `stackPasteInReverse`, ahead of already-pasted ones).
+    func selectFirst() {
+        selectedEntryID = displayEntries.first?.id
     }
 
-    /// Returns the oldest pending entry and moves it to the bottom of the stack.
+    func select(_ entry: PasteStackEntry) {
+        selectedEntryID = entry.id
+    }
+
+    /// Moves the selection by `delta` positions through `displayEntries`,
+    /// clamped to the ends of the list. Used for arrow-key navigation in the
+    /// floating panel.
+    func moveSelection(by delta: Int) {
+        let displayed = displayEntries
+        guard !displayed.isEmpty else { selectedEntryID = nil; return }
+        guard let selectedEntryID,
+              let index = displayed.firstIndex(where: { $0.id == selectedEntryID }) else {
+            self.selectedEntryID = displayed.first?.id
+            return
+        }
+        let next = max(0, min(displayed.count - 1, index + delta))
+        self.selectedEntryID = displayed[next].id
+    }
+
+    /// After one clip is pasted, selection advances to the next pending clip,
+    /// intentionally skipping the pasted clip moved to the stack bottom.
+    private func selectNextPendingEntry() {
+        let displayed = displayEntries
+        selectedEntryID = displayed.first(where: { !$0.isPasted })?.id ?? displayed.first?.id
+    }
+
+    // MARK: - Pasting
+
+    /// The entry `next()` would consume - oldest, or newest with
+    /// `stackPasteInReverse` - without consuming it. Callers paste the clip
+    /// first and only consume via `next(entryID:)` once the pasteboard write
+    /// actually succeeded.
+    func peekNext() -> PasteStackEntry? {
+        nextPendingIndex().map { entries[$0] }
+    }
+
+    /// The pending entry with `id`, without consuming it, for the same
+    /// paste-then-consume handshake `peekNext()` serves.
+    func peekEntry(id: UUID) -> PasteStackEntry? {
+        entries.first(where: { $0.id == id && !$0.isPasted })
+    }
+
+    /// Returns the oldest (or, with `stackPasteInReverse`, newest) pending
+    /// entry and moves it to the bottom of the stack.
     func next() -> PasteStackEntry? {
         // Nothing pending is not a reason to stop collecting: an accidental
         // "paste next" while the stack is drained should leave the session on.
-        guard let index = entries.firstIndex(where: { !$0.isPasted }) else { return nil }
+        guard let index = nextPendingIndex() else { return nil }
         return takeEntry(at: index)
     }
 
+    private func nextPendingIndex() -> Int? {
+        let pendingIndexes = entries.indices.filter { !entries[$0].isPasted }
+        return Settings.shared.stackPasteInReverse ? pendingIndexes.last : pendingIndexes.first
+    }
+
+    /// Pastes a specific pending entry out of order - the panel's "paste
+    /// this" click target and Enter-to-paste on the selected card.
     func next(entryID: UUID) -> PasteStackEntry? {
         guard let index = entries.firstIndex(where: { $0.id == entryID && !$0.isPasted }) else {
             return nil
@@ -175,8 +241,21 @@ final class PasteSequence {
         result.isPasted = true
         entries.append(result)
         isCollecting = false
+        if pendingCount == 0, !Settings.shared.keepPastedStackItems {
+            entries.removeAll()
+            selectedEntryID = nil
+        } else {
+            selectNextPendingEntry()
+        }
         persistActiveStack()
         return result
+    }
+
+    /// Removes an entry from the panel, e.g. its × button.
+    func remove(_ entry: PasteStackEntry) {
+        entries.removeAll { $0.id == entry.id }
+        if selectedEntryID == entry.id { selectFirst() }
+        persistActiveStack()
     }
 
     /// Deletes only the active saved stack; all other stack decks remain.
@@ -188,6 +267,7 @@ final class PasteSequence {
         } else {
             entries = []
             self.activeStackID = nil
+            selectedEntryID = nil
             isCollecting = false
         }
         scheduleSave()
@@ -206,12 +286,14 @@ final class PasteSequence {
         savedStacks.insert(stack, at: 0)
         activeStackID = stack.id
         entries = []
+        selectedEntryID = nil
     }
 
     private func activate(_ stack: SavedPasteStack) {
         activeStackID = stack.id
         entries = stack.entries
         isCollecting = false
+        selectFirst()
     }
 
     // MARK: - Persistence
@@ -223,6 +305,7 @@ final class PasteSequence {
         guard let newest = savedStacks.first(where: \.hasEntries) else {
             entries = []
             activeStackID = nil
+            selectedEntryID = nil
             return
         }
         activate(newest)
