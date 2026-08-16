@@ -129,6 +129,7 @@ final class Settings {
         static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
         static let previewImageApplicationBundleID = "previewImageApplicationBundleID"
         static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
+        static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
@@ -228,6 +229,13 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(previewLinkApplicationBundleID, forKey: Keys.previewLinkApplicationBundleID) }
     }
 
+    /// Skips the five-minute Undo window entirely: deleted clips are purged
+    /// immediately instead of sitting recoverable (payload and all) in
+    /// store.json until the window closes.
+    var deletePermanently: Bool {
+        didSet { guard isLoaded else { return }; d.set(deletePermanently, forKey: Keys.deletePermanently) }
+    }
+
     /// Applications whose copied content should never be recorded in history.
     /// Store bundle identifiers rather than paths so the choice continues to work
     /// when an app is updated or moved.
@@ -289,6 +297,7 @@ final class Settings {
             Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
             Keys.previewImageApplicationBundleID: PreviewOpenTarget.image.defaultApplicationBundleID,
             Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
+            Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: BarResizeGeometry.defaultHeight,
             Keys.showBarResizeHandle: false,
@@ -317,6 +326,7 @@ final class Settings {
             ?? PreviewOpenTarget.image.defaultApplicationBundleID
         previewLinkApplicationBundleID = d.string(forKey: Keys.previewLinkApplicationBundleID)
             ?? PreviewOpenTarget.link.defaultApplicationBundleID
+        deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
         let storedBarHeight = d.double(forKey: Keys.barHeight)
