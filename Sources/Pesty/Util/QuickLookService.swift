@@ -11,6 +11,9 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     private var indexObservation: NSKeyValueObservation?
     private var closeObservation: NSObjectProtocol?
     private var resizeObservation: NSObjectProtocol?
+    private var moveObservation: NSObjectProtocol?
+    private var isRecentering = false
+    private var userHasMovedPanel = false
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("Pesty-QuickLook", isDirectory: true)
 
@@ -60,6 +63,7 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         panel.reloadData()
         panel.currentPreviewItemIndex = selectedIndex
         panel.makeKeyAndOrderFront(nil)
+        userHasMovedPanel = false
         recenterPanel()
         observePanel(panel)
     }
@@ -89,6 +93,21 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
                 MainActor.assumeIsolated { QuickLookService.shared.recenterPanel() }
             }
         }
+        if moveObservation == nil {
+            // A deliberate repositioning by the user is respected: willMove
+            // fires for title-bar drags but not for the panel's own
+            // content-driven origin shifts, and the flag rules out this
+            // service's recenters — after that, auto-recentering stands down
+            // until the panel next opens fresh.
+            moveObservation = NotificationCenter.default.addObserver(
+                forName: NSWindow.willMoveNotification, object: panel, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated {
+                    let service = QuickLookService.shared
+                    if !service.isRecentering { service.userHasMovedPanel = true }
+                }
+            }
+        }
         if closeObservation == nil {
             // Space/Esc inside the panel close it natively without going
             // through dismiss(); willClose is the one signal common to every
@@ -103,19 +122,33 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     /// Keeps the panel's center on the screen's center. setFrameOrigin only
     /// moves the window, so this cannot re-trigger the resize notification.
+    /// Once the user has dragged the panel somewhere on purpose, their
+    /// placement wins and this becomes a no-op for the rest of the session.
     private func recenterPanel() {
-        guard let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
+        guard !userHasMovedPanel,
+              let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
               let screen = panel.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let frame = panel.frame
+        isRecentering = true
         panel.setFrameOrigin(NSPoint(x: visible.midX - frame.width / 2,
                                      y: visible.midY - frame.height / 2))
+        isRecentering = false
     }
 
     private func panelDidClose() {
         indexObservation = nil
         purgeTemporaryFiles()
         onPanelDidClose?()
+    }
+
+    /// The clip the panel is showing right now, resolved from the panel's
+    /// own index. The bar's selection trails the panel by an async KVO hop,
+    /// so callers reacting to a keystroke inside the panel must use this
+    /// rather than the bar's selected item.
+    var currentClipID: UUID? {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible else { return nil }
+        return clipID(forPreviewIndex: panel.currentPreviewItemIndex)
     }
 
     /// A clip can own more than one preview item (e.g. multiple files), so

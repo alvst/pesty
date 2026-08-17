@@ -279,10 +279,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// hotkey at all until the next relaunch - the exact bug this is meant to fix.
     @objc private func screenParametersChanged() {
         // Quick Look never outlives the bar — including when a screen change
-        // force-hides it directly, bypassing hideBar()'s own dismiss.
-        QuickLookService.shared.dismiss()
+        // force-hides it directly, bypassing hideBar()'s own dismiss. The bar
+        // is torn down first so quickLookDidClose() sees it gone and can hand
+        // focus back to the previous app.
         barController?.forceHide()
         stopKeyMonitor()
+        QuickLookService.shared.dismiss()
     }
 
     func showBar() {
@@ -524,7 +526,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // "Copy" means here.
         if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared()?.isKeyWindow == true {
             if Int(event.keyCode) == kVK_ANSI_C, event.modifierFlags.contains(.command) {
-                if let item = store.selectedItem { copyItem(item) }
+                // The bar's selection trails the panel by an async KVO hop, so
+                // a quick arrow-then-⌘C could copy the previous clip. Resolve
+                // the clip from the panel's own current index instead.
+                if let id = QuickLookService.shared.currentClipID,
+                   let item = store.item(withID: id) {
+                    copyItem(item)
+                }
                 return nil
             }
             return event
