@@ -39,6 +39,11 @@ struct PestyPreviewPopover: View {
         return URL(string: (item.text ?? item.displayTitle).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    /// Loading a copied URL in a live web view is a network request to whoever
+    /// owns that link - the same disclosure the fetched link previews make, so
+    /// it answers to the same single switch rather than a second one.
+    private var canLoadWebPreview: Bool { Settings.shared.fetchLinkPreviews }
+
     var body: some View {
         VStack(spacing: 0) {
             previewPanel
@@ -78,7 +83,11 @@ struct PestyPreviewPopover: View {
 
             Group {
                 if let url {
-                    WebLinkPreview(url: url)
+                    if canLoadWebPreview {
+                        WebLinkPreview(url: url)
+                    } else {
+                        OfflineLinkPreview(item: item, url: url)
+                    }
                 } else {
                     SelectedClipPreviewView(item: item)
                 }
@@ -126,6 +135,47 @@ struct PestyPreviewPopover: View {
             .menuStyle(.borderedButton)
             .controlSize(.small)
         }
+    }
+}
+
+/// What a link clip's preview shows while link fetching is off: the URL
+/// itself, with the browser one click away. Nothing here touches the network,
+/// so previewing a copied link never tells its owner the clip exists.
+private struct OfflineLinkPreview: View {
+    let item: ClipItem
+    let url: URL
+
+    private var openTitle: String {
+        InlinePreviewExternalOpener.primaryActionTitle(for: item) ?? "Open in Browser"
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Spacer(minLength: 0)
+            Image(systemName: "safari")
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(Color.accentColor)
+            Text(url.host ?? url.absoluteString)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.cardTextPrimary)
+                .lineLimit(1)
+            Text(url.absoluteString)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.cardTextSecondary)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .lineLimit(4)
+            Button(openTitle) { InlinePreviewExternalOpener.openPrimary(item) }
+                .controlSize(.regular)
+            Text("Turn on link previews in Settings to load the page here.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.cardTextTertiary)
+                .multilineTextAlignment(.center)
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white.opacity(0.58))
     }
 }
 

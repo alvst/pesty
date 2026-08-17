@@ -33,6 +33,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
 
+        // Nothing exported for an "Open in …" handoff survives a restart; a
+        // crash is the only way one can still be sitting there at launch.
+        InlinePreviewExternalOpener.purgeTemporaryFiles()
+
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
@@ -90,6 +94,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         store.saveNow()
         QuickLookService.shared.purgeTemporaryFiles()
+        InlinePreviewExternalOpener.purgeTemporaryFiles()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -561,7 +566,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return nil
             }
         case kVK_Escape:
-            if !store.multiSelectedIDs.isEmpty {
+            // The inline preview is a non-key panel, so unlike Quick Look its
+            // Escape arrives here. It is the newest thing on screen, so it is
+            // the first thing Escape takes back: the bar only hides once no
+            // preview is open.
+            if store.inlinePreviewVisible {
+                hideInlinePreview()
+            } else if !store.multiSelectedIDs.isEmpty {
                 store.clearMultiSelection()
             } else if !store.searchText.isEmpty {
                 store.searchText = ""; store.selectFirst()
