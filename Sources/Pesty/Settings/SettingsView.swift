@@ -466,6 +466,13 @@ private struct HistoryRetentionSettings: View {
             }
         }
         .padding(.top, 4)
+        // Alvie's Pesty keeps this whole card as one flat spacing-14 VStack,
+        // so the divider after it inherits that same rhythm automatically.
+        // Splitting the retention drafting logic into its own view (needed
+        // for the confirm-before-apply dialog) means the divider that
+        // follows only sees the card's own spacing: 0 - restore the gap
+        // explicitly instead.
+        .padding(.bottom, 14)
         .onChange(of: draftMode) { evaluateDraft() }
         .onChange(of: draftLimit) { evaluateDraft() }
         .onChange(of: draftDays) { evaluateDraft() }
