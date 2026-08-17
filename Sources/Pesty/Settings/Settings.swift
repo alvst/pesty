@@ -212,7 +212,9 @@ final class Settings {
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
             Keys.playSound: false,
-            Keys.playSoundOnCopy: true,
+            // Off by default, matching the paste sound: existing users
+            // shouldn't gain a new audible behavior from an update.
+            Keys.playSoundOnCopy: false,
             Keys.ignoreConcealed: true,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
