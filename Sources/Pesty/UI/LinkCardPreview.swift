@@ -108,17 +108,31 @@ struct LinkCardPreview: View {
 struct LinkPreviewContent: View {
     let text: String
     let compact: Bool
+    let titleOverride: String?
     private let previews = LinkPreviewStore.shared
+
+    init(text: String, compact: Bool, titleOverride: String? = nil) {
+        self.text = text
+        self.compact = compact
+        self.titleOverride = titleOverride
+    }
 
     private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
     private var preview: LinkPreview? { previews.preview(for: url) }
     private var host: String { url?.host ?? text }
+    private var title: String {
+        if let titleOverride = titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !titleOverride.isEmpty {
+            return titleOverride
+        }
+        return preview?.title ?? host
+    }
 
     var body: some View {
         HStack(spacing: compact ? 8 : 12) {
             icon
             VStack(alignment: .leading, spacing: compact ? 2 : 5) {
-                Text(preview?.title ?? host)
+                Text(title)
                     .font(.system(size: compact ? 12 : 15, weight: .semibold))
                     .foregroundStyle(Theme.cardTextPrimary)
                     .lineLimit(compact ? 2 : 3)

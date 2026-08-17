@@ -70,7 +70,14 @@ struct ClipPreviewView: View {
             }
         case .link:
             if let text = item.text, !text.isEmpty {
-                LinkPreviewContent(text: text, compact: false)
+                if Settings.shared.fetchLinkPreviews {
+                    LinkPreviewContent(text: text, compact: false, titleOverride: item.customTitle)
+                } else {
+                    Text(text)
+                        .font(.system(size: 14))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } else {
                 unavailable("This clip has no link to preview.")
             }

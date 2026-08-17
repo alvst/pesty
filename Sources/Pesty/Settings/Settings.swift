@@ -81,6 +81,7 @@ final class Settings {
         static let playSound = "playSound"
         static let ignoreConcealed = "ignoreConcealed"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
+        static let fetchLinkPreviews = "fetchLinkPreviews"
         static let barHeight = "barHeight"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
@@ -165,6 +166,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(ignoredSourceAppBundleIDs, forKey: Keys.ignoredSourceAppBundleIDs) }
     }
 
+    var fetchLinkPreviews: Bool {
+        didSet { guard isLoaded else { return }; d.set(fetchLinkPreviews, forKey: Keys.fetchLinkPreviews) }
+    }
+
     var barHeight: Double {
         didSet {
             guard isLoaded else { return }
@@ -209,6 +214,7 @@ final class Settings {
             Keys.playSound: false,
             Keys.ignoreConcealed: true,
             Keys.ignoredSourceAppBundleIDs: [],
+            Keys.fetchLinkPreviews: false,
             Keys.barHeight: 430.0,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
@@ -230,6 +236,7 @@ final class Settings {
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
+        fetchLinkPreviews = d.bool(forKey: Keys.fetchLinkPreviews)
         barHeight = d.double(forKey: Keys.barHeight)
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)

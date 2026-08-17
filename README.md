@@ -141,7 +141,7 @@ Pesty reimplements the parts of Paste people use every day - the slide-up strip,
 
 **Is Pesty a good clipboard manager for Mac?** It keeps a searchable history of everything you copy (text, links, images, files, colors) and pastes it back with a keystroke - with pinboards and a color-coded strip.
 
-**Does it keep my clipboard private?** Yes. Everything stays on your Mac - no servers, no analytics, no network calls - and password-manager clips are ignored.
+**Does it keep my clipboard private?** Yes. Everything stays on your Mac - no servers, no analytics, and no network calls by default - and password-manager clips are ignored. (One optional feature, link previews, fetches link titles and icons from the web; it's off unless you turn it on.)
 
 **What macOS does it need?** macOS 14 (Sonoma) or later, on Apple Silicon or Intel.
 
