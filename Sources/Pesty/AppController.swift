@@ -343,13 +343,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     /// Pastes the oldest pending Paste Stack entry into the last active app,
-    /// the same handoff `pasteItem` uses for a regular clip.
+    /// the same handoff `pasteItem` uses for a regular clip. The entry is
+    /// only consumed once its content actually made it onto the pasteboard,
+    /// so an entry whose backing image file has vanished neither pastes
+    /// stale clipboard contents nor gets marked as pasted.
     func pasteNextStackItem() {
         guard Settings.shared.pasteStacksEnabled,
-              let entry = PasteSequence.shared.next() else { return }
+              let candidate = PasteSequence.shared.peekNext() else { return }
         let target = pasteTarget
         hideBar()
-        PasteService.paste(entry.item, into: target, monitor: monitor)
+        guard PasteService.paste(candidate.item, into: target, monitor: monitor) else { return }
+        _ = PasteSequence.shared.next(entryID: candidate.id)
     }
 
     var pasteMenuTitle: String {

@@ -48,6 +48,11 @@ struct HotkeyRecorderView: View {
             if mods & (cmdKey | controlKey | optionKey) == 0 {
                 NSSound.beep(); return nil
             }
+            // Both slots sharing one combo would leave whichever registers
+            // second dead; refuse the recording and keep the old binding.
+            if taken(byOtherSlot: Int(event.keyCode), modifiers: mods) {
+                NSSound.beep(); return nil
+            }
             switch kind {
             case .main:
                 settings.hotkeyKeyCode = Int(event.keyCode)
@@ -64,6 +69,17 @@ struct HotkeyRecorderView: View {
     private func stop() {
         recording = false
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+
+    private func taken(byOtherSlot keyCode: Int, modifiers: Int) -> Bool {
+        switch kind {
+        case .main:
+            return keyCode == settings.sequenceHotkeyKeyCode
+                && modifiers == settings.sequenceHotkeyModifiers
+        case .pasteStackNext:
+            return keyCode == settings.hotkeyKeyCode
+                && modifiers == settings.hotkeyModifiers
+        }
     }
 
     private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> Int {

@@ -35,9 +35,12 @@ final class ClipboardMonitor {
         guard !isPaused else { return }
         if current == suppressUntilChangeCount { return }
         guard let item = makeItem() else { return }
-        ClipboardStore.shared.addCaptured(item)
+        // addCaptured may dedup against an existing history entry (deleting the
+        // fresh capture's image file in the process), so queue the canonical
+        // clip it returns - never the raw capture.
+        let stored = ClipboardStore.shared.addCaptured(item)
         if Settings.shared.pasteStacksEnabled {
-            PasteSequence.shared.addIfNeeded(item)
+            PasteSequence.shared.addIfNeeded(stored)
         }
     }
 

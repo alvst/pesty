@@ -101,7 +101,13 @@ final class ClipboardStore {
         return visibleItems.first(where: { $0.id == id })
     }
 
-    func addCaptured(_ item: ClipItem) {
+    /// Records a fresh capture and returns the clip that actually lives in
+    /// history afterwards. When the capture dedups against an existing entry,
+    /// the capture's own image file is deleted here - callers that hold on to
+    /// the clip (the Paste Stack queue) must use the returned canonical item,
+    /// not the one they passed in.
+    @discardableResult
+    func addCaptured(_ item: ClipItem) -> ClipItem {
         if let idx = history.firstIndex(where: { $0.sameContent(as: item) }) {
             if item.imageFileName != history[idx].imageFileName { deleteImageFile(item) }
             var existing = history.remove(at: idx)
@@ -112,7 +118,7 @@ final class ClipboardStore {
                 selectionAnchorID = existing.id
             }
             scheduleSave()
-            return
+            return existing
         }
         history.insert(item, at: 0)
         trimHistory()
@@ -121,6 +127,7 @@ final class ClipboardStore {
             selectionAnchorID = item.id
         }
         scheduleSave()
+        return item
     }
 
     func applyRetentionPolicy() { trimHistory(); scheduleSave() }
@@ -204,6 +211,9 @@ final class ClipboardStore {
         case .history:
             removed = history.filter { ids.contains($0.id) }
             history.removeAll { ids.contains($0.id) }
+            // A deleted (possibly sensitive) clip must not live on in the
+            // Paste Stack queue or its saved decks on disk.
+            PasteSequence.shared.removeItems(withIDs: ids)
         case .pinboard(let boardID):
             guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
             removed = pinboards[boardIndex].items.filter { ids.contains($0.id) }
@@ -229,6 +239,7 @@ final class ClipboardStore {
         let old = history
         history.removeAll()
         selectedID = nil
+        PasteSequence.shared.removeItems(withIDs: Set(old.map(\.id)))
         for item in old { deleteImageFile(item) }
         reconcileMultiSelection()
         scheduleSave()
@@ -498,8 +509,14 @@ final class ClipboardStore {
 
     private func deleteImageFile(_ item: ClipItem) {
         guard let name = item.imageFileName else { return }
+        // Queued Paste Stack entries reference the same backing files, so
+        // retention trims and deletes here must not remove an image out from
+        // under an entry still waiting to be pasted.
+        let sequence = PasteSequence.shared
         let stillUsed = history.contains { $0.imageFileName == name }
             || pinboards.contains { $0.items.contains { $0.imageFileName == name } }
+            || sequence.entries.contains { $0.item.imageFileName == name }
+            || sequence.savedStacks.contains { $0.entries.contains { $0.item.imageFileName == name } }
         if stillUsed { return }
         if let url = imageURL(for: item) { try? FileManager.default.removeItem(at: url) }
     }

@@ -53,15 +53,22 @@ enum PasteService {
         return pasteboard.changeCount
     }
 
+    /// Returns false when nothing could be written to the pasteboard (for
+    /// example an image clip whose backing file is gone). In that case no
+    /// focus switch and no synthetic ⌘V happen - pasting whatever happened
+    /// to be on the clipboard already would be worse than doing nothing.
+    @discardableResult
     static func paste(_ item: ClipItem,
                       into targetApp: NSRunningApplication?,
                       monitor: ClipboardMonitor,
-                      asPlainText: Bool = false) {
+                      asPlainText: Bool = false) -> Bool {
+        let before = NSPasteboard.general.changeCount
         let change = copy(item, asPlainText: asPlainText)
         monitor.suppressUntilChangeCount = change
+        guard change != before else { return false }
         if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
 
-        guard let target = targetApp, !target.isTerminated else { return }
+        guard let target = targetApp, !target.isTerminated else { return true }
 
         #if MAS
         // Mac App Store (sandboxed) build: copy the clip and return focus to the
@@ -71,10 +78,11 @@ enum PasteService {
         #else
         // Direct-download build: optionally paste straight into the active app by
         // synthesizing ⌘V. This requires the user's Accessibility grant.
-        guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return }
+        guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return true }
         target.activate()
         waitForFrontmost(target, attempts: 20)
         #endif
+        return true
     }
 
     #if !MAS

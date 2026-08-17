@@ -127,15 +127,39 @@ final class PasteSequence {
         return true
     }
 
+    /// Purges entries backed by the given clips from the active stack and
+    /// every saved deck, so a clip deleted from history does not live on in
+    /// the queue or in pasteStacks.json.
+    func removeItems(withIDs ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let hadActiveMatches = entries.contains { ids.contains($0.item.id) }
+        entries.removeAll { ids.contains($0.item.id) }
+        var changed = hadActiveMatches
+        for index in savedStacks.indices
+        where savedStacks[index].entries.contains(where: { ids.contains($0.item.id) }) {
+            savedStacks[index].entries.removeAll { ids.contains($0.item.id) }
+            savedStacks[index].updatedAt = .now
+            changed = true
+        }
+        guard changed else { return }
+        persistActiveStack()
+        scheduleSave()
+    }
+
     // MARK: - Pasting
+
+    /// The oldest pending entry, without consuming it. Callers paste the
+    /// clip first and only consume via `next(entryID:)` once the pasteboard
+    /// write actually succeeded.
+    func peekNext() -> PasteStackEntry? {
+        entries.first(where: { !$0.isPasted })
+    }
 
     /// Returns the oldest pending entry and moves it to the bottom of the stack.
     func next() -> PasteStackEntry? {
-        guard let index = entries.firstIndex(where: { !$0.isPasted }) else {
-            isCollecting = false
-            persistActiveStack()
-            return nil
-        }
+        // Nothing pending is not a reason to stop collecting: an accidental
+        // "paste next" while the stack is drained should leave the session on.
+        guard let index = entries.firstIndex(where: { !$0.isPasted }) else { return nil }
         return takeEntry(at: index)
     }
 

@@ -239,7 +239,8 @@ final class Settings {
             Keys.cloudKitSync: true,
             Keys.pasteStacksEnabled: false,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
-            Keys.sequenceHotkeyModifiers: cmdKey | optionKey
+            // ⌃⌥V - deliberately not ⌘⌥V, which shadows Finder's "Move Item Here".
+            Keys.sequenceHotkeyModifiers: controlKey | optionKey
         ])
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.string(forKey: Keys.historyRetentionMode) ?? "")
