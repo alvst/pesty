@@ -9,6 +9,7 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     private var startIndexByClipID: [UUID: Int] = [:]
     private var orderedStartIndexes: [(index: Int, id: UUID)] = []
     private var indexObservation: NSKeyValueObservation?
+    private var closeObservation: NSObjectProtocol?
     private let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("Pesty-QuickLook", isDirectory: true)
 
@@ -24,12 +25,13 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
 
     func dismiss() {
         QLPreviewPanel.shared()?.orderOut(nil)
+        purgeTemporaryFiles()
     }
 
     func toggle(items: [ClipItem], selectedID: UUID?) {
         guard let panel = QLPreviewPanel.shared() else { return }
         if panel.isVisible {
-            panel.orderOut(nil)
+            dismiss()
             return
         }
 
@@ -67,6 +69,16 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
             DispatchQueue.main.async {
                 guard let self, let id = self.clipID(forPreviewIndex: index) else { return }
                 self.onSelectionChange?(id)
+            }
+        }
+        if closeObservation == nil {
+            // Space/Esc inside the panel close it natively without going
+            // through dismiss(); willClose is the signal common to every
+            // such path, so the preview files never linger past the panel.
+            closeObservation = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: panel, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { QuickLookService.shared.purgeTemporaryFiles() }
             }
         }
     }
@@ -113,10 +125,17 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
     }
 
     private func prepareTemporaryDirectory() {
-        try? FileManager.default.removeItem(at: temporaryDirectory)
+        purgeTemporaryFiles()
         try? FileManager.default.createDirectory(at: temporaryDirectory,
                                                   withIntermediateDirectories: true,
                                                   attributes: [.posixPermissions: 0o700])
+    }
+
+    /// The preview files are plain-text copies of clip content, so they must
+    /// not outlive the panel that needed them: purged on every dismissal and
+    /// again at app termination.
+    func purgeTemporaryFiles() {
+        try? FileManager.default.removeItem(at: temporaryDirectory)
     }
 
     private func write(_ data: Data, named title: String, extension fileExtension: String) -> URL? {
@@ -126,6 +145,7 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         let url = temporaryDirectory.appendingPathComponent(filename)
         do {
             try data.write(to: url, options: .atomic)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             return url
         } catch { return nil }
     }

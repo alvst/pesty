@@ -88,6 +88,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.saveNow()
+        QuickLookService.shared.purgeTemporaryFiles()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -520,8 +521,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         switch code {
         case kVK_Space:
-            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
-            return nil
+            // Finder's rule: Space previews only when the user is not typing
+            // a query. Mid-search it falls through below and appends to the
+            // search text like any other printable character.
+            if store.searchText.isEmpty {
+                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+                return nil
+            }
         case kVK_Escape:
             if !store.multiSelectedIDs.isEmpty {
                 store.clearMultiSelection()
