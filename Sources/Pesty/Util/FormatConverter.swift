@@ -4,16 +4,68 @@ import AppKit
 /// options. HTML is preferred as the source when the clip carried it —
 /// browser copies often have no RTF at all — with RTF as the fallback.
 enum FormatConverter {
+    /// Above this, skip rich conversion entirely and let the caller fall back
+    /// to plain text. The HTML importer runs synchronously on the main thread
+    /// at paste time; a pathological clip must not hitch the paste.
+    private static let maxRichSourceBytes = 1_000_000
+
     static func canConvert(_ item: ClipItem) -> Bool {
-        item.htmlData != nil || item.rtfData != nil
+        withinLimit(item.htmlData) || withinLimit(item.rtfData)
+    }
+
+    private static func withinLimit(_ data: Data?) -> Bool {
+        guard let data else { return false }
+        return !data.isEmpty && data.count <= maxRichSourceBytes
+    }
+
+    /// Removes every element that could make the HTML importer touch the
+    /// network. `NSAttributedString(html:)` is WebKit-backed and will fetch
+    /// remote subresources — `<img src="http...">` tracking pixels included —
+    /// synchronously, on the main thread, at paste time. That would break the
+    /// app's no-network-calls promise and stall the paste, so the offending
+    /// elements are dropped wholesale before conversion: the converters only
+    /// keep text plus bold/italic/underline/links, and images, scripts, and
+    /// stylesheets aren't representable in the output anyway.
+    private static func sanitizedHTML(_ data: Data) -> Data? {
+        guard let raw = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16) else { return nil }
+        var html = raw
+
+        func drop(_ pattern: String) {
+            html = html.replacingOccurrences(of: pattern, with: "",
+                                             options: [.regularExpression, .caseInsensitive])
+        }
+
+        // Container elements go with their entire contents…
+        for tag in ["script", "style", "iframe", "object", "picture", "svg", "video", "audio"] {
+            drop("<\(tag)\\b[^>]*>[\\s\\S]*?</\(tag)\\s*>")
+            // …and any unbalanced leftovers of the same tags.
+            drop("<\(tag)\\b[^>]*/?>")
+            drop("</\(tag)\\s*>")
+        }
+        // Void/self-closing elements that reference external resources.
+        for tag in ["img", "source", "embed", "link"] {
+            drop("<\(tag)\\b[^>]*/?>")
+        }
+        // Neutralize CSS url(...) in surviving style attributes
+        // (background images are fetched too).
+        html = html.replacingOccurrences(of: "url\\s*\\([^)]*\\)", with: "none",
+                                         options: [.regularExpression, .caseInsensitive])
+        return html.data(using: .utf8)
     }
 
     private static func attributed(for item: ClipItem) -> NSAttributedString? {
-        if let html = item.htmlData,
-           let s = NSAttributedString(html: html, documentAttributes: nil) {
+        if let html = item.htmlData, withinLimit(html),
+           let safe = sanitizedHTML(html),
+           let s = NSAttributedString(html: safe,
+                                      // Belt-and-braces alongside the stripping
+                                      // above: never let the importer wait on a
+                                      // (now nonexistent) subresource load.
+                                      options: [.timeout: 2.0],
+                                      documentAttributes: nil) {
             return s
         }
-        if let rtf = item.rtfData,
+        if let rtf = item.rtfData, withinLimit(rtf),
            let s = NSAttributedString(rtf: rtf, documentAttributes: nil) {
             return s
         }
