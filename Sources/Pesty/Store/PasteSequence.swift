@@ -108,6 +108,13 @@ final class PasteSequence {
         return displayEntries.filter { $0.item.searchableText.contains(trimmed) }
     }
 
+    /// Whether the panel is currently showing a filtered subset. Drag-to-
+    /// reorder is suspended while it is: a drop only knows about the rows on
+    /// screen, so it would silently reorder around the hidden ones.
+    var isFiltering: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @ObservationIgnored private var saveWorkItem: DispatchWorkItem?
 
     private static var baseDir: URL { ClipboardStore.localBase }
@@ -251,16 +258,22 @@ final class PasteSequence {
         self.selectedEntryID = displayed[next].id
     }
 
-    /// Reorders one pending entry to sit directly before another within the
-    /// active stack - the floating panel's drag-to-reorder. No-op for
+    /// Reorders one pending entry to sit directly before another *as the panel
+    /// displays them* - the floating panel's drag-to-reorder. No-op for
     /// unknown IDs or dragging an entry onto itself.
+    ///
+    /// The caret the user drops onto is drawn above a row in display order,
+    /// and `displayEntries` reverses the pending run when "paste newest first"
+    /// is on. Dropping above a row is therefore an insert *after* the target
+    /// in the raw queue whenever that setting is on; inserting before it
+    /// either way lands the entry on the opposite side of the caret shown.
     func moveEntry(_ id: UUID, before targetID: UUID) {
         guard id != targetID,
               let sourceIndex = entries.firstIndex(where: { $0.id == id }) else { return }
         var updated = entries
         let entry = updated.remove(at: sourceIndex)
         guard let targetIndex = updated.firstIndex(where: { $0.id == targetID }) else { return }
-        updated.insert(entry, at: targetIndex)
+        updated.insert(entry, at: Settings.shared.stackPasteInReverse ? targetIndex + 1 : targetIndex)
         guard updated.map(\.id) != entries.map(\.id) else { return }
         entries = updated
         persistActiveStack()

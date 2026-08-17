@@ -162,7 +162,8 @@ struct PasteStackView: View {
                                                index: index + 1,
                                                selected: stack.selectedEntryID == entry.id)
                                 .id(entry.id)
-                                .modifier(PasteStackEntryReorderTarget(entry: entry))
+                                .modifier(PasteStackEntryReorderTarget(entry: entry,
+                                                                       reorderable: !stack.isFiltering))
                         }
                     }
                     .padding(.horizontal, 12)
@@ -309,8 +310,15 @@ private struct PasteStackEntryRow: View {
         .opacity(entry.isPasted ? 0.48 : 1)
         .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .onTapGesture { stack.select(entry) }
-        .help(entry.isPasted ? "Pasted clip" : "Select this stack clip - drag to reorder")
-        .modifier(PasteStackEntryDragSource(entry: entry))
+        .help(helpText)
+        .modifier(PasteStackEntryDragSource(entry: entry, reorderable: !stack.isFiltering))
+    }
+
+    /// Only advertises dragging when dragging is actually available - a
+    /// filtered list has reordering switched off.
+    private var helpText: String {
+        if entry.isPasted { return "Pasted clip" }
+        return stack.isFiltering ? "Select this stack clip" : "Select this stack clip - drag to reorder"
     }
 
     private var rowBackground: Color {
@@ -369,12 +377,16 @@ private let pasteStackEntryIdentifierType = "com.greycorelabs.pesty.paste-stack-
 
 /// Makes a pending entry row draggable within the panel. Pasted entries
 /// (already at the bottom of the list, no longer affecting paste order in
-/// any meaningful way) are left non-draggable.
+/// any meaningful way) are left non-draggable, and so is every row while a
+/// search filter is on: a drop only knows about the rows still on screen, so
+/// reordering across a filtered list would silently leapfrog hidden entries
+/// and change a paste order the user cannot see.
 private struct PasteStackEntryDragSource: ViewModifier {
     let entry: PasteStackEntry
+    let reorderable: Bool
 
     func body(content: Content) -> some View {
-        if entry.isPasted {
+        if entry.isPasted || !reorderable {
             content
         } else {
             content.onDrag {
@@ -391,15 +403,16 @@ private struct PasteStackEntryDragSource: ViewModifier {
 }
 
 /// Lets a pending entry be dropped onto another to reorder the active stack.
-/// Mirrors BarView's `PinboardItemReorderTarget`/`CardInsertionCaret` for a
-/// vertical list: a horizontal insertion caret above the row being dragged
-/// over, rather than a box highlight.
+/// The drop affordance is an insertion caret drawn above the row being
+/// dragged over, rather than a box highlight around it, so it reads as "the
+/// entry lands here" instead of "this row is the target".
 private struct PasteStackEntryReorderTarget: ViewModifier {
     let entry: PasteStackEntry
+    let reorderable: Bool
     @State private var isTargeted = false
 
     func body(content: Content) -> some View {
-        if entry.isPasted {
+        if entry.isPasted || !reorderable {
             content
         } else {
             content
@@ -428,8 +441,8 @@ private struct PasteStackEntryReorderTarget: ViewModifier {
 }
 
 /// A horizontal, capsule-capped insertion line shown above whichever row a
-/// dragged stack entry is currently over - the vertical-list counterpart to
-/// the Pinboard card strip's I-beam insertion caret.
+/// dragged stack entry is currently over: an I-beam caret marking where the
+/// entry will land, laid out for a vertical list.
 private struct PasteStackInsertionCaret: View {
     var color: Color
     var capWidth: CGFloat = 12

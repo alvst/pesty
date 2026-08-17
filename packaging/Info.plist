@@ -34,5 +34,18 @@
     <string>public.app-category.productivity</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.greycorelabs.pesty.paste-stack-entry-id</string>
+            <key>UTTypeDescription</key>
+            <string>Pesty Paste Stack Entry Identifier</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
