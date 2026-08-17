@@ -162,25 +162,26 @@ final class PasteSequence {
         scheduleSave()
     }
 
-    /// Moves a clip the user explicitly chose from Clipboard history straight
-    /// into the active Paste Stack, without requiring collection to already
-    /// be on. Unlike passive clipboard capture, this also resumes collection
-    /// so the stack keeps growing if the user copies more clips afterward.
+    /// Queues a clip the user explicitly chose from Clipboard history, without
+    /// requiring collection to already be on. Adding one clip is all the menu
+    /// item promises, so this deliberately leaves `isCollecting` alone rather
+    /// than switching on collect-everything behind the user's back.
     @discardableResult
     func addHistoryItem(_ item: ClipItem) -> Bool {
         ensureActiveStack()
-        guard !containsHistoryItemID(item.id) else { return false }
-        isCollecting = true
-        entries.append(makeEntry(for: item))
+        guard !activeStackContains(item) else { return false }
+        entries.append(makeEntry(for: ClipboardStore.shared.stackCopy(of: item)))
         if selectedEntryID == nil { selectFirst() }
         persistActiveStack()
         return true
     }
 
-    /// Whether a clip already sits in any saved stack (active or not) - used
-    /// to grey out "Move to Paste Stack" once a clip has already been queued.
-    func containsHistoryItemID(_ id: UUID) -> Bool {
-        savedStacks.contains { stack in stack.entries.contains { $0.item.id == id } }
+    /// Whether the active stack already queues this clip - used to grey out
+    /// "Add to Paste Stack". Compared by content rather than id, because a
+    /// clip moved in from history is queued as an independent copy with its
+    /// own identity; other decks are irrelevant to what this menu item does.
+    func activeStackContains(_ item: ClipItem) -> Bool {
+        entries.contains { $0.item.sameContent(as: item) }
     }
 
     /// Captures the rendered image while the original clip is still readily
@@ -267,15 +268,15 @@ final class PasteSequence {
     private func takeEntry(at index: Int) -> PasteStackEntry {
         var result = entries.remove(at: index)
         result.isPasted = true
-        entries.append(result)
         isCollecting = false
-        if pendingCount == 0, !Settings.shared.keepPastedStackItems {
-            entries.removeAll()
-            selectedEntryID = nil
-        } else {
-            selectNextPendingEntry()
-        }
+        // "Keep pasted items" off means what the toggle says: the entry leaves
+        // the stack as soon as it is pasted, rather than lingering until the
+        // last pending entry follows it out.
+        let keepPasted = Settings.shared.keepPastedStackItems
+        if keepPasted { entries.append(result) }
+        selectNextPendingEntry()
         persistActiveStack()
+        if !keepPasted { releaseAsset(of: result) }
         return result
     }
 
@@ -284,11 +285,13 @@ final class PasteSequence {
         entries.removeAll { $0.id == entry.id }
         if selectedEntryID == entry.id { selectFirst() }
         persistActiveStack()
+        releaseAsset(of: entry)
     }
 
     /// Deletes only the active saved stack; all other stack decks remain.
     func cancel() {
         guard let activeStackID else { return }
+        let dropped = entries
         savedStacks.removeAll { $0.id == activeStackID }
         if let next = savedStacks.first(where: \.hasEntries) {
             activate(next)
@@ -299,6 +302,16 @@ final class PasteSequence {
             isCollecting = false
         }
         scheduleSave()
+        for entry in dropped { releaseAsset(of: entry) }
+    }
+
+    /// An entry queued from history owns its own copy of the clip's image, so
+    /// dropping the entry has to release it. Entries captured from the
+    /// clipboard share history's file, which ClipboardStore keeps for as long
+    /// as anything else still references it.
+    private func releaseAsset(of entry: PasteStackEntry) {
+        guard entry.item.imageFileName != nil else { return }
+        ClipboardStore.shared.releaseImageFile(for: entry.item)
     }
 
     // MARK: - Deck switching
@@ -314,12 +327,13 @@ final class PasteSequence {
     /// the next non-empty saved stack, matching `cancel()`; deleting any
     /// other deck leaves the active stack untouched.
     func deleteStack(_ id: UUID) {
-        guard savedStacks.contains(where: { $0.id == id }) else { return }
+        guard let stack = savedStacks.first(where: { $0.id == id }) else { return }
         if activeStackID == id {
             cancel()
         } else {
             savedStacks.removeAll { $0.id == id }
             scheduleSave()
+            for entry in stack.entries { releaseAsset(of: entry) }
         }
     }
 

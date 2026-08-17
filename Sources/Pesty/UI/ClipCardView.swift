@@ -281,7 +281,7 @@ struct ClipCardView: View {
     }
 
     private var isInPasteStack: Bool {
-        PasteSequence.shared.containsHistoryItemID(item.id)
+        PasteSequence.shared.activeStackContains(item)
     }
 
     private var deleteMenuTitle: String {

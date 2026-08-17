@@ -47,6 +47,12 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
                     visible.minY + CGFloat(Settings.shared.barHeight) + 14)
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         panel.orderFrontRegardless()
+        // Taking key status while the Paste Bar is up makes the bar resign key,
+        // and with "hide when clicking outside" on that hides the bar outright -
+        // so queueing a second clip from history would mean reopening the bar
+        // every time. The panel only claims focus (and its key monitor) when
+        // there is no bar to steal it from.
+        guard !AppController.shared.isBarPresented else { return }
         panel.makeKey()
         startKeyMonitor()
     }

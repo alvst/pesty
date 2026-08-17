@@ -299,6 +299,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         barController?.hide()
     }
 
+    /// Whether the Paste Bar is up or on its way up. The Paste Stack panel
+    /// consults this before taking key status, since the bar hides itself the
+    /// moment it resigns key.
+    var isBarPresented: Bool { barController?.isPresented == true }
+
     func pasteSelected() {
         guard let item = store.selectedItem else { return }
         pasteItem(item)

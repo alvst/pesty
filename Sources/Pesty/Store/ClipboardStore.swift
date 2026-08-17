@@ -290,6 +290,34 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    /// An independent copy of a clip for a Paste Stack to own - its own UUID
+    /// and, for images, its own file - so a queued entry keeps working after
+    /// the clip it came from is deleted from history. Same shape of copy
+    /// `saveToPinboard` makes for the same reason.
+    func stackCopy(of item: ClipItem) -> ClipItem {
+        var copy = ClipItem(
+            type: item.type,
+            text: item.text,
+            rtfData: item.rtfData,
+            imageFileName: item.imageFileName,
+            imageHash: item.imageHash,
+            fileURLs: item.fileURLs,
+            colorHex: item.colorHex,
+            sourceBundleID: item.sourceBundleID,
+            sourceAppName: item.sourceAppName,
+            customTitle: item.customTitle,
+            createdAt: item.createdAt)
+        if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
+        return copy
+    }
+
+    /// Frees the image file behind a clip that just left a Paste Stack. The
+    /// file survives if history, a pinboard, or another queued entry still
+    /// references it, so this is safe for entries that share history's file.
+    func releaseImageFile(for item: ClipItem) {
+        deleteImageFile(item)
+    }
+
     func item(withID id: UUID) -> ClipItem? {
         if let item = history.first(where: { $0.id == id }) { return item }
         return pinboards.lazy.flatMap(\.items).first(where: { $0.id == id })
