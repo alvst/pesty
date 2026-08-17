@@ -126,13 +126,19 @@ struct ClipCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .link:
-            VStack(spacing: 10) {
-                Spacer(minLength: 0)
-                Image(systemName: "safari").font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Theme.cardTextTertiary)
-                Spacer(minLength: 0)
+            if settings.fetchLinkPreviews {
+                LinkCardPreview(text: item.text ?? item.displayTitle,
+                                titleOverride: item.customTitle)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                VStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    Image(systemName: "safari").font(.system(size: 34, weight: .light))
+                        .foregroundStyle(Theme.cardTextTertiary)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
         default:
             Text(item.text ?? "")
                 .font(.system(size: 12.5))
@@ -150,7 +156,7 @@ struct ClipCardView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if item.type == .link {
+            if item.type == .link, !settings.fetchLinkPreviews {
                 Text(item.displayTitle)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.cardTextPrimary).lineLimit(1)

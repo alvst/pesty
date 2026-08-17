@@ -68,7 +68,20 @@ struct ClipPreviewView: View {
                     }
                 }
             }
-        case .text, .richText, .link:
+        case .link:
+            if let text = item.text, !text.isEmpty {
+                if Settings.shared.fetchLinkPreviews {
+                    LinkPreviewContent(text: text, compact: false, titleOverride: item.customTitle)
+                } else {
+                    Text(text)
+                        .font(.system(size: 14))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                unavailable("This clip has no link to preview.")
+            }
+        case .text, .richText:
             if let text = item.text, !text.isEmpty {
                 Text(text)
                     .font(.system(size: 14))

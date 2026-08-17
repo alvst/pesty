@@ -30,58 +30,6 @@ struct RichTextContent: View {
     }
 }
 
-/// Compact horizontal favicon/title/host row, used both here and (in a
-/// separate PR) on link clip cards. Kept self-contained so this file doesn't
-/// depend on that other branch landing first.
-struct LinkPreviewContent: View {
-    let text: String
-    let compact: Bool
-    private let previews = LinkPreviewStore.shared
-
-    private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    private var preview: LinkPreview? { previews.preview(for: url) }
-    private var host: String { url?.host ?? text }
-
-    var body: some View {
-        HStack(spacing: compact ? 8 : 12) {
-            icon
-            VStack(alignment: .leading, spacing: compact ? 2 : 5) {
-                Text(preview?.title ?? host)
-                    .font(.system(size: compact ? 12 : 15, weight: .semibold))
-                    .foregroundStyle(Theme.cardTextPrimary)
-                    .lineLimit(compact ? 2 : 3)
-                Text(host)
-                    .font(.system(size: compact ? 10 : 12))
-                    .foregroundStyle(Theme.cardTextSecondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .onAppear { previews.load(for: url) }
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        if let image = preview?.icon {
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-                .scaledToFit()
-                .frame(width: compact ? 28 : 42, height: compact ? 28 : 42)
-                .clipShape(RoundedRectangle(cornerRadius: compact ? 6 : 10, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: compact ? 6 : 10, style: .continuous)
-                .fill(Color.accentColor.opacity(0.14))
-                .frame(width: compact ? 28 : 42, height: compact ? 28 : 42)
-                .overlay {
-                    Image(systemName: "link")
-                        .font(.system(size: compact ? 12 : 17, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                }
-        }
-    }
-}
-
 struct PestyPreviewPopover: View {
     let item: ClipItem
     let pointerOffset: CGFloat
@@ -259,7 +207,9 @@ struct SelectedClipPreviewView: View {
             }
         case .link:
             VStack(spacing: 14) {
-                LinkPreviewContent(text: item.text ?? item.displayTitle, compact: false)
+                LinkPreviewContent(text: item.text ?? item.displayTitle,
+                                   compact: false,
+                                   titleOverride: item.customTitle)
                 Text(item.text ?? "")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.cardTextSecondary)
