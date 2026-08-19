@@ -320,8 +320,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// the app the user came from, unless another Pesty window like Settings
     /// is exactly what now holds key — stealing focus back from a window the
     /// user just clicked would make it unusable.
+    /// Whether the Paste Bar is currently on screen, for surfaces that have to
+    /// lay themselves out around it.
+    var isBarPresented: Bool { barController?.isPresented == true }
+
     private func quickLookDidClose() {
-        guard NSApp.isActive, barController?.isPresented != true else { return }
+        guard NSApp.isActive, !isBarPresented else { return }
         if let key = NSApp.keyWindow, key === settingsWindow { return }
         guard let target = previousApp ?? lastActiveApp, !target.isTerminated else { return }
         target.activate()

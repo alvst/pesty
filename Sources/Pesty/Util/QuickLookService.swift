@@ -120,21 +120,51 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         }
     }
 
-    /// Keeps the panel's center on the screen's center. setFrameOrigin only
-    /// moves the window, so this cannot re-trigger the resize notification.
+    /// Centers the panel, and shrinks it first when the previewed item is
+    /// larger than the usable area — Quick Look sizes itself to its content,
+    /// so a tall image otherwise runs off the bottom of the screen with no way
+    /// to reach the end of it. The bar sits along the bottom, so the usable
+    /// area is the visible frame minus the bar and a breathing margin.
     /// Once the user has dragged the panel somewhere on purpose, their
     /// placement wins and this becomes a no-op for the rest of the session.
     private func recenterPanel() {
         guard !userHasMovedPanel,
               let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
               let screen = panel.screen ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
+
+        var available = screen.visibleFrame.insetBy(dx: Self.screenMargin, dy: Self.screenMargin)
+        let barHeight = CGFloat(Settings.shared.barHeight)
+        if AppController.shared.isBarPresented, available.height > barHeight {
+            available.origin.y += barHeight
+            available.size.height -= barHeight
+        }
+        guard available.width > 0, available.height > 0 else { return }
+
         let frame = panel.frame
+        // A tolerance keeps this from trading frame changes with Quick Look's
+        // own layout over a fraction of a point.
+        let oversize = frame.width > available.width + 1 || frame.height > available.height + 1
         isRecentering = true
-        panel.setFrameOrigin(NSPoint(x: visible.midX - frame.width / 2,
-                                     y: visible.midY - frame.height / 2))
-        isRecentering = false
+        defer { isRecentering = false }
+        guard oversize else {
+            // setFrameOrigin alone can't re-trigger the resize notification
+            // that called this, so the common path can't loop.
+            panel.setFrameOrigin(NSPoint(x: available.midX - frame.width / 2,
+                                         y: available.midY - frame.height / 2))
+            return
+        }
+
+        let scale = min(available.width / frame.width, available.height / frame.height)
+        let size = NSSize(width: (frame.width * scale).rounded(.down),
+                          height: (frame.height * scale).rounded(.down))
+        panel.setFrame(NSRect(x: available.midX - size.width / 2,
+                              y: available.midY - size.height / 2,
+                              width: size.width,
+                              height: size.height),
+                       display: true)
     }
+
+    private static let screenMargin: CGFloat = 24
 
     private func panelDidClose() {
         indexObservation = nil
