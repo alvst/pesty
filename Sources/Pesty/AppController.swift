@@ -541,19 +541,32 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // monitor is only responsible for keys delivered to the panel itself.
         guard event.window === barController?.window else { return event }
 
+        let code = Int(event.keyCode)
+        let flags = event.modifierFlags
+        let cmd = flags.contains(.command)
+
+        let searchHasFocus = barController?.searchOwnsFirstResponder == true
+
+        // Space means Preview, not a character — even when the search field
+        // holds focus with nothing typed yet, which it does from the moment
+        // the bar opens. Only once a query is actually being composed does
+        // Space become an ordinary space, so multi-word searches still work.
+        if code == kVK_Space,
+           !flags.contains(.command),
+           !flags.contains(.option),
+           !flags.contains(.control),
+           store.searchText.isEmpty {
+            togglePreviewForSelection()
+            return nil
+        }
+
         // The native search field owns the entire event while it is editing:
         // arrows, selection, clipboard commands, deletion, spaces, keyboard
         // layouts, and composed text all need real AppKit text-editing
         // behavior, not this monitor's clip-navigation shortcuts.
-        if barController?.searchOwnsFirstResponder == true {
-            return event
-        }
+        if searchHasFocus { return event }
 
         if handleBarCommandShortcut(event) { return nil }
-
-        let code = Int(event.keyCode)
-        let flags = event.modifierFlags
-        let cmd = flags.contains(.command)
 
         if let digit = Self.quickPasteDigit(for: code),
            includes(Settings.shared.quickPasteModifier, in: flags) {
@@ -572,7 +585,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // a query. Mid-search it falls through below and appends to the
             // search text like any other printable character.
             if store.searchText.isEmpty {
-                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+                togglePreviewForSelection()
                 return nil
             }
         case kVK_Escape:
@@ -644,6 +657,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return nil
         }
         return event
+    }
+
+    /// Space's preview action, shared by the early Space rule and the card
+    /// key switch so both routes behave identically.
+    private func togglePreviewForSelection() {
+        QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
     }
 
     private func isPrintableTextIntent(_ event: NSEvent) -> Bool {
