@@ -547,11 +547,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let searchHasFocus = barController?.searchOwnsFirstResponder == true
 
+        // Any *other* editable field inside the bar — today only a future
+        // inline Pinboard rename — owns Space unconditionally: a space in a
+        // name is always a literal space, never a preview. Scoped as "an
+        // NSText that isn't the search field" so the Space rule below can
+        // treat the two cases differently, which a blanket
+        // `firstResponder is NSText` guard could not.
+        let otherEditorHasFocus = !searchHasFocus
+            && barController?.window?.firstResponder is NSText
+
         // Space means Preview, not a character — even when the search field
         // holds focus with nothing typed yet, which it does from the moment
         // the bar opens. Only once a query is actually being composed does
         // Space become an ordinary space, so multi-word searches still work.
         if code == kVK_Space,
+           !otherEditorHasFocus,
            !flags.contains(.command),
            !flags.contains(.option),
            !flags.contains(.control),
@@ -559,6 +569,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             togglePreviewForSelection()
             return nil
         }
+
+        if otherEditorHasFocus { return event }
 
         // The native search field owns the entire event while it is editing:
         // arrows, selection, clipboard commands, deletion, spaces, keyboard
