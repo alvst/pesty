@@ -82,6 +82,7 @@ final class Settings {
         static let ignoreConcealed = "ignoreConcealed"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
+        static let pasteStyleCards = "pasteStyleCards"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -174,6 +175,10 @@ final class Settings {
         }
     }
 
+    var pasteStyleCards: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStyleCards, forKey: Keys.pasteStyleCards) }
+    }
+
     var showMenuBarIcon: Bool {
         didSet {
             guard isLoaded else { return }
@@ -210,6 +215,7 @@ final class Settings {
             Keys.ignoreConcealed: true,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
+            Keys.pasteStyleCards: true,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false,
@@ -231,6 +237,7 @@ final class Settings {
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
         barHeight = d.double(forKey: Keys.barHeight)
+        pasteStyleCards = d.bool(forKey: Keys.pasteStyleCards)
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
