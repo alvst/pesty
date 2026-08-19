@@ -117,16 +117,46 @@ final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource
         }
     }
 
-    /// Keeps the panel's center on the screen's center. setFrameOrigin only
-    /// moves the window, so this cannot re-trigger the resize notification.
+    /// Centers the panel, and shrinks it first when the previewed item is
+    /// larger than the screen — Quick Look sizes itself to the content, so a
+    /// tall image otherwise runs off the bottom with no way to see the end of
+    /// it. The bar occupies the bottom of the screen, so the usable area is
+    /// the visible frame minus the bar and a breathing margin.
     private func recenterPanel() {
         guard let panel = QLPreviewPanel.shared(), panel.isVisible, !panel.inLiveResize,
               let screen = panel.screen ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
+
+        var available = screen.visibleFrame.insetBy(dx: Self.screenMargin, dy: Self.screenMargin)
+        let barHeight = CGFloat(Settings.shared.barHeight)
+        if AppController.shared.isBarPresented, available.height > barHeight {
+            available.origin.y += barHeight
+            available.size.height -= barHeight
+        }
+        guard available.width > 0, available.height > 0 else { return }
+
         let frame = panel.frame
-        panel.setFrameOrigin(NSPoint(x: visible.midX - frame.width / 2,
-                                     y: visible.midY - frame.height / 2))
+        // A tolerance keeps this from trading frame changes with Quick Look's
+        // own layout over a fraction of a point.
+        let oversize = frame.width > available.width + 1 || frame.height > available.height + 1
+        guard oversize else {
+            // setFrameOrigin alone can't re-trigger the resize notification
+            // that called this, so the common path can't loop.
+            panel.setFrameOrigin(NSPoint(x: available.midX - frame.width / 2,
+                                         y: available.midY - frame.height / 2))
+            return
+        }
+
+        let scale = min(available.width / frame.width, available.height / frame.height)
+        let size = NSSize(width: (frame.width * scale).rounded(.down),
+                          height: (frame.height * scale).rounded(.down))
+        panel.setFrame(NSRect(x: available.midX - size.width / 2,
+                              y: available.midY - size.height / 2,
+                              width: size.width,
+                              height: size.height),
+                       display: true)
     }
+
+    private static let screenMargin: CGFloat = 24
 
     private func panelDidClose() {
         qlLog.debug("panel closed")

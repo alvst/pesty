@@ -339,6 +339,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         return true
     }
 
+    /// Whether the Paste Bar is currently on screen, for surfaces that must
+    /// lay themselves out around it.
+    var isBarPresented: Bool { barController?.isPresented == true }
+
     func toggleInlinePreview() {
         guard Settings.shared.clipPreviewStyle == .inlinePesty,
               store.source != .pasteStack,
@@ -1028,22 +1032,39 @@ final class AppController: NSObject, NSApplicationDelegate {
         let flags = event.modifierFlags
         let cmd = flags.contains(.command)
 
+        let searchHasFocus = barController?.searchOwnsFirstResponder == true
+
+        // Other live editors, such as Pinboard rename, retain native key
+        // behavior. Requiring `currentEditor` avoids reviving a stale field
+        // editor that an ordered-out panel retained from an earlier search.
+        let renameHasFocus: Bool = {
+            guard !searchHasFocus,
+                  let fieldEditor = event.window?.firstResponder as? NSTextView,
+                  fieldEditor.isFieldEditor,
+                  let control = fieldEditor.delegate as? NSControl,
+                  control.currentEditor() === fieldEditor else { return false }
+            return true
+        }()
+
+        // Space means Preview, not a character — even when the search field
+        // happens to hold focus with nothing typed yet. Only once a query is
+        // actually being composed does Space become an ordinary space, so
+        // multi-word searches still work.
+        if code == kVK_Space,
+           !renameHasFocus,
+           !flags.contains(.command),
+           !flags.contains(.option),
+           !flags.contains(.control),
+           store.searchText.isEmpty {
+            togglePreviewForSelection()
+            return nil
+        }
+
         // The native search field owns the entire event while it is editing.
         // This includes arrows, selections, clipboard commands, deletion,
         // spaces, keyboard layouts, and composed text.
-        if barController?.searchOwnsFirstResponder == true {
-            return event
-        }
-
-        // Other live editors, such as Pinboard rename, also retain native key
-        // behavior. Requiring `currentEditor` avoids reviving a stale field
-        // editor that an ordered-out panel retained from an earlier search.
-        if let fieldEditor = event.window?.firstResponder as? NSTextView,
-           fieldEditor.isFieldEditor,
-           let control = fieldEditor.delegate as? NSControl,
-           control.currentEditor() === fieldEditor {
-            return event
-        }
+        if searchHasFocus { return event }
+        if renameHasFocus { return event }
 
         if store.source != .pasteStack,
            includes(Settings.shared.quickPasteModifier, in: flags),
@@ -1059,17 +1080,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         switch code {
         case kVK_Space:
-            if Settings.shared.clipPreviewStyle == .inlinePesty,
-               store.source != .pasteStack,
-               store.selectedItem != nil {
-                toggleInlinePreview()
-            } else if store.source == .pasteStack {
-                let entries = pasteSequence.visibleEntries(matching: store.searchText)
-                QuickLookService.shared.toggle(items: entries.map(\.item),
-                                               selectedID: selectedVisiblePasteStackEntry?.item.id)
-            } else {
-                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
-            }
+            togglePreviewForSelection()
             return nil
         case kVK_Escape:
             cancelBarSearchOrHide()
@@ -1181,6 +1192,22 @@ final class AppController: NSObject, NSApplicationDelegate {
             return !pasteSequence.visibleEntries(matching: store.searchText).isEmpty
         }
         return !store.visibleItems.isEmpty
+    }
+
+    /// Space's preview action, shared by the early Space rule and the card
+    /// key switch so both routes behave identically.
+    private func togglePreviewForSelection() {
+        if Settings.shared.clipPreviewStyle == .inlinePesty,
+           store.source != .pasteStack,
+           store.selectedItem != nil {
+            toggleInlinePreview()
+        } else if store.source == .pasteStack {
+            let entries = pasteSequence.visibleEntries(matching: store.searchText)
+            QuickLookService.shared.toggle(items: entries.map(\.item),
+                                           selectedID: selectedVisiblePasteStackEntry?.item.id)
+        } else {
+            QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+        }
     }
 
     private func isPrintableTextIntent(_ event: NSEvent) -> Bool {
