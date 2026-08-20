@@ -211,6 +211,7 @@ final class Settings {
         static let previewLinkApplicationBundleID = "previewLinkApplicationBundleID"
         static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
+        static let fetchLinkPreviews = "fetchLinkPreviews"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
         static let showMenuBarIcon = "showMenuBarIcon"
@@ -330,6 +331,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(ignoredSourceAppBundleIDs, forKey: Keys.ignoredSourceAppBundleIDs) }
     }
 
+    var fetchLinkPreviews: Bool {
+        didSet { guard isLoaded else { return }; d.set(fetchLinkPreviews, forKey: Keys.fetchLinkPreviews) }
+    }
+
     var barHeight: Double {
         didSet {
             guard isLoaded else { return }
@@ -389,6 +394,7 @@ final class Settings {
             Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
             Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
+            Keys.fetchLinkPreviews: false,
             Keys.barHeight: BarResizeGeometry.defaultHeight,
             Keys.showBarResizeHandle: false,
             Keys.showMenuBarIcon: true,
@@ -420,6 +426,7 @@ final class Settings {
         deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }
+        fetchLinkPreviews = d.bool(forKey: Keys.fetchLinkPreviews)
         let storedBarHeight = d.double(forKey: Keys.barHeight)
         let normalizedBarHeight = BarResizeGeometry.normalizedPersistedHeight(storedBarHeight)
         barHeight = normalizedBarHeight

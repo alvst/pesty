@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 private final class InlinePreviewPanel: NSPanel {
     // Keep keyboard focus in the Paste Bar while the preview remains clickable.
@@ -68,8 +69,28 @@ final class InlinePreviewWindowController: NSWindowController {
         barWindow.makeKey()
     }
 
+    /// Ordering the panel out only makes it invisible - the SwiftUI tree it
+    /// hosts stays alive, so a link preview's web view would keep playing
+    /// audio and holding connections open behind a window nobody can see.
+    /// Tear the content down as well; `show` rebuilds it from scratch, which
+    /// clearing `currentItemID` guarantees even if the same clip comes back.
     func hide() {
+        stopWebContent(in: hostingView)
+        hostingView.rootView = AnyView(EmptyView())
+        currentItemID = nil
+        currentPointerOffset = 0
         window?.orderOut(nil)
+    }
+
+    private func stopWebContent(in view: NSView) {
+        if let webView = view as? WKWebView {
+            webView.stopLoading()
+            if let blank = URL(string: "about:blank") {
+                webView.load(URLRequest(url: blank))
+            }
+            return
+        }
+        for subview in view.subviews { stopWebContent(in: subview) }
     }
 
     private func presentationFrame(for card: NSRect, on screen: NSScreen) -> (frame: NSRect, pointerOffset: CGFloat) {

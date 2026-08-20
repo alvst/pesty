@@ -29,6 +29,16 @@ enum InlinePreviewExternalOpener {
         .appendingPathComponent("Pesty-Open", isDirectory: true)
     private static let maximumRecommendedApplications = 10
 
+    /// The exported files are copies of clip content sitting outside Pesty's
+    /// managed store, so they must not outlive the session that handed them
+    /// off: purged at launch (which also clears anything a crash left behind)
+    /// and again at termination, the same way Quick Look treats its own
+    /// scratch directory. `write` recreates the directory, owner-only, on the
+    /// next export.
+    static func purgeTemporaryFiles() {
+        try? FileManager.default.removeItem(at: temporaryDirectory)
+    }
+
     static func primaryActionTitle(for item: ClipItem) -> String? {
         guard let target = target(for: item),
               let application = primaryApplication(for: target) else { return nil }

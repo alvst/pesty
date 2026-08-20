@@ -279,6 +279,12 @@ private struct GeneralSettings: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 10)
+                        Divider()
+                        settingToggle("Fetch link previews", isOn: $settings.fetchLinkPreviews)
+                        Text("Downloads each link's title, icon, and preview image from the web. Copied URLs are sent to their own servers to do this. Off keeps Pesty fully offline.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 10)
                     }
                 }
             }

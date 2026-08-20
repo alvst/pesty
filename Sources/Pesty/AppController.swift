@@ -33,6 +33,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
 
+        // Nothing exported for an "Open in …" handoff survives a restart; a
+        // crash is the only way one can still be sitting there at launch.
+        InlinePreviewExternalOpener.purgeTemporaryFiles()
+
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
@@ -89,6 +93,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.saveNow()
+        QuickLookService.shared.purgeTemporaryFiles()
+        InlinePreviewExternalOpener.purgeTemporaryFiles()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -583,14 +589,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         switch code {
         case kVK_Space:
-            if Settings.shared.clipPreviewStyle == .inlinePesty, store.selectedItem != nil {
-                toggleInlinePreview()
-            } else {
-                QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+            // Finder's rule: Space previews only when the user is not typing
+            // a query. Mid-search it falls through below and appends to the
+            // search text like any other printable character. Both preview
+            // styles sit behind that same gate.
+            if store.searchText.isEmpty {
+                if Settings.shared.clipPreviewStyle == .inlinePesty, store.selectedItem != nil {
+                    toggleInlinePreview()
+                } else {
+                    QuickLookService.shared.toggle(items: store.visibleItems, selectedID: store.selectedID)
+                }
+                return nil
             }
-            return nil
         case kVK_Escape:
-            if !store.multiSelectedIDs.isEmpty {
+            // The inline preview is a non-key panel, so unlike Quick Look its
+            // Escape arrives here. It is the newest thing on screen, so it is
+            // the first thing Escape takes back: the bar only hides once no
+            // preview is open.
+            if store.inlinePreviewVisible {
+                hideInlinePreview()
+            } else if !store.multiSelectedIDs.isEmpty {
                 store.clearMultiSelection()
             } else if !store.searchText.isEmpty {
                 store.searchText = ""; store.selectFirst()
