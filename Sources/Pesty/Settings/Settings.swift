@@ -64,7 +64,7 @@ enum HistoryRetentionMode: String, CaseIterable, Identifiable {
 final class Settings {
     static let shared = Settings()
 
-    @ObservationIgnored private let d = UserDefaults.standard
+    @ObservationIgnored private let d = DemoDefaults.store ?? .standard
     @ObservationIgnored private var isLoaded = false
 
     enum Keys {

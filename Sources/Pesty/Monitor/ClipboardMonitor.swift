@@ -28,6 +28,8 @@ final class ClipboardMonitor {
 
     func togglePause() { isPaused.toggle() }
 
+    func setPaused(_ paused: Bool) { isPaused = paused }
+
     private func poll() {
         let current = pasteboard.changeCount
         guard current != lastChangeCount else { return }

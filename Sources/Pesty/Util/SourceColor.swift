@@ -19,7 +19,7 @@ enum SourceColor {
 
     private static let key = "appColorMap"
     private static var map: [String: Int] = {
-        UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        (DemoDefaults.store ?? .standard).dictionary(forKey: key) as? [String: Int] ?? [:]
     }()
 
     static func color(for bundleID: String?) -> Color {
@@ -27,7 +27,7 @@ enum SourceColor {
         if let i = map[id] { return palette[i % palette.count] }
         let i = map.count % palette.count
         map[id] = i
-        UserDefaults.standard.set(map, forKey: key)
+        (DemoDefaults.store ?? .standard).set(map, forKey: key)
         return palette[i]
     }
 }

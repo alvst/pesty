@@ -49,6 +49,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.toggleBar() }
         HotKeyCenter.shared.start()
 
+        // Demo content is a fixed set, so capture stays off: otherwise whatever
+        // the person copies while working - a password, a chat message, a file
+        // path - lands at the front of the strip and ends up in a screenshot.
+        // Set before the menu is built so its Pause/Resume label starts right.
+        if CommandLine.arguments.contains("--demo") { monitor.setPaused(true) }
         setMenuBarIconVisible(Settings.shared.showMenuBarIcon)
 
         if Settings.shared.launchAtLogin { LaunchAtLogin.set(enabled: true) }
@@ -60,6 +65,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         #endif
 
         if CommandLine.arguments.contains("--demo") {
+            // Demo content is a fixed set, so capture stays off: otherwise
+            // whatever the person copies while working - a password, a chat
+            // message, a file path - lands at the front of the strip and ends
+            // up in a screenshot. Resume from the menu bar if a demo genuinely
+            // needs a live copy.
             store.seedDemo()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.showBar()
@@ -171,7 +181,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                      action: #selector(menuOpen), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",").target = self
-        let pause = menu.addItem(withTitle: "Pause Pesty", action: #selector(menuTogglePause), keyEquivalent: "")
+        let pause = menu.addItem(withTitle: monitor.isPaused ? "Resume Pesty" : "Pause Pesty",
+                                 action: #selector(menuTogglePause), keyEquivalent: "")
         pause.target = self
         pauseMenuItem = pause
         menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "").target = self

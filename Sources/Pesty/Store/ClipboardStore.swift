@@ -47,9 +47,18 @@ final class ClipboardStore {
     private var fileWatch: DispatchSourceFileSystemObject?
     private var ignoreWatchUntil: Date = .distantPast
 
+    /// Demo mode gets its own store. Seeding demo content into the real one
+    /// would both bury the user's clipboard history and leave whatever
+    /// Pinboards they happen to have sitting in the middle of a screenshot.
+    /// Reads only the process arguments, so it is safe from any actor — and
+    /// it has to be, since the demo preferences domain is resolved lazily
+    /// from wherever it is first touched.
+    nonisolated static var isDemo: Bool { CommandLine.arguments.contains("--demo") }
+
     static var localBase: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Pesty", isDirectory: true)
+        let directory = isDemo ? "Pesty-Demo" : "Pesty"
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(directory, isDirectory: true)
     }
 
     static var isSandboxed: Bool {
@@ -57,7 +66,7 @@ final class ClipboardStore {
     }
 
     static var iCloudBase: URL? {
-        guard !isSandboxed else { return nil }
+        guard !isSandboxed, !isDemo else { return nil }
         let p = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
         guard FileManager.default.fileExists(atPath: p.path) else { return nil }
@@ -232,6 +241,15 @@ final class ClipboardStore {
         for item in old { deleteImageFile(item) }
         reconcileMultiSelection()
         scheduleSave()
+    }
+
+    /// Used only to build the demo store's fixed contents.
+    func replaceAllForDemo(history newHistory: [ClipItem], pinboards newPinboards: [Pinboard]) {
+        guard ClipboardStore.isDemo else { return }
+        history = newHistory
+        pinboards = newPinboards
+        selectFirst()
+        saveNow()
     }
 
     @discardableResult
