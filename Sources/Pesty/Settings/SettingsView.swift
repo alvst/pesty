@@ -256,9 +256,6 @@ private struct GeneralSettings: View {
                     }
                 }
             }
-            .onChange(of: settings.barHeight) { _, _ in
-                AppController.shared.updateConfiguredBarHeight()
-            }
 
             SettingsFormGroup("Clip Previews") {
                 SettingsSurface {
@@ -348,6 +345,11 @@ private struct GeneralSettings: View {
             #endif
         }
         .background(Color.clear)
+        // Live feedback while dragging the height slider: resize the bar if it
+        // is up, otherwise outline the proposed size where it would appear.
+        .onChange(of: settings.barHeight) { _, height in
+            AppController.shared.previewBarHeight(height)
+        }
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
