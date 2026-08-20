@@ -204,6 +204,7 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let playSoundOnCopy = "playSoundOnCopy"
+        static let promoteOnPaste = "promoteOnPaste"
         static let ignoreConcealed = "ignoreConcealed"
         static let clipPreviewStyle = "clipPreviewStyle"
         static let previewTextApplicationBundleID = "previewTextApplicationBundleID"
@@ -291,6 +292,10 @@ final class Settings {
 
     var playSoundOnCopy: Bool {
         didSet { guard isLoaded else { return }; d.set(playSoundOnCopy, forKey: Keys.playSoundOnCopy) }
+    }
+
+    var promoteOnPaste: Bool {
+        didSet { guard isLoaded else { return }; d.set(promoteOnPaste, forKey: Keys.promoteOnPaste) }
     }
 
     var ignoreConcealed: Bool {
@@ -387,6 +392,7 @@ final class Settings {
             // Off by default, matching the paste sound: existing users
             // shouldn't gain a new audible behavior from an update.
             Keys.playSoundOnCopy: false,
+            Keys.promoteOnPaste: true,
             Keys.ignoreConcealed: true,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
             Keys.previewTextApplicationBundleID: PreviewOpenTarget.text.defaultApplicationBundleID,
@@ -415,6 +421,7 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
+        promoteOnPaste = d.bool(forKey: Keys.promoteOnPaste)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
         previewTextApplicationBundleID = d.string(forKey: Keys.previewTextApplicationBundleID)

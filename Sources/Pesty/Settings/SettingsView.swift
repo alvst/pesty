@@ -233,6 +233,8 @@ private struct GeneralSettings: View {
                         Divider()
                         settingToggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                         Divider()
+                        settingToggle("Move pasted clips to the top of history", isOn: $settings.promoteOnPaste)
+                        Divider()
                         settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
                         Divider()
                         settingToggle("Launch at login", isOn: $settings.launchAtLogin)

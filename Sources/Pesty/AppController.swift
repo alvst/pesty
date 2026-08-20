@@ -397,6 +397,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let target = pasteTarget
         hideBar()
         PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
+        if Settings.shared.promoteOnPaste {
+            store.promoteCopiedItem(item)
+        }
     }
 
     func copyItem(_ item: ClipItem) {
@@ -405,6 +408,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Tink, not Pop: copy and paste stay audibly distinct.
         if Settings.shared.playSoundOnCopy { NSSound(named: "Tink")?.play() }
         hideBar()
+    }
+
+    private var warnedAccessibilityThisLaunch = false
+
+    /// Direct paste silently degrading to copy-only reads as "paste is
+    /// broken". Explain once per launch, with a shortcut to the grant.
+    func reportMissingAccessibilityForDirectPaste() {
+        guard !warnedAccessibilityThisLaunch else { return }
+        warnedAccessibilityThisLaunch = true
+        suppressAutoHide = true
+        defer { suppressAutoHide = false }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Pesty can\u{2019}t paste directly"
+        alert.informativeText = "The clip was copied, but macOS is blocking the automatic \u{2318}V because Accessibility permission isn\u{2019}t granted (a rebuilt app needs re-granting). Paste manually with \u{2318}V, or grant access in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "OK")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     var pasteMenuTitle: String {
@@ -640,6 +664,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             QuickLookService.shared.updateSelection(selectedID: store.selectedID)
             return nil
         case kVK_Delete:
+            // ⌘⌫ while a query is being edited means "delete to line start"
+            // in the field, never "destroy the selected clip" - text-field
+            // semantics win the whole time there's a query to clear.
+            if cmd, !store.searchText.isEmpty {
+                store.searchText = ""; store.selectFirst()
+                searchClearedAt = Date()
+                return nil
+            }
             if cmd { deleteEffectiveSelection(permanently: opt); return nil }
             if !store.searchText.isEmpty {
                 store.searchText.removeLast(); store.selectFirst()
