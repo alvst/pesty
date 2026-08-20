@@ -259,6 +259,75 @@ private struct GeneralSettings: View {
                 }
             }
 
+            SettingsFormGroup("Clip Colors") {
+                SettingsSurface {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent("Color theme") {
+                            Picker("", selection: $settings.clipColorTheme) {
+                                ForEach(ClipColorTheme.allCases) { theme in
+                                    Text(theme.title).tag(theme)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                        Divider()
+                        Text(settings.clipColorTheme.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 10)
+                        if settings.clipColorTheme == .accentShades {
+                            Divider()
+                            LabeledContent("Base color") {
+                                ColorPicker("", selection: clipColorAccent, supportsOpacity: false)
+                                    .labelsHidden()
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
+                            Divider()
+                            HStack(spacing: 12) {
+                                Text("Preview")
+                                    .font(.system(size: 14))
+                                Spacer(minLength: 16)
+                                HStack(spacing: 4) {
+                                    ForEach(Array(SourceColor.accentShades(for: settings.clipColorAccentHex).enumerated()),
+                                            id: \.offset) { _, color in
+                                        Circle()
+                                            .fill(color)
+                                            .frame(width: 13, height: 13)
+                                    }
+                                }
+                                .accessibilityLabel("Ten stable shades of the selected base color")
+                            }
+                            .padding(.vertical, 10)
+                            Text("Each source app keeps one of ten deterministic shades, so its cards stay recognizable without drifting too far from your chosen color.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 10)
+                        }
+                        Divider()
+                        LabeledContent("Selected clip position") {
+                            Picker("", selection: $settings.selectedClipPosition) {
+                                ForEach(SelectedClipPosition.allCases) { position in
+                                    Text(position.title).tag(position)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 10)
+                        Divider()
+                        Text(settings.selectedClipPosition.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 10)
+                    }
+                }
+            }
+
             SettingsFormGroup("Clip Previews") {
                 SettingsSurface {
                     VStack(alignment: .leading, spacing: 8) {
@@ -368,6 +437,13 @@ private struct GeneralSettings: View {
         }
     }
     #endif
+
+    private var clipColorAccent: Binding<Color> {
+        Binding(
+            get: { Color(hex: settings.clipColorAccentHex) ?? .pink },
+            set: { settings.clipColorAccentHex = NSColor($0).hexString }
+        )
+    }
 
     private func previewApplicationRow(for target: PreviewOpenTarget) -> some View {
         let bundleID = settings.previewApplicationBundleID(for: target)
