@@ -417,6 +417,7 @@ private struct HistoryRetentionSettings: View {
     @State private var draftDays = Settings.shared.historyRetentionDays
     @State private var pendingRemovalCount = 0
     @State private var confirmingChange = false
+    @State private var storageBytes: Int64?
 
     private var draftPreset: HistoryRetentionPreset { HistoryRetentionPreset(nearestDays: draftDays) }
 
@@ -425,6 +426,35 @@ private struct HistoryRetentionSettings: View {
             get: { draftPreset.sliderIndex },
             set: { draftDays = HistoryRetentionPreset(sliderIndex: $0).days }
         )
+    }
+
+    private var storageSummary: String {
+        let count = ClipboardStore.shared.history.count
+        let clips = "\(count) clip\(count == 1 ? "" : "s")"
+        guard let storageBytes else { return clips }
+        return "\(clips) · \(ByteCountFormatter.string(fromByteCount: storageBytes, countStyle: .file))"
+    }
+
+    private func refreshStorageSize() async {
+        let dir = ClipboardStore.shared.dataDirectory
+        storageBytes = await Task.detached(priority: .utility) {
+            Self.directorySize(at: dir)
+        }.value
+    }
+
+    /// Walks the store directory off the main actor; images can make it
+    /// large enough that a synchronous walk would hitch the Settings window.
+    nonisolated private static func directorySize(at url: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(at: url,
+                                                              includingPropertiesForKeys: Array(keys)) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            guard let values = try? file.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
+        }
+        return total
     }
 
     var body: some View {
@@ -472,6 +502,8 @@ private struct HistoryRetentionSettings: View {
                 Text(footnote)
                     .font(.caption).foregroundStyle(.secondary)
             }
+            LabeledContent("Currently storing", value: storageSummary)
+                .font(.system(size: 14))
         }
         .padding(.top, 4)
         // Alvie's Pesty keeps this whole card as one flat spacing-14 VStack,
@@ -481,6 +513,7 @@ private struct HistoryRetentionSettings: View {
         // follows only sees the card's own spacing: 0 - restore the gap
         // explicitly instead.
         .padding(.bottom, 14)
+        .task { await refreshStorageSize() }
         .onChange(of: draftMode) { evaluateDraft() }
         .onChange(of: draftLimit) { evaluateDraft() }
         .onChange(of: draftDays) { evaluateDraft() }
