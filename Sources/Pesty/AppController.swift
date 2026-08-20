@@ -35,6 +35,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var isReopenPresentationPending = false
     private var editorFocusRestore: EditorFocusRestore?
     private let copyToast = CopyToastController()
+    private let barHeightGhost = BarHeightGhostController()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
@@ -299,6 +300,8 @@ final class AppController: NSObject, NSApplicationDelegate {
             barController = BarWindowController()
         }
         barController?.resignSearch()
+        // The real bar supersedes any height outline still lingering.
+        barHeightGhost.hide()
         barController?.show()
         // An open Settings window rises with the bar instead of staying
         // buried behind whatever app the user summoned Pesty over.
@@ -342,6 +345,17 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// Whether the Paste Bar is currently on screen, for surfaces that must
     /// lay themselves out around it.
     var isBarPresented: Bool { barController?.isPresented == true }
+
+    /// Feedback for the Settings height slider: resize the real bar when it
+    /// is up, and otherwise outline the proposed size where the bar would be.
+    func previewBarHeight(_ height: Double) {
+        if isBarPresented {
+            barHeightGhost.hide()
+            resizeVisibleBar(to: height)
+        } else {
+            barHeightGhost.show(height: CGFloat(height))
+        }
+    }
 
     func toggleInlinePreview() {
         guard Settings.shared.clipPreviewStyle == .inlinePesty,

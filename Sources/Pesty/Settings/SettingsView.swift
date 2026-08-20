@@ -240,6 +240,9 @@ private struct GeneralSettings: View {
                                 LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                                     .font(.system(size: 14))
                                 Slider(value: $settings.barHeight, in: 300...720, step: 10)
+                                    .onChange(of: settings.barHeight) { _, height in
+                                        AppController.shared.previewBarHeight(height)
+                                    }
                             }
                             .padding(.vertical, 12)
                         }
