@@ -248,7 +248,9 @@ private struct GeneralSettings: View {
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                                 .font(.system(size: 14))
-                            Slider(value: $settings.barHeight, in: 300...720, step: 10)
+                            Slider(value: $settings.barHeight,
+                                   in: BarResizeGeometry.minimumHeight...BarResizeGeometry.maximumHeight,
+                                   step: 10)
                         }
                         .padding(.vertical, 12)
                         #if MAS
