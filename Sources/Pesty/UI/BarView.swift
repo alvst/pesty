@@ -25,6 +25,7 @@ struct BarView: View {
     // Live x-position of the gap a dragged clip card is over while
     // reordering within a Pinboard — nil when no such drag is active.
     @State private var stripInsertionX: CGFloat?
+    @State private var stripChromeWatchdog: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -389,6 +390,7 @@ struct BarView: View {
                             clipDragLog.debug("strip caret \(snapped == nil ? "cleared" : "shown", privacy: .public)")
                         }
                         stripInsertionX = snapped
+                        watchForStripDragEnd()
                     },
                     onDrop: { id, x in
                         stripInsertionX = nil
@@ -409,6 +411,22 @@ struct BarView: View {
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    /// Mirrors the Pinboard row's watchdog: a caret must never outlive the
+    /// drag that drew it, even when the drop lands somewhere that never tells
+    /// this target the drag left.
+    private func watchForStripDragEnd() {
+        stripChromeWatchdog?.cancel()
+        stripChromeWatchdog = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                guard NSEvent.pressedMouseButtons == 0 else { continue }
+                stripInsertionX = nil
+                return
+            }
+        }
     }
 
     private var isPinboardSource: Bool {

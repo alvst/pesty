@@ -22,6 +22,8 @@ struct ClipCardView: View {
     }
 
     @State private var hovering = false
+    @State private var fileThumbnail: NSImage?
+    @State private var fileIsMissing = false
     private var isPinboardCard: Bool {
         guard pasteStackEntry == nil else { return false }
         if case .pinboard = ClipboardStore.shared.source { return true }
@@ -74,6 +76,7 @@ struct ClipCardView: View {
             selectCard()
         }
         .contextMenu { menu }
+        .task(id: item.id) { await loadFileThumbnail() }
         .overlay {
             // A native dragging session instead of .onDrag: multi-file clips
             // drag out as real separate file items, and the session reports
@@ -99,7 +102,7 @@ struct ClipCardView: View {
             headerColor
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.type.label)
+                    Text(cardTypeLabel)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     // Pinned clips are kept deliberately, so "when it was
@@ -143,6 +146,13 @@ struct ClipCardView: View {
             .frame(width: Theme.enlargedIconSize * aspect, height: Theme.enlargedIconSize)
             .offset(x: Theme.enlargedIconOverhang, y: -Theme.enlargedIconRise)
             .allowsHitTesting(false)
+    }
+
+    /// A multi-file clip is one clip of many files, so the count is the
+    /// headline - naming only the first file hid the other four.
+    private var cardTypeLabel: String {
+        guard item.type == .file, item.fileURLs.count > 1 else { return item.type.label }
+        return "\(item.fileURLs.count) files"
     }
 
     private var enlargedIconReservedWidth: CGFloat {
@@ -268,7 +278,9 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private var fileContent: some View {
-        if let image = filePreviewImage {
+        if item.fileURLs.count > 1 {
+            stackedFileIcons
+        } else if let image = filePreviewImage {
             VStack(spacing: 8) {
                 Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -276,14 +288,86 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.textSecondary).lineLimit(1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let thumbnail = fileThumbnail {
+            // A real preview of the contents, the way Quick Look renders it:
+            // the type icon says which app opens the file, not what is in it.
+            Image(nsImage: thumbnail)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
         } else {
-            VStack(spacing: 9) {
-                Image(systemName: "doc.fill").font(.system(size: 32)).foregroundStyle(headerColor)
-                Text(item.displayTitle).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2).multilineTextAlignment(.center)
+            VStack(spacing: 10) {
+                // No preview available: the file's own icon, at a size worth
+                // looking at, is the whole identity such a clip has.
+                Image(nsImage: fileIcon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: Theme.fileIconSize, height: Theme.fileIconSize)
+                    .opacity(fileIsMissing ? 0.5 : 1)
+                if fileIsMissing {
+                    // Without this the card looks like a failed render rather
+                    // than what it is: a clip whose file has moved or gone.
+                    Text("File not found")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// The real file's icon when it is still there, and the icon for its type
+    /// when it is not — asking the workspace about a path that no longer
+    /// exists yields a blank page, which looks like a bug.
+    private var fileIcon: NSImage {
+        guard let url = item.fileURLs.first.flatMap(URL.init(string:)), url.isFileURL else {
+            return NSWorkspace.shared.icon(for: .data)
+        }
+        if !fileIsMissing { return NSWorkspace.shared.icon(forFile: url.path) }
+        let type = UTType(filenameExtension: url.pathExtension) ?? .data
+        return NSWorkspace.shared.icon(for: type)
+    }
+
+    /// Thumbnails are generated off the main actor by the system and cached,
+    /// so scrolling the strip does not re-render a preview per frame.
+    private func loadFileThumbnail() async {
+        guard item.type == .file,
+              let url = item.fileURLs.first.flatMap(URL.init(string:)),
+              url.isFileURL else { return }
+        fileIsMissing = !FileManager.default.fileExists(atPath: url.path)
+        guard !fileIsMissing,
+              item.fileURLs.count == 1,
+              singleImageFileURL == nil else { return }
+        if let cached = FileThumbnailProvider.shared.cached(for: url) {
+            fileThumbnail = cached
+            return
+        }
+        fileThumbnail = await FileThumbnailProvider.shared.thumbnail(
+            for: url,
+            size: CGSize(width: Theme.cardWidth - 26, height: 190),
+            scale: NSScreen.main?.backingScaleFactor ?? 2)
+    }
+
+    /// The real icons of the first few files, fanned out behind one another:
+    /// it shows both what kind of files these are and that there is more than
+    /// one, which a single generic page icon cannot.
+    private var stackedFileIcons: some View {
+        let urls = Array(item.fileURLs.prefix(3).compactMap { URL(string: $0) })
+        return ZStack {
+            // Reversed so the first file lands on top of the stack.
+            ForEach(Array(urls.enumerated()).reversed(), id: \.offset) { index, url in
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: Theme.fileIconSize, height: Theme.fileIconSize)
+                    .opacity(index == 0 ? 1 : 0.92)
+                    .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
+                    .offset(x: CGFloat(index) * -12, y: CGFloat(index) * -10)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var filePreviewImage: NSImage? {
@@ -298,11 +382,15 @@ struct ClipCardView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
+            HStack(alignment: .bottom, spacing: 6) {
+                // A path is worth reading in full, so it wraps rather than
+                // collapsing to an ellipsis; everything else stays one line.
                 Text(metaLeft)
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(item.type == .file ? 3 : 1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
                 if let entry = pasteStackEntry {
                     Text(entry.isPasted ? "Pasted" : "Ready")
@@ -332,12 +420,19 @@ struct ClipCardView: View {
         case .file:
             guard item.fileURLs.count == 1,
                   let url = item.fileURLs.first.flatMap(URL.init(string:)) else {
-                return "\(item.fileURLs.count) files"
+                return item.fileURLs
+                    .compactMap { URL(string: $0)?.lastPathComponent }
+                    .joined(separator: ", ")
             }
-            if showsFullBleedImage, let size = ImagePixelSize.of(url) {
+            // An image shows what it is, so its size is the useful fact; a
+            // screenshot's path is a timestamped folder nobody reads. Files
+            // without a preview get the full location instead, since two
+            // documents of the same name differ only by where they live.
+            if singleImageFileURL != nil {
+                guard let size = ImagePixelSize.of(url) else { return url.lastPathComponent }
                 return "\(Int(size.width)) × \(Int(size.height))"
             }
-            return url.lastPathComponent
+            return (url.path as NSString).abbreviatingWithTildeInPath
         case .image:
             guard let size = ImagePixelSize.of(item) else { return "Image" }
             return "\(Int(size.width)) × \(Int(size.height))"

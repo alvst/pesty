@@ -46,6 +46,9 @@ enum Theme {
     // content. The icon is drawn from trimmed artwork, so this is a true edge
     // offset rather than a guess at the icon's built-in transparent padding.
     static let enlargedIconDrop: CGFloat = 5
+    /// File cards lean on the document icon to say what the clip is, so it is
+    /// sized as the card's subject rather than as a small adornment.
+    static let fileIconSize: CGFloat = 104
     static let enlargedIconRise: CGFloat = enlargedIconSize - enlargedHeaderHeight - enlargedIconDrop
 
     static let cardBody = Color.white.opacity(0.94)

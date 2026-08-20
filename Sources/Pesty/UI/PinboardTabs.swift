@@ -122,6 +122,7 @@ struct PinboardTabs: View {
     // The Pinboard tab a dragged clip card is currently over — highlighted
     // as the pin target. nil when no clip drag is over the row.
     @State private var clipDropBoardID: UUID?
+    @State private var chromeWatchdog: Task<Void, Never>?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -187,6 +188,7 @@ struct PinboardTabs: View {
             .onDrop(of: [.plainText, .pestyClipID], delegate: PinboardRowDropDelegate(
                 onHover: { x in
                     insertionX = x.flatMap { snappedInsertionX(forHoverX: $0) }
+                    watchForDragEnd()
                 },
                 onDrop: { draggedID, x in
                     let index = insertionIndex(forX: x)
@@ -205,6 +207,7 @@ struct PinboardTabs: View {
                         pinboardDragLog.debug("clipDropBoardID -> \(target?.uuidString ?? "nil", privacy: .public)")
                         clipDropBoardID = target
                     }
+                    watchForDragEnd()
                 },
                 onClipDrop: { clipID, x in
                     clipDropBoardID = nil
@@ -431,6 +434,25 @@ struct PinboardTabs: View {
             }
         }
         return store.pinboards.count
+    }
+
+    /// Drop targets can miss their final `dropExited` when a drag ends
+    /// somewhere else, stranding a caret or ring on screen with no drag in
+    /// progress. Watching for the mouse button's release clears the chrome in
+    /// every one of those cases, while leaving it alone during a live drag
+    /// that simply pauses over the row.
+    private func watchForDragEnd() {
+        chromeWatchdog?.cancel()
+        chromeWatchdog = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                guard NSEvent.pressedMouseButtons == 0 else { continue }
+                insertionX = nil
+                clipDropBoardID = nil
+                return
+            }
+        }
     }
 
     /// The Pinboard tab under an x-position (in the row's coordinate space),
