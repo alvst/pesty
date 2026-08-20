@@ -243,6 +243,8 @@ private struct GeneralSettings: View {
                         Divider()
                         settingToggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
                         Divider()
+                        settingToggle("Paste-style clip cards", isOn: $settings.pasteStyleCards)
+                        Divider()
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
                                 .font(.system(size: 14))

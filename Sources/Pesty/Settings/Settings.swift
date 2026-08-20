@@ -267,6 +267,7 @@ final class Settings {
         static let fetchLinkPreviews = "fetchLinkPreviews"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
+        static let pasteStyleCards = "pasteStyleCards"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
@@ -411,6 +412,10 @@ final class Settings {
         }
     }
 
+    var pasteStyleCards: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStyleCards, forKey: Keys.pasteStyleCards) }
+    }
+
     var showMenuBarIcon: Bool {
         didSet {
             guard isLoaded else { return }
@@ -470,6 +475,7 @@ final class Settings {
             Keys.fetchLinkPreviews: false,
             Keys.barHeight: BarResizeGeometry.defaultHeight,
             Keys.showBarResizeHandle: false,
+            Keys.pasteStyleCards: true,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
             Keys.iCloudSync: false,
@@ -508,6 +514,7 @@ final class Settings {
         let normalizedBarHeight = BarResizeGeometry.normalizedPersistedHeight(storedBarHeight)
         barHeight = normalizedBarHeight
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
+        pasteStyleCards = d.bool(forKey: Keys.pasteStyleCards)
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)

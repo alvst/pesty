@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ClipCardView: View {
     let item: ClipItem
@@ -53,7 +54,7 @@ struct ClipCardView: View {
             headerColor
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.type.label)
+                    Text(cardTypeLabel)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
                     Text(item.createdAt.clipRelativeLong)
@@ -62,12 +63,49 @@ struct ClipCardView: View {
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
-                appIconTile
+                if settings.pasteStyleCards {
+                    // The enlarged icon is an overlay so its overhang can't
+                    // stretch the header; this only reserves the width its
+                    // visible part covers, keeping the title clear of it.
+                    Color.clear.frame(width: enlargedIconReservedWidth, height: 1)
+                } else {
+                    appIconTile
+                }
             }
             .padding(.horizontal, 13)
-            .padding(.vertical, 7)
+            .padding(.vertical, settings.pasteStyleCards ? 5 : 7)
         }
-        .frame(height: Theme.headerHeight)
+        .frame(height: settings.pasteStyleCards ? Theme.enlargedHeaderHeight : Theme.headerHeight)
+        .overlay(alignment: .topTrailing) {
+            if settings.pasteStyleCards { enlargedAppIcon }
+        }
+    }
+
+    /// A multi-file clip is one clip of many files, so the count is the
+    /// headline - naming only the first file hid the other four.
+    private var cardTypeLabel: String {
+        guard settings.pasteStyleCards, item.type == .file, item.fileURLs.count > 1 else {
+            return item.type.label
+        }
+        return "\(item.fileURLs.count) files"
+    }
+
+    /// Scaled past the card's top and trailing edges, then cropped by the
+    /// card's own rounded rectangle — the icon frames the corner instead of
+    /// sitting fully inside a tile.
+    private var enlargedAppIcon: some View {
+        let icon = AppIconProvider.trimmedIcon(forBundleID: item.sourceBundleID)
+        let aspect = icon.size.height > 0 ? icon.size.width / icon.size.height : 1
+        return Image(nsImage: icon)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: Theme.enlargedIconSize * aspect, height: Theme.enlargedIconSize)
+            .offset(x: Theme.enlargedIconOverhang, y: -Theme.enlargedIconRise)
+            .allowsHitTesting(false)
+    }
+
+    private var enlargedIconReservedWidth: CGFloat {
+        Theme.enlargedIconSize - Theme.enlargedIconOverhang - 13
     }
 
     private var appIconTile: some View {
@@ -88,15 +126,62 @@ struct ClipCardView: View {
 
     private var body_: some View {
         VStack(alignment: .leading, spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if showsFullBleedImage {
+                imageCanvas
+            } else {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.horizontal, 13)
+                    .padding(.top, 11)
+            }
             footer
+                .padding(.horizontal, 13)
+                .padding(.bottom, 10)
         }
-        .padding(.horizontal, 13)
-        .padding(.top, 11)
-        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.cardBody)
+    }
+
+    /// Image clips run edge to edge instead of sitting inset in the card body:
+    /// a padded thumbnail wastes the card's whole point, which is recognizing
+    /// the picture at a glance. A copied screenshot arrives as a *file* rather
+    /// than image data, so file clips pointing at an image get the same
+    /// treatment - the distinction is invisible to the person who copied it.
+    private var showsFullBleedImage: Bool {
+        settings.pasteStyleCards && (item.type == .image || singleImageFileURL != nil)
+    }
+
+    /// Matched on the path extension rather than by loading the file: this is
+    /// evaluated on every card render, so it must not touch disk.
+    private var singleImageFileURL: URL? {
+        guard item.type == .file,
+              item.fileURLs.count == 1,
+              let url = item.fileURLs.first.flatMap(URL.init(string:)),
+              url.isFileURL,
+              let type = UTType(filenameExtension: url.pathExtension),
+              type.conforms(to: .image) else { return nil }
+        return url
+    }
+
+    private var fullBleedImage: NSImage? {
+        if item.type == .image { return store.loadImage(for: item) }
+        return singleImageFileURL.flatMap(NSImage.init(contentsOf:))
+    }
+
+    private var imageCanvas: some View {
+        ZStack {
+            // Transparency has to be visible, not guessed at — an image with a
+            // cut-out is otherwise indistinguishable from one on white.
+            CheckerboardBackground()
+            if let img = fullBleedImage {
+                Image(nsImage: img)
+                    .resizable().interpolation(.medium).scaledToFit()
+            } else {
+                placeholder("photo")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     @ViewBuilder
@@ -117,14 +202,7 @@ struct ClipCardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .file:
-            VStack(spacing: 9) {
-                Image(systemName: "doc.fill").font(.system(size: 32))
-                    .foregroundStyle(headerColor)
-                Text(item.displayTitle).font(.system(size: 12))
-                    .foregroundStyle(Theme.cardTextSecondary).lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            fileContent
         case .link:
             if settings.fetchLinkPreviews {
                 LinkCardPreview(text: item.text ?? item.displayTitle,
@@ -146,6 +224,60 @@ struct ClipCardView: View {
                 .lineLimit(10)
                 .multilineTextAlignment(.leading)
         }
+    }
+
+    /// Paste-style file cards are carried by the file's own icon; with the
+    /// toggle off the card keeps the small generic glyph it has always had.
+    @ViewBuilder
+    private var fileContent: some View {
+        if settings.pasteStyleCards, item.fileURLs.count > 1 {
+            stackedFileIcons
+        } else {
+            VStack(spacing: settings.pasteStyleCards ? 10 : 9) {
+                fileIcon
+                Text(item.displayTitle).font(.system(size: 12))
+                    .foregroundStyle(Theme.cardTextSecondary).lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var fileIcon: some View {
+        // The file's real icon, at a size worth looking at: the type badge is
+        // the whole identity of a file that has no preview.
+        if settings.pasteStyleCards,
+           let url = item.fileURLs.first.flatMap(URL.init(string:)), url.isFileURL {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Theme.fileIconSize, height: Theme.fileIconSize)
+        } else {
+            Image(systemName: "doc.fill")
+                .font(.system(size: settings.pasteStyleCards ? Theme.fileIconSize * 0.6 : 32))
+                .foregroundStyle(headerColor)
+        }
+    }
+
+    /// The real icons of the first few files, fanned out behind one another:
+    /// it shows both what kind of files these are and that there is more than
+    /// one, which a single generic page icon cannot.
+    private var stackedFileIcons: some View {
+        let urls = Array(item.fileURLs.prefix(3).compactMap { URL(string: $0) })
+        return ZStack {
+            // Reversed so the first file lands on top of the stack.
+            ForEach(Array(urls.enumerated()).reversed(), id: \.offset) { index, url in
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: Theme.fileIconSize, height: Theme.fileIconSize)
+                    .opacity(index == 0 ? 1 : 0.92)
+                    .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
+                    .offset(x: CGFloat(index) * -12, y: CGFloat(index) * -10)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func placeholder(_ symbol: String) -> some View {
@@ -313,5 +445,30 @@ struct ClipCardView: View {
         }
         image.isTemplate = false
         return image
+    }
+}
+
+/// The standard transparency checkerboard drawn behind image clips. Canvas
+/// rather than a tiled Image: the pattern is a handful of rects, and this
+/// keeps it resolution-independent without shipping an asset.
+private struct CheckerboardBackground: View {
+    var square: CGFloat = 8
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
+            let columns = Int(ceil(size.width / square))
+            let rows = Int(ceil(size.height / square))
+            for row in 0..<max(rows, 0) {
+                for column in 0..<max(columns, 0) where (row + column).isMultiple(of: 2) {
+                    let rect = CGRect(x: CGFloat(column) * square,
+                                      y: CGFloat(row) * square,
+                                      width: square,
+                                      height: square)
+                    context.fill(Path(rect), with: .color(Color(white: 0.87)))
+                }
+            }
+        }
+        .drawingGroup()
     }
 }
