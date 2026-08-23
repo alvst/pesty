@@ -144,7 +144,7 @@ enum FormatConverter {
                 if !marker.isEmpty {
                     rendered = "\(marker)\(rendered)\(String(marker.reversed()))"
                 }
-                out += leading + rendered + trailing
+                out += String(leading) + rendered + trailing
             }
         }
         let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
