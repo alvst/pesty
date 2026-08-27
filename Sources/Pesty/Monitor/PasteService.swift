@@ -125,7 +125,7 @@ enum PasteService {
                       imageOverride: NSImage? = nil) {
         let change = copy(item, format: format, imageOverride: imageOverride)
         monitor.suppressUntilChangeCount = change
-        if Settings.shared.playSound { NSSound(named: "Pop")?.play() }
+        if Settings.shared.playSound { FeedbackSound.play(FeedbackSound.paste) }
 
         guard let target = targetApp, !target.isTerminated else { return }
 

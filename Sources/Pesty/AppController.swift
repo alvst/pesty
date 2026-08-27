@@ -438,7 +438,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             store.promoteCopiedItem(item)
         }
         // Tink, not Pop: copy and paste stay audibly distinct.
-        if Settings.shared.playSoundOnCopy { NSSound(named: "Tink")?.play() }
+        if Settings.shared.playSoundOnCopy { FeedbackSound.play(FeedbackSound.copy) }
         hideBar()
         copyToast.show()
     }
@@ -452,7 +452,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         // A combined copy has no single source clip to promote.
         monitor.suppressUntilChangeCount = PasteService.copy(items)
-        if Settings.shared.playSoundOnCopy { NSSound(named: "Tink")?.play() }
+        if Settings.shared.playSoundOnCopy { FeedbackSound.play(FeedbackSound.copy) }
         hideBar()
         copyToast.show()
     }
