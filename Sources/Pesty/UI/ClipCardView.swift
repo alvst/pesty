@@ -1,5 +1,7 @@
 import AppKit
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
 
 struct ClipCardView: View {
     let item: ClipItem
@@ -111,12 +113,40 @@ struct ClipCardView: View {
                 .lineLimit(1)
                 Spacer(minLength: 4)
                 if pinnedBoardID != nil { pinBadge }
-                appIconTile
+                if settings.pasteStyleCards {
+                    // The enlarged icon is an overlay so its overhang can't
+                    // stretch the header; this only reserves the width its
+                    // visible part covers, keeping the title clear of it.
+                    Color.clear.frame(width: enlargedIconReservedWidth, height: 1)
+                } else {
+                    appIconTile
+                }
             }
             .padding(.horizontal, 13)
-            .padding(.vertical, 7)
+            .padding(.vertical, settings.pasteStyleCards ? 5 : 7)
         }
-        .frame(height: Theme.headerHeight)
+        .frame(height: settings.pasteStyleCards ? Theme.enlargedHeaderHeight : Theme.headerHeight)
+        .overlay(alignment: .topTrailing) {
+            if settings.pasteStyleCards { enlargedAppIcon }
+        }
+    }
+
+    /// Scaled past the card's top and trailing edges, then cropped by the
+    /// card's own rounded rectangle — the icon frames the corner instead of
+    /// sitting fully inside a tile.
+    private var enlargedAppIcon: some View {
+        let icon = AppIconProvider.trimmedIcon(forBundleID: item.sourceBundleID)
+        let aspect = icon.size.height > 0 ? icon.size.width / icon.size.height : 1
+        return Image(nsImage: icon)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: Theme.enlargedIconSize * aspect, height: Theme.enlargedIconSize)
+            .offset(x: Theme.enlargedIconOverhang, y: -Theme.enlargedIconRise)
+            .allowsHitTesting(false)
+    }
+
+    private var enlargedIconReservedWidth: CGFloat {
+        Theme.enlargedIconSize - Theme.enlargedIconOverhang - 13
     }
 
     private var appIconTile: some View {
@@ -137,15 +167,62 @@ struct ClipCardView: View {
 
     private var body_: some View {
         VStack(alignment: .leading, spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if showsFullBleedImage {
+                imageCanvas
+            } else {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.horizontal, 13)
+                    .padding(.top, 11)
+            }
             footer
+                .padding(.horizontal, 13)
+                .padding(.bottom, 10)
         }
-        .padding(.horizontal, 13)
-        .padding(.top, 11)
-        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.cardBody)
+    }
+
+    /// Image clips run edge to edge instead of sitting inset in the card body:
+    /// a padded thumbnail wastes the card's whole point, which is recognizing
+    /// the picture at a glance. A copied screenshot arrives as a *file* rather
+    /// than image data, so file clips pointing at an image get the same
+    /// treatment - the distinction is invisible to the person who copied it.
+    private var showsFullBleedImage: Bool {
+        settings.pasteStyleCards && (item.type == .image || singleImageFileURL != nil)
+    }
+
+    /// Matched on the path extension rather than by loading the file: this is
+    /// evaluated on every card render, so it must not touch disk.
+    private var singleImageFileURL: URL? {
+        guard item.type == .file,
+              item.fileURLs.count == 1,
+              let url = item.fileURLs.first.flatMap(URL.init(string:)),
+              url.isFileURL,
+              let type = UTType(filenameExtension: url.pathExtension),
+              type.conforms(to: .image) else { return nil }
+        return url
+    }
+
+    private var fullBleedImage: NSImage? {
+        if item.type == .image { return cardImage }
+        return filePreviewImage
+    }
+
+    private var imageCanvas: some View {
+        ZStack {
+            // Transparency has to be visible, not guessed at — an image with a
+            // cut-out is otherwise indistinguishable from one on white.
+            CheckerboardBackground()
+            if let img = fullBleedImage {
+                Image(nsImage: img)
+                    .resizable().interpolation(.medium).scaledToFit()
+            } else {
+                placeholder("photo")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     @ViewBuilder
@@ -253,9 +330,17 @@ struct ClipCardView: View {
             return (item.text ?? "").replacingOccurrences(of: "https://", with: "")
                                     .replacingOccurrences(of: "http://", with: "")
         case .file:
-            return "\(item.fileURLs.count) file\(item.fileURLs.count == 1 ? "" : "s")"
+            guard item.fileURLs.count == 1,
+                  let url = item.fileURLs.first.flatMap(URL.init(string:)) else {
+                return "\(item.fileURLs.count) files"
+            }
+            if showsFullBleedImage, let size = ImagePixelSize.of(url) {
+                return "\(Int(size.width)) × \(Int(size.height))"
+            }
+            return url.lastPathComponent
         case .image:
-            return "Image"
+            guard let size = ImagePixelSize.of(item) else { return "Image" }
+            return "\(Int(size.width)) × \(Int(size.height))"
         case .color:
             return item.colorHex ?? "Color"
         }
@@ -502,5 +587,55 @@ private struct PinboardMenuItemLabel: View {
                 .frame(width: 18, height: 18)
             Text(pinboard.name)
         }
+    }
+}
+
+/// The standard transparency checkerboard drawn behind image clips. Canvas
+/// rather than a tiled Image: the pattern is a handful of rects, and this
+/// keeps it resolution-independent without shipping an asset.
+private struct CheckerboardBackground: View {
+    var square: CGFloat = 8
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
+            let columns = Int(ceil(size.width / square))
+            let rows = Int(ceil(size.height / square))
+            for row in 0..<max(rows, 0) {
+                for column in 0..<max(columns, 0) where (row + column).isMultiple(of: 2) {
+                    let rect = CGRect(x: CGFloat(column) * square,
+                                      y: CGFloat(row) * square,
+                                      width: square,
+                                      height: square)
+                    context.fill(Path(rect), with: .color(Color(white: 0.87)))
+                }
+            }
+        }
+        .drawingGroup()
+    }
+}
+
+/// Reads an image clip's pixel dimensions from the file's metadata instead of
+/// decoding it, and remembers them: the card footer asks on every render.
+@MainActor
+enum ImagePixelSize {
+    private static var cache: [String: CGSize] = [:]
+
+    static func of(_ item: ClipItem) -> CGSize? {
+        guard item.imageFileName != nil,
+              let url = ClipboardStore.shared.imageURL(for: item) else { return nil }
+        return of(url)
+    }
+
+    static func of(_ url: URL) -> CGSize? {
+        let name = url.path
+        if let cached = cache[name] { return cached }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let size = CGSize(width: width, height: height)
+        cache[name] = size
+        return size
     }
 }

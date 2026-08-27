@@ -194,7 +194,7 @@ struct PasteStackContentView: View {
                         .font(.system(size: 16, weight: .bold))
                     Text(summary)
                         .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.chromeTextMuted)
                 }
                 if savedStacks.count > 1 {
                     Menu {
@@ -206,7 +206,7 @@ struct PasteStackContentView: View {
                     } label: {
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.textSecondary)
+                            .foregroundStyle(Theme.chromeTextMuted)
                     }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
@@ -271,7 +271,7 @@ struct PasteStackContentView: View {
                         .font(.system(size: 15, weight: .semibold))
                     Text("Choose Collect, then copy text, images, or files in any app.")
                         .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.chromeTextMuted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if visibleEntries.isEmpty {
@@ -397,12 +397,12 @@ struct PasteStackContentView: View {
         VStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 30, weight: .light))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextMuted)
             Text("No matches for “\(store.searchText)”")
                 .font(.system(size: 15, weight: .semibold))
             Text("Try a different search.")
                 .font(.system(size: 12))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextMuted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

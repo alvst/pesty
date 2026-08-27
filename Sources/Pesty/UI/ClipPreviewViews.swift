@@ -45,11 +45,11 @@ struct LinkPreviewContent: View {
             VStack(alignment: .leading, spacing: compact ? 2 : 5) {
                 Text(preview?.title ?? host)
                     .font(.system(size: compact ? 12 : 15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.chromeText)
                     .lineLimit(compact ? 2 : 3)
                 Text(host)
                     .font(.system(size: compact ? 10 : 12))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.chromeTextMuted)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -350,7 +350,7 @@ struct SelectedClipPreviewView: View {
         case .richText:
             ScrollView {
                 RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.chromeText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -359,7 +359,7 @@ struct SelectedClipPreviewView: View {
                 LinkPreviewContent(text: item.text ?? item.displayTitle, compact: false)
                 Text(item.text ?? "")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.chromeTextMuted)
                     .textSelection(.enabled)
                     .lineLimit(3)
                 Spacer()
@@ -379,7 +379,7 @@ struct SelectedClipPreviewView: View {
                     Text(item.displayTitle)
                         .font(.system(size: 14, weight: .medium))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(Theme.chromeText)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -397,7 +397,7 @@ struct SelectedClipPreviewView: View {
             ScrollView {
                 Text(item.text ?? "")
                     .font(.system(size: 15))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.chromeText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -407,7 +407,7 @@ struct SelectedClipPreviewView: View {
     private func missingPreview(_ symbol: String) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 38, weight: .light))
-            .foregroundStyle(Theme.textTertiary)
+            .foregroundStyle(Theme.chromeTextFaint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

@@ -231,6 +231,7 @@ private struct GeneralSettings: View {
                             Divider()
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
                             Divider()
+                            settingToggle("Paste-style clip cards", isOn: $settings.pasteStyleCards)
                             settingToggle("Show resize handle on the Pesty-Alvie bar", isOn: $settings.showBarResizeHandle)
                             Divider()
                             settingToggle("Show Pesty-Alvie in the menu bar", isOn: $settings.showMenuBarIcon)

@@ -82,7 +82,7 @@ struct ClipPreviewWindowView: View {
             }
         case .richText:
             RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(Theme.chromeText)
                 .textSelection(.enabled)
         case .link:
             VStack(alignment: .leading, spacing: 14) {

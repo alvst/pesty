@@ -159,7 +159,7 @@ struct PinboardTabs: View {
                 Button(action: addPinboard) {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.chromeTextMuted)
                         .frame(width: 26, height: 26)
                         .background(Theme.fieldBG, in: Circle())
                 }

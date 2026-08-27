@@ -255,6 +255,7 @@ final class Settings {
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
         static let showBarResizeHandle = "showBarResizeHandle"
+        static let pasteStyleCards = "pasteStyleCards"
         static let clipPreviewStyle = "clipPreviewStyle"
         static let clipColorTheme = "clipColorTheme"
         static let selectedClipPosition = "selectedClipPosition"
@@ -411,6 +412,10 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(showBarResizeHandle, forKey: Keys.showBarResizeHandle) }
     }
 
+    var pasteStyleCards: Bool {
+        didSet { guard isLoaded else { return }; d.set(pasteStyleCards, forKey: Keys.pasteStyleCards) }
+    }
+
     var clipPreviewStyle: ClipPreviewStyle {
         didSet {
             guard isLoaded else { return }
@@ -487,6 +492,7 @@ final class Settings {
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
             Keys.showBarResizeHandle: false,
+            Keys.pasteStyleCards: true,
             Keys.clipPreviewStyle: ClipPreviewStyle.nativeQuickLook.rawValue,
             Keys.clipColorTheme: ClipColorTheme.default.rawValue,
             Keys.selectedClipPosition: SelectedClipPosition.center.rawValue,
@@ -528,6 +534,7 @@ final class Settings {
             d.set(normalizedBarHeight, forKey: Keys.barHeight)
         }
         showBarResizeHandle = d.bool(forKey: Keys.showBarResizeHandle)
+        pasteStyleCards = d.bool(forKey: Keys.pasteStyleCards)
         clipPreviewStyle = ClipPreviewStyle(rawValue: d.integer(forKey: Keys.clipPreviewStyle)) ?? .nativeQuickLook
         clipColorTheme = ClipColorTheme(rawValue: d.integer(forKey: Keys.clipColorTheme)) ?? .default
         selectedClipPosition = SelectedClipPosition(rawValue: d.integer(forKey: Keys.selectedClipPosition)) ?? .center

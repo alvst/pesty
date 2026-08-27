@@ -101,7 +101,7 @@ struct BarView: View {
         Button { AppController.shared.toggleInlinePreview() } label: {
             Image(systemName: store.inlinePreviewVisible ? "rectangle.on.rectangle" : "rectangle.on.rectangle.angled")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.textSecondary)
+                .foregroundStyle(store.inlinePreviewVisible ? Theme.selection : Theme.chromeTextMuted)
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
@@ -132,7 +132,7 @@ struct BarView: View {
         Button { store.undoLastDelete() } label: {
             Label("Undo", systemImage: "arrow.uturn.backward")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(Theme.chromeText)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
                 .background(Theme.fieldBG, in: Capsule())
@@ -145,7 +145,7 @@ struct BarView: View {
     private var resizeHandle: some View {
         HStack {
             Capsule(style: .continuous)
-                .fill(Theme.textTertiary.opacity(0.7))
+                .fill(Theme.chromeTextFaint.opacity(0.7))
                 .frame(width: 42, height: 4)
         }
         .frame(maxWidth: .infinity)
@@ -203,7 +203,7 @@ struct BarView: View {
         } label: {
             Image(systemName: settings.iCloudSync ? "checkmark.icloud.fill" : "arrow.triangle.2.circlepath")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.textSecondary)
+                .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.chromeTextMuted)
         }
         .buttonStyle(.plain)
         .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
@@ -224,7 +224,7 @@ struct BarView: View {
         HStack(spacing: searchIsActive ? 6 : 0) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(searchIsActive ? Theme.textPrimary : Theme.textSecondary)
+                .foregroundStyle(searchIsActive ? Theme.chromeText : Theme.chromeTextMuted)
                 .accessibilityHidden(true)
 
             // Keep this native field mounted even in the compact state. The
@@ -250,7 +250,7 @@ struct BarView: View {
             if searchIsActive {
                 Button { AppController.shared.clearBarSearch() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                        .font(.system(size: 12)).foregroundStyle(Theme.chromeTextFaint)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -287,7 +287,7 @@ struct BarView: View {
         } label: {
             Image(systemName: monitor.isPaused ? "pause.fill" : "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextMuted)
                 .frame(width: 30, height: 30)
         }
         .menuStyle(.borderlessButton)
@@ -455,12 +455,12 @@ struct BarView: View {
         VStack(spacing: 10) {
             Image(systemName: store.searchText.isEmpty ? "doc.on.clipboard" : "magnifyingglass")
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Theme.textTertiary)
+                .foregroundStyle(Theme.chromeTextFaint)
             Text(store.searchText.isEmpty
                  ? "Nothing copied yet"
                  : "No matches for “\(store.searchText)”")
                 .font(.system(size: 13))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.chromeTextMuted)
         }
     }
 }
