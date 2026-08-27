@@ -65,6 +65,10 @@ struct BarView: View {
             DispatchQueue.main.async { updateFloatingPreview() }
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
+        // Every strip in the bar scrolls horizontally, so one instance at the
+        // root serves the card strip, the Pinboard tab row, and the in-bar
+        // Paste Stack — it resolves whichever is under the pointer.
+        .background(HorizontalScrollWheelSupport())
         .ignoresSafeArea()
     }
 
