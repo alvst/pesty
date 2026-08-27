@@ -42,9 +42,17 @@ final class ClipboardStore {
     private var fileWatch: DispatchSourceFileSystemObject?
     private var lastSavedData: Data?
 
+    /// Demo mode gets its own store. Seeding demo content into the real one
+    /// would both bury the user's clipboard history and leave whatever
+    /// Pinboards they happen to have sitting in the middle of a screenshot.
+    static var isDemo: Bool { CommandLine.arguments.contains("--demo") }
+
     static var localBase: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(AppIdentity.storageDirectoryName, isDirectory: true)
+        let directory = isDemo
+            ? "\(AppIdentity.storageDirectoryName)-Demo"
+            : AppIdentity.storageDirectoryName
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(directory, isDirectory: true)
     }
 
     static var isSandboxed: Bool {
@@ -52,7 +60,7 @@ final class ClipboardStore {
     }
 
     static var iCloudBase: URL? {
-        guard !isSandboxed else { return nil }
+        guard !isSandboxed, !isDemo else { return nil }
         let p = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
         guard FileManager.default.fileExists(atPath: p.path) else { return nil }
@@ -62,7 +70,8 @@ final class ClipboardStore {
     var iCloudAvailable: Bool { ClipboardStore.iCloudBase != nil }
 
     private init() {
-        let base = (Settings.shared.iCloudSync ? ClipboardStore.iCloudBase : nil) ?? ClipboardStore.localBase
+        let base = (!ClipboardStore.isDemo && Settings.shared.iCloudSync
+                    ? ClipboardStore.iCloudBase : nil) ?? ClipboardStore.localBase
         baseDir = base
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         storeURL = base.appendingPathComponent("store.json")
@@ -321,6 +330,15 @@ final class ClipboardStore {
         }
         for item in old { deleteImageFile(item) }
         scheduleSave()
+    }
+
+    /// Used only to build the demo store's fixed contents.
+    func replaceAllForDemo(history newHistory: [ClipItem], pinboards newPinboards: [Pinboard]) {
+        guard ClipboardStore.isDemo else { return }
+        history = newHistory
+        pinboards = newPinboards
+        selectFirst()
+        saveNow()
     }
 
     @discardableResult
