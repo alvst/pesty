@@ -24,6 +24,24 @@ enum PasteService {
         Bundle.main.bundleIdentifier ?? AppIdentity.bundleIdentifier
     }
 
+    /// Copies several clips as one payload: their text joined by newlines,
+    /// which is the only representation a mixed selection can share. A single
+    /// clip still routes through `copy(_:)` so it keeps its rich text, image,
+    /// or file representations intact.
+    @discardableResult
+    static func copy(_ items: [ClipItem], to pasteboard: NSPasteboard = .general) -> Int {
+        guard items.count > 1 else {
+            guard let item = items.first else { return pasteboard.changeCount }
+            return copy(item, to: pasteboard)
+        }
+        let text = items.compactMap(\.plainText).joined(separator: "\n")
+        guard !text.isEmpty else { return pasteboard.changeCount }
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        markPestyAsSource(on: pasteboard)
+        return pasteboard.changeCount
+    }
+
     @discardableResult
     static func copy(_ item: ClipItem,
                      to pasteboard: NSPasteboard = .general,

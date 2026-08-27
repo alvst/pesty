@@ -26,7 +26,22 @@ final class ClipboardStore {
     /// Search owns native text editing until the user submits it or chooses a
     /// result. Card shortcuts only run while this is `.cards`.
     var barInputMode: BarInputMode = .cards
-    var selectedID: UUID?
+    /// The bar's card selection. `ClipSelection` owns the ordering rules; the
+    /// store only supplies what is currently on screen.
+    private(set) var selection = ClipSelection()
+
+    /// The lead of the selection: the card arrow keys move from and the one
+    /// every single-item action uses. Assigning it means "just this one",
+    /// which is what the many existing callers (arrow keys, capture, tab
+    /// switch, delete fallback) already intend — so it collapses any
+    /// multi-selection.
+    var selectedID: UUID? {
+        get { selection.lead }
+        set { selection.select(newValue) }
+    }
+
+    /// Every selected card.
+    var selectedIDs: Set<UUID> { selection.ids }
     var inlinePreviewVisible = false
     /// Used by the strip to restore its opening position without animating from
     /// whichever card was selected the last time the bar was visible.
@@ -124,6 +139,32 @@ final class ClipboardStore {
         guard let id = selectedID else { return nil }
         return visibleItems.first(where: { $0.id == id })
     }
+
+    /// The selection in visible (left-to-right) order — a `Set` has none, and
+    /// an action over several clips has to be reproducible. Falls back to the
+    /// lead alone so callers can treat this as "what the user means right now"
+    /// without special-casing an empty multi-selection.
+    var selectedItems: [ClipItem] {
+        let items = visibleItems.filter { selectedIDs.contains($0.id) }
+        if items.isEmpty, let selectedItem { return [selectedItem] }
+        return items
+    }
+
+    var hasMultipleSelection: Bool { selection.isMultiple }
+
+    /// ⌘-click.
+    func toggleSelection(of id: UUID) { selection.toggle(id, in: visibleOrder) }
+
+    /// ⇧-click and ⇧-arrow.
+    func extendSelection(to id: UUID) { selection.extend(to: id, in: visibleOrder) }
+
+    func selectAllVisible() { selection.selectAll(in: visibleOrder) }
+
+    /// Drops anything no longer on screen out of the selection — after a
+    /// delete, a search, or a switch to another Pinboard.
+    func pruneSelection() { selection.prune(to: visibleOrder) }
+
+    private var visibleOrder: [UUID] { visibleItems.map(\.id) }
 
     @discardableResult
     func addCaptured(_ item: ClipItem) -> ClipItem {
@@ -242,7 +283,14 @@ final class ClipboardStore {
                 at: date
             )
         }
-        if selectedID == item.id { selectFirst() }
+        if selectedID == item.id {
+            // The lead is gone; the rest of a multi-selection is not, so keep
+            // it and just promote a survivor rather than collapsing to first.
+            let survivors = selectedIDs.subtracting([item.id])
+            if survivors.isEmpty { selectFirst() } else { pruneSelection() }
+        } else {
+            pruneSelection()
+        }
         _ = refreshDeletionState(at: date)
         scheduleSave()
     }
@@ -597,14 +645,20 @@ final class ClipboardStore {
         selectedID = firstID
     }
 
-    func moveSelection(by delta: Int) {
+    /// `extending` is ⇧-arrow: it grows or shrinks the run from the anchor
+    /// instead of moving a single selection.
+    func moveSelection(by delta: Int, extending: Bool = false) {
         let items = visibleItems
         guard !items.isEmpty else { return }
         guard let id = selectedID, let idx = items.firstIndex(where: { $0.id == id }) else {
             selectedID = items.first?.id; return
         }
         let next = max(0, min(items.count - 1, idx + delta))
-        selectedID = items[next].id
+        if extending {
+            extendSelection(to: items[next].id)
+        } else {
+            selectedID = items[next].id
+        }
     }
 
     func imageURL(for item: ClipItem) -> URL? {

@@ -398,8 +398,25 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteSelected(format: PasteFormat = .original) {
+        let items = store.selectedItems
+        if items.count > 1 {
+            pasteCombined(items)
+            return
+        }
         guard let item = store.selectedItem else { return }
         pasteItem(item, format: format)
+    }
+
+    /// Several clips paste as one block, joined by newlines. Nothing is
+    /// promoted: the combined text is a one-off payload, not a clip that
+    /// belongs in the history.
+    private func pasteCombined(_ items: [ClipItem]) {
+        let text = items.compactMap(\.plainText).joined(separator: "\n")
+        guard !text.isEmpty else { return }
+        let target = pasteTargetApp()
+        hideBar(immediately: true)
+        PasteService.paste(ClipItem(type: .text, text: text),
+                           into: target, monitor: monitor, format: .plainText)
     }
 
     func pasteItem(_ item: ClipItem, format: PasteFormat = .original) {
@@ -427,8 +444,24 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func copySelected() {
-        guard let item = store.selectedItem else { return }
-        copyItem(item)
+        let items = store.selectedItems
+        guard !items.isEmpty else { return }
+        guard items.count > 1 else {
+            copyItem(items[0])
+            return
+        }
+        // A combined copy has no single source clip to promote.
+        monitor.suppressUntilChangeCount = PasteService.copy(items)
+        if Settings.shared.playSoundOnCopy { NSSound(named: "Tink")?.play() }
+        hideBar()
+        copyToast.show()
+    }
+
+    /// Deletes every selected clip, so ⌫ acts on exactly what the rings show.
+    private func deleteBarSelection(permanently: Bool) {
+        let items = store.selectedItems
+        guard !items.isEmpty else { return }
+        for item in items { store.delete(item, permanently: permanently) }
     }
 
     func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
@@ -1233,16 +1266,22 @@ final class AppController: NSObject, NSApplicationDelegate {
                store.undoLastDelete() { return nil }
         case kVK_LeftArrow:
             if cmd { moveBarSection(by: -1) }
-            else { moveBarSelection(by: -1) }
+            else { moveBarSelection(by: -1, extending: flags.contains(.shift)) }
             return nil
         case kVK_RightArrow:
             if cmd { moveBarSection(by: 1) }
-            else { moveBarSelection(by: 1) }
+            else { moveBarSelection(by: 1, extending: flags.contains(.shift)) }
             return nil
         case kVK_UpArrow:
-            moveBarSelection(by: -1); return nil
+            moveBarSelection(by: -1, extending: flags.contains(.shift)); return nil
         case kVK_DownArrow:
-            moveBarSelection(by: 1); return nil
+            moveBarSelection(by: 1, extending: flags.contains(.shift)); return nil
+        case kVK_ANSI_A:
+            // ⌘A in card mode selects every visible clip. The search field is
+            // handled well above this, so it keeps native select-all.
+            guard cmd, store.source != .pasteStack else { break }
+            store.selectAllVisible()
+            return nil
         case kVK_Delete:
             // ⌘⌫ during an active search means "delete to line start" in the
             // field — never "destroy the selected clip". Text-field semantics
@@ -1264,17 +1303,14 @@ final class AppController: NSObject, NSApplicationDelegate {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if cmd, let sel = store.selectedItem {
-                store.delete(sel, permanently: flags.contains(.option)); return nil
-            }
-            if let sel = store.selectedItem { store.delete(sel, permanently: flags.contains(.option)) }
+            deleteBarSelection(permanently: flags.contains(.option))
             return nil
         case kVK_ForwardDelete:
             if store.source == .pasteStack, let entry = selectedVisiblePasteStackEntry {
                 removePasteStackEntry(entry)
                 return nil
             }
-            if let sel = store.selectedItem { store.delete(sel, permanently: flags.contains(.option)) }
+            deleteBarSelection(permanently: flags.contains(.option))
             return nil
         default:
             break
@@ -1296,13 +1332,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         return event
     }
 
-    private func moveBarSelection(by delta: Int) {
+    /// `extending` is ⇧-arrow. The Paste Stack keeps its own single-selection
+    /// model, so it simply moves.
+    private func moveBarSelection(by delta: Int, extending: Bool = false) {
         if store.source == .pasteStack {
             pasteSequence.moveSelection(by: delta, matching: store.searchText)
             QuickLookService.shared.updateSelection(selectedID: selectedVisiblePasteStackEntry?.item.id)
             return
         }
-        store.moveSelection(by: delta)
+        store.moveSelection(by: delta, extending: extending)
         QuickLookService.shared.updateSelection(selectedID: store.selectedID)
     }
 

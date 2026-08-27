@@ -7,6 +7,10 @@ struct ClipCardView: View {
     let item: ClipItem
     let index: Int
     let selected: Bool
+    /// The one card in a multi-selection that the keyboard moves from. Every
+    /// selected card gets the ring; only the lead gets the brighter inner
+    /// edge, so it stays findable in a run of ten.
+    let isLead: Bool
     /// Supplying a stack entry preserves the normal card appearance while the
     /// Paste Stack owns selection and paste behavior.
     let pasteStackEntry: PasteStackEntry?
@@ -14,10 +18,12 @@ struct ClipCardView: View {
     init(item: ClipItem,
          index: Int,
          selected: Bool,
+         isLead: Bool = true,
          pasteStackEntry: PasteStackEntry? = nil) {
         self.item = item
         self.index = index
         self.selected = selected
+        self.isLead = isLead
         self.pasteStackEntry = pasteStackEntry
     }
 
@@ -54,18 +60,18 @@ struct ClipCardView: View {
                     cornerRadius: Theme.cardCorner + Theme.selectedCardRing,
                     style: .continuous
                 )
-                .fill(Theme.selection)
+                .fill(Theme.selection.opacity(isLead ? 1 : 0.55))
                 .padding(-Theme.selectedCardRing)
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
-                .strokeBorder(selected ? .white.opacity(0.72) : Theme.cardBorder,
-                              lineWidth: selected ? 1.5 : 1)
+                .strokeBorder(selected ? .white.opacity(isLead ? 0.95 : 0.45) : Theme.cardBorder,
+                              lineWidth: selected ? (isLead ? 2 : 1.5) : 1)
         )
         .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
         .scaleEffect(hovering && !selected ? 1.015 : 1.0)
-        .zIndex(selected ? 1 : 0)
+        .zIndex(selected ? (isLead ? 2 : 1) : 0)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -73,8 +79,12 @@ struct ClipCardView: View {
             pasteCard()
         }
         .onTapGesture {
-            selectCard()
+            // Only reached for cards with no drag source (that overlay claims
+            // every left-mouse-down otherwise). SwiftUI's tap carries no
+            // modifiers, so read them from the event still in flight.
+            selectCard(NSEvent.modifierFlags)
         }
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu { menu }
         .task(id: item.id) { await loadFileThumbnail() }
         .overlay {
@@ -87,8 +97,16 @@ struct ClipCardView: View {
             // on every card render.
             if ClipDragProvider.canDrag(item) {
                 ClipDragSource(
-                    makeWriters: { ClipDragProvider.pasteboardWriters(for: item) },
-                    onSelect: { selectCard() },
+                    // Dragging a card that is part of a multi-selection takes
+                    // the whole selection with it, like dragging a group of
+                    // files in Finder.
+                    makeWriters: {
+                        let dragged = store.selectedIDs.contains(item.id)
+                            ? store.selectedItems
+                            : [item]
+                        return dragged.flatMap(ClipDragProvider.pasteboardWriters(for:))
+                    },
+                    onSelect: { selectCard($0) },
                     onOpen: { pasteCard() },
                     onDragStarted: { AppController.shared.beginDragOut(itemID: item.id) },
                     onDragExitedBar: { AppController.shared.dragSessionExitedBar() }
@@ -481,7 +499,7 @@ struct ClipCardView: View {
             if let boardID = store.currentPinboardID {
                 Divider()
                 Button {
-                    store.togglePin(item.id, inBoard: boardID)
+                    for target in actionTargets { store.togglePin(target.id, inBoard: boardID) }
                 } label: {
                     Label(pinnedBoardID != nil ? "Unpin from Top" : "Pin to Top",
                           systemImage: pinnedBoardID != nil ? "pin.slash" : "pin")
@@ -548,9 +566,11 @@ struct ClipCardView: View {
             editAndRenameActions
 
             Button(role: .destructive) {
-                store.delete(item, permanently: NSEvent.modifierFlags.contains(.option))
+                let permanently = NSEvent.modifierFlags.contains(.option)
+                for target in actionTargets { store.delete(target, permanently: permanently) }
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(actionTargets.count > 1 ? "Delete \(actionTargets.count) Clips" : "Delete",
+                      systemImage: "trash")
             }
             .keyboardShortcut(.delete, modifiers: [])
 
@@ -600,7 +620,7 @@ struct ClipCardView: View {
             if !store.pinboards.isEmpty {
                 ForEach(store.pinboards) { b in
                     Button {
-                        store.saveToPinboard(item, boardID: b.id)
+                        for target in actionTargets { store.saveToPinboard(target, boardID: b.id) }
                     } label: {
                         PinboardMenuItemLabel(pinboard: b)
                     }
@@ -643,14 +663,32 @@ struct ClipCardView: View {
     private func pinToNewBoard() {
         if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
             let board = store.addPinboard(name: name)
-            store.saveToPinboard(item, boardID: board.id)
+            for target in actionTargets { store.saveToPinboard(target, boardID: board.id) }
         }
     }
 
-    private func selectCard() {
+    /// macOS list conventions: ⇧ extends a contiguous run from the anchor,
+    /// ⌘ toggles one card in or out, anything else replaces the selection.
+    /// What a menu action applies to. Right-clicking a card that is part of a
+    /// multi-selection acts on the whole selection, the way Finder does;
+    /// right-clicking any other card acts on that card alone.
+    private var actionTargets: [ClipItem] {
+        guard pasteStackEntry == nil,
+              store.hasMultipleSelection,
+              store.selectedIDs.contains(item.id) else { return [item] }
+        return store.selectedItems
+    }
+
+    private func selectCard(_ modifiers: NSEvent.ModifierFlags = []) {
         AppController.shared.focusBarCards()
         if let entry = pasteStackEntry {
             AppController.shared.pasteSequence.select(entry)
+            return
+        }
+        if modifiers.contains(.shift) {
+            store.extendSelection(to: item.id)
+        } else if modifiers.contains(.command) {
+            store.toggleSelection(of: item.id)
         } else {
             store.selectedID = item.id
         }

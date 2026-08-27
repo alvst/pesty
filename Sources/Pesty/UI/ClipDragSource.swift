@@ -13,7 +13,9 @@ struct ClipDragSource: NSViewRepresentable {
     /// so it must only run when a drag actually starts — never as part of
     /// evaluating the card's view body.
     let makeWriters: () -> [NSPasteboardWriting]
-    let onSelect: () -> Void
+    /// Carries the click's modifiers so the card can tell a plain click from
+    /// a ⇧- or ⌘-click without reaching back into the current event.
+    let onSelect: (NSEvent.ModifierFlags) -> Void
     let onOpen: () -> Void
     let onDragStarted: () -> Void
     let onDragExitedBar: () -> Void
@@ -39,13 +41,14 @@ struct ClipDragSource: NSViewRepresentable {
 
 final class DragSourceView: NSView, NSDraggingSource {
     var makeWriters: () -> [NSPasteboardWriting] = { [] }
-    var onSelect: () -> Void = {}
+    var onSelect: (NSEvent.ModifierFlags) -> Void = { _ in }
     var onOpen: () -> Void = {}
     var onDragStarted: () -> Void = {}
     var onDragExitedBar: () -> Void = {}
 
     private var mouseDownLocation: NSPoint?
     private var mouseDownClickCount = 0
+    private var mouseDownModifiers: NSEvent.ModifierFlags = []
     private var startedDragging = false
     private var dragAttemptFailed = false
     private var hasExitedBar = false
@@ -61,12 +64,15 @@ final class DragSourceView: NSView, NSDraggingSource {
     override func mouseDown(with event: NSEvent) {
         mouseDownLocation = convert(event.locationInWindow, from: nil)
         mouseDownClickCount = event.clickCount
+        mouseDownModifiers = event.modifierFlags
         startedDragging = false
         dragAttemptFailed = false
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard !startedDragging, !dragAttemptFailed, let start = mouseDownLocation else { return }
+        // A modifier-click is adjusting the selection, not starting a drag.
+        guard mouseDownModifiers.intersection([.shift, .command]).isEmpty else { return }
         let current = convert(event.locationInWindow, from: nil)
         guard hypot(current.x - start.x, current.y - start.y) >= 4 else { return }
 
@@ -97,13 +103,19 @@ final class DragSourceView: NSView, NSDraggingSource {
         defer {
             mouseDownLocation = nil
             mouseDownClickCount = 0
+            mouseDownModifiers = []
             startedDragging = false
         }
         guard !startedDragging else { return }
         // This view's hitTest claims every left-mouse-down over the card, so
         // it has to reproduce the click gestures SwiftUI would otherwise own.
-        onSelect()
-        if mouseDownClickCount >= 2 { onOpen() }
+        onSelect(mouseDownModifiers)
+        // A modifier-click is a selection gesture, never an open — double
+        // ⌘-clicking a card should not paste it.
+        let isSelectionGesture = mouseDownModifiers
+            .intersection([.shift, .command])
+            .isEmpty == false
+        if mouseDownClickCount >= 2, !isSelectionGesture { onOpen() }
     }
 
     func draggingSession(
