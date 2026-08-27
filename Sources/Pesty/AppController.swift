@@ -1,6 +1,17 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+import os.log
+
+private let dragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
+
+extension Notification.Name {
+    /// Posted when a drag that started in the bar ends (drop, abandon, or
+    /// Escape-cancel), so drop targets can clear hover chrome — a trailing
+    /// dropUpdated can otherwise repaint a caret or ring after performDrop
+    /// already cleared it.
+    static let pestyDragSessionEnded = Notification.Name("PestyDragSessionEnded")
+}
 
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate {
@@ -19,6 +30,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
+    private var dragOutTimer: Timer?
     private var isReopenPresentationPending = false
     private var editorFocusRestore: EditorFocusRestore?
     private let copyToast = CopyToastController()
@@ -286,6 +298,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
         barController?.hide(immediately: immediately)
+        // The bar itself never activates Pesty, but an alert, Settings, or a
+        // drag ending inside the bar can. Hiding while Pesty is active would
+        // strand keyboard focus with no visible window — hand it back to the
+        // app the user came from.
+        if NSApp.isActive, let target = previousApp ?? lastActiveApp, !target.isTerminated {
+            NSApp.yieldActivation(to: target)
+            target.activate()
+        }
     }
 
     func toggleInlinePreview() {
@@ -503,12 +523,118 @@ final class AppController: NSObject, NSApplicationDelegate {
         copySelected()
     }
 
-    func beginDragOut() {
-        // Let AppKit establish the dragging session before taking the source
-        // panel offscreen; the drag then continues naturally into another app.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            self?.hideBar()
+    /// True while a drag that started inside the bar is still holding the
+    /// mouse button.
+    var isDragSessionActive: Bool { dragOutTimer != nil }
+
+    /// The clip whose card is being dragged. The drag never leaves this
+    /// process for in-bar drops, so the ID is handed over directly — custom
+    /// pasteboard types don't survive the drag pasteboard's promise
+    /// round-trip reliably (loadDataRepresentation fails for undeclared
+    /// UTIs), and the payload on the pasteboard is only a marker.
+    private(set) var draggedClipID: UUID?
+    private var dragSessionCancelled = false
+
+    func beginDragOut(itemID: UUID) {
+        draggedClipID = itemID
+        beginDragTracking(hidesBarWhenLeaving: true)
+    }
+
+    func beginTabDrag() {
+        // A Pinboard tab means nothing outside the bar, so the bar stays up
+        // for the whole drag; tracking still runs for Escape-to-cancel.
+        draggedClipID = nil
+        beginDragTracking(hidesBarWhenLeaving: false)
+    }
+
+    private func beginDragTracking(hidesBarWhenLeaving: Bool) {
+        dragLog.debug("drag tracking started (hidesBarWhenLeaving=\(hidesBarWhenLeaving))")
+        dragSessionCancelled = false
+        // The bar stays up while the drag remains inside it, so a card can be
+        // dropped on a Pinboard tab. Once the drag leaves the panel it is
+        // headed for another app, and the bar hides to uncover the drop
+        // target. Drag sessions run the loop in the event-tracking mode, so
+        // the timer must be scheduled in .common to fire at all. The interval
+        // also samples the Escape key, so it must stay short enough to catch
+        // a quick tap.
+        dragOutTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated { self?.pollDrag(timer, hidesBarWhenLeaving: hidesBarWhenLeaving) }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        dragOutTimer = timer
+    }
+
+    private func pollDrag(_ timer: Timer, hidesBarWhenLeaving: Bool) {
+        // Buttons released: the drag is over. If it ended over the bar (a
+        // Pinboard drop or an abandoned drag), the bar stays. draggedClipID
+        // survives until the next drag — performDrop may still be reading it.
+        if NSEvent.pressedMouseButtons == 0 {
+            timer.invalidate()
+            dragOutTimer = nil
+            NotificationCenter.default.post(name: .pestyDragSessionEnded, object: nil)
+            return
+        }
+        // Key events never reach this app's monitors during a drag session,
+        // so Escape is sampled directly. Cancelling empties the drag
+        // pasteboard and forgets the dragged clip: wherever the user lets
+        // go — even in another app — the drop delivers nothing.
+        if !dragSessionCancelled,
+           CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(kVK_Escape)) {
+            dragSessionCancelled = true
+            draggedClipID = nil
+            NSPasteboard(name: .drag).clearContents()
+            NotificationCenter.default.post(name: .pestyDragSessionEnded, object: nil)
+            dragLog.debug("drag cancelled via Escape")
+        }
+        if hidesBarWhenLeaving, !dragSessionCancelled,
+           let panel = barController?.window, panel.isVisible,
+           !panel.frame.contains(NSEvent.mouseLocation) {
+            hideBar()
+        }
+    }
+
+    /// Pins a dragged clip onto a Pinboard tab. The card may have come from
+    /// the history strip, another Pinboard, or a Paste Stack, so the ID is
+    /// resolved across all of them.
+    /// AppKit activates an app when a drop lands in one of its windows, so
+    /// an in-bar drop (pin, reorder) silently steals focus from the app the
+    /// user came from. Hand activation straight back and re-key the panel the
+    /// nonactivating way it was before the drop.
+    func restoreFocusAfterInBarDrop() {
+        suppressAutoHide = true
+        // First hop: let AppKit finish the drop-triggered activation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            guard NSApp.isActive, let target = previousApp ?? lastActiveApp, !target.isTerminated else {
+                suppressAutoHide = false
+                return
+            }
+            NSApp.yieldActivation(to: target)
+            target.activate()
+            // Second hop: once the target is active again, take key back the
+            // nonactivating way the panel normally holds it, then re-arm
+            // click-outside hiding.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self else { return }
+                barController?.bringToFront()
+                suppressAutoHide = false
+            }
+        }
+    }
+
+    func pinClip(id: UUID, toBoard boardID: UUID) {
+        let candidates = store.history
+            + store.pinboards.flatMap(\.items)
+            + pasteSequence.entries.map(\.item)
+            + pasteSequence.savedStacks.flatMap { $0.entries.map(\.item) }
+        guard let item = candidates.first(where: { $0.id == id }) else {
+            dragLog.debug("pinClip: no clip found for id \(id)")
+            return
+        }
+        dragLog.debug("pinClip: pinning \(id) to board \(boardID)")
+        store.saveToPinboard(item, boardID: boardID)
+        restoreFocusAfterInBarDrop()
     }
 
     func beginPasteSequence() {
@@ -784,6 +910,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
+        // A live drag session owns the keyboard: AppKit cancels the drag when
+        // Escape reaches it, and none of the bar's own shortcuts should fire
+        // mid-drag (Escape would otherwise hide the bar out from under the
+        // drag instead of cancelling it).
+        if isDragSessionActive {
+            dragLog.debug("key \(event.keyCode) passed through during drag")
+            return event
+        }
+
         // Native context menus, the clip editor, previews, and Settings own
         // their responder chains. The Paste Bar monitor only handles keys that
         // actually arrive at its floating panel.

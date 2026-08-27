@@ -1,5 +1,9 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+import os.log
+
+private let clipDragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
@@ -18,6 +22,9 @@ struct BarView: View {
     @State private var resizeStartHeight: Double?
     @State private var resizeStartScreenY: CGFloat?
     @State private var cardFrames: [UUID: CGRect] = [:]
+    // Live x-position of the gap a dragged clip card is over while
+    // reordering within a Pinboard — nil when no such drag is active.
+    @State private var stripInsertionX: CGFloat?
 
     var body: some View {
         ZStack {
@@ -47,6 +54,8 @@ struct BarView: View {
             DispatchQueue.main.async { updateFloatingPreview() }
         }
         .onChange(of: store.source) { _, source in
+            // A reorder caret from one view must not survive into another.
+            stripInsertionX = nil
             guard store.inlinePreviewVisible else { return }
             guard source != .pasteStack else {
                 AppController.shared.hideInlinePreview()
@@ -350,9 +359,76 @@ struct BarView: View {
                 .overlay {
                     if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
                 }
+                .overlay {
+                    if let stripInsertionX {
+                        // Same height as the cards, centered on their span.
+                        InsertionCaret(color: Theme.selection, height: cardHeight)
+                            .position(x: stripInsertionX,
+                                      y: Theme.cardStripTopInset + cardHeight / 2)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.08), value: stripInsertionX != nil)
+                .onDrop(of: [.pestyClipID], delegate: ClipStripDropDelegate(
+                    canReorder: isPinboardSource,
+                    onHover: { x in
+                        let snapped = x.flatMap { snappedStripInsertionX(forX: $0) }
+                        if (snapped == nil) != (stripInsertionX == nil) {
+                            clipDragLog.debug("strip caret \(snapped == nil ? "cleared" : "shown", privacy: .public)")
+                        }
+                        stripInsertionX = snapped
+                    },
+                    onDrop: { id, x in
+                        stripInsertionX = nil
+                        guard case .pinboard(let boardID) = store.source else { return }
+                        store.movePinboardItem(id,
+                                               before: stripInsertionTargetID(forX: x),
+                                               inBoard: boardID)
+                        AppController.shared.restoreFocusAfterInBarDrop()
+                    }
+                ))
+                .onReceive(NotificationCenter.default.publisher(for: .pestyDragSessionEnded)) { _ in
+                    clipDragLog.debug("drag ended: clearing strip caret")
+                    stripInsertionX = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        stripInsertionX = nil
+                    }
+                }
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private var isPinboardSource: Bool {
+        if case .pinboard = store.source { return true }
+        return false
+    }
+
+    /// The visible cards left-to-right with their live frames. Both the
+    /// drop's x-position and these frames are measured in the bar's own
+    /// coordinate space, so they compare directly.
+    private var orderedStripFrames: [(id: UUID, frame: CGRect)] {
+        store.visibleItems.compactMap { item in
+            cardFrames[item.id].map { (item.id, $0) }
+        }
+    }
+
+    /// The card a dragged clip would land in front of — nil appends at the end.
+    private func stripInsertionTargetID(forX x: CGFloat) -> UUID? {
+        orderedStripFrames.first(where: { x < $0.frame.midX })?.id
+    }
+
+    /// The caret's x-position: the middle of the gap the drop resolves to,
+    /// so the line snaps cleanly between two cards.
+    private func snappedStripInsertionX(forX x: CGFloat) -> CGFloat? {
+        let frames = orderedStripFrames
+        guard !frames.isEmpty else { return nil }
+        guard let index = frames.firstIndex(where: { x < $0.frame.midX }) else {
+            return frames[frames.count - 1].frame.maxX + 8
+        }
+        if index == 0 { return frames[0].frame.minX - 8 }
+        return (frames[index - 1].frame.maxX + frames[index].frame.minX) / 2
     }
 
     private var emptyState: some View {
@@ -366,6 +442,48 @@ struct BarView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textSecondary)
         }
+    }
+}
+
+/// Reorders clips within a Pinboard: tracks the drag's x-position to drive
+/// the insertion caret and commits the move on release. Inert everywhere
+/// else — history and search results keep their recency order.
+private struct ClipStripDropDelegate: DropDelegate {
+    let canReorder: Bool
+    let onHover: (CGFloat?) -> Void
+    let onDrop: (UUID, CGFloat) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        clipDragLog.debug("strip validateDrop: canReorder=\(canReorder)")
+        return canReorder
+    }
+
+    func dropEntered(info: DropInfo) {
+        onHover(info.location.x)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        // An Escape-cancelled drag forgets the dragged clip; stop painting
+        // the caret and refuse the drop.
+        guard AppController.shared.draggedClipID != nil else {
+            onHover(nil)
+            return DropProposal(operation: .cancel)
+        }
+        onHover(info.location.x)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        onHover(nil)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        onHover(nil)
+        clipDragLog.debug("strip performDrop at x=\(info.location.x)")
+        guard canReorder,
+              let id = AppController.shared.draggedClipID else { return false }
+        onDrop(id, info.location.x)
+        return true
     }
 }
 

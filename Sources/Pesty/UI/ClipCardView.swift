@@ -20,9 +20,22 @@ struct ClipCardView: View {
     }
 
     @State private var hovering = false
+    private var isPinboardCard: Bool {
+        guard pasteStackEntry == nil else { return false }
+        if case .pinboard = ClipboardStore.shared.source { return true }
+        return false
+    }
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
     private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+
+    /// Promotion is per board, so it only means anything while that board is
+    /// the one on screen.
+    private var pinnedBoardID: UUID? {
+        guard pasteStackEntry == nil, let boardID = store.currentPinboardID,
+              store.isPinned(item.id, inBoard: boardID) else { return nil }
+        return boardID
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,7 +72,7 @@ struct ClipCardView: View {
             selectCard()
         }
         .onDrag {
-            AppController.shared.beginDragOut()
+            AppController.shared.beginDragOut(itemID: item.id)
             return ClipDragProvider.make(for: item)
         }
         .contextMenu { menu }
@@ -73,12 +86,17 @@ struct ClipCardView: View {
                     Text(item.type.label)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
-                    Text(item.createdAt.clipRelativeLong)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.headerSubText)
+                    // Pinned clips are kept deliberately, so "when it was
+                    // copied" is noise there — the timestamp is history-only.
+                    if !isPinboardCard {
+                        Text(item.createdAt.clipRelativeLong)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.headerSubText)
+                    }
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
+                if pinnedBoardID != nil { pinBadge }
                 appIconTile
             }
             .padding(.horizontal, 13)
@@ -254,6 +272,18 @@ struct ClipCardView: View {
             }
             .keyboardShortcut("c", modifiers: .command)
 
+            // Only meaningful while a Pinboard is on screen: promotion is a
+            // property of the clip's place on *this* board.
+            if let boardID = store.currentPinboardID {
+                Divider()
+                Button {
+                    store.togglePin(item.id, inBoard: boardID)
+                } label: {
+                    Label(pinnedBoardID != nil ? "Unpin from Top" : "Pin to Top",
+                          systemImage: pinnedBoardID != nil ? "pin.slash" : "pin")
+                }
+            }
+
             Divider()
 
             editAndRenameActions
@@ -326,11 +356,26 @@ struct ClipCardView: View {
         .keyboardShortcut("r", modifiers: .command)
     }
 
+    /// Marks a clip promoted to the front of the board being viewed. It sits
+    /// on the header rather than the body so it reads at a glance while
+    /// scanning a row of cards.
+    private var pinBadge: some View {
+        Image(systemName: "pin.fill")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Theme.headerText)
+            .frame(width: 20, height: 20)
+            .background(Color.black.opacity(0.22), in: Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.28)))
+            .accessibilityLabel("Pinned to top")
+    }
+
     private var pinMenu: some View {
         Menu {
             if !store.pinboards.isEmpty {
                 ForEach(store.pinboards) { b in
-                    Button { store.saveToPinboard(item, boardID: b.id) } label: {
+                    Button {
+                        store.saveToPinboard(item, boardID: b.id)
+                    } label: {
                         PinboardMenuItemLabel(pinboard: b)
                     }
                 }

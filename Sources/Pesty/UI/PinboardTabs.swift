@@ -16,12 +16,12 @@ private struct TabFramePreferenceKey: PreferenceKey {
 }
 
 /// A text-cursor-style "I-beam": a vertical line with small horizontal caps
-/// top and bottom, shown where a dragged Pinboard would land.
-private struct InsertionCaret: View {
+/// top and bottom, shown where a dragged Pinboard tab or clip card would land.
+struct InsertionCaret: View {
     var color: Color
     var height: CGFloat = 29
-    var capWidth: CGFloat = 6
-    var lineWidth: CGFloat = 2
+    var capWidth: CGFloat = 8
+    var lineWidth: CGFloat = 3
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +29,10 @@ private struct InsertionCaret: View {
             Rectangle().fill(color).frame(width: lineWidth, height: height - lineWidth * 2)
             Capsule().fill(color).frame(width: capWidth, height: lineWidth)
         }
+        // The caret floats over card content of any brightness; the halo
+        // keeps it legible on both.
+        .shadow(color: .black.opacity(0.55), radius: 2)
+        .shadow(color: .white.opacity(0.35), radius: 0.5)
     }
 }
 
@@ -40,24 +44,59 @@ private struct InsertionCaret: View {
 private struct PinboardRowDropDelegate: DropDelegate {
     let onHover: (CGFloat?) -> Void
     let onDrop: (UUID, CGFloat) -> Void
+    /// Clip drags (a card dragged from the strip) target a whole tab to pin
+    /// onto, not a gap between tabs, so they get their own hover/drop pair.
+    let onClipHover: (CGFloat?) -> Void
+    let onClipDrop: (UUID, CGFloat) -> Void
+
+    /// Clip cards also carry plain text for drags into other apps, so the
+    /// private clip-ID type — not .plainText — is what tells a card drag
+    /// apart from a Pinboard tab reorder.
+    private func isClipDrag(_ info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.pestyClipID])
+    }
 
     func dropEntered(info: DropInfo) {
-        onHover(info.location.x)
+        isClipDrag(info) ? onClipHover(info.location.x) : onHover(info.location.x)
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        if isClipDrag(info) {
+            onClipHover(info.location.x)
+            return DropProposal(operation: .copy)
+        }
+        // An Escape-cancelled drag empties the drag pasteboard; a session
+        // with neither payload gets no hover chrome and no drop.
+        guard info.hasItemsConforming(to: [.plainText]) else {
+            onHover(nil)
+            onClipHover(nil)
+            return DropProposal(operation: .cancel)
+        }
         onHover(info.location.x)
         return DropProposal(operation: .move)
     }
 
     func dropExited(info: DropInfo) {
         onHover(nil)
+        onClipHover(nil)
     }
 
     func performDrop(info: DropInfo) -> Bool {
         onHover(nil)
-        guard let provider = info.itemProviders(for: [.plainText]).first else { return false }
+        onClipHover(nil)
         let x = info.location.x
+        pinboardDragLog.debug("row performDrop: clip=\(self.isClipDrag(info)) x=\(x)")
+        if isClipDrag(info) {
+            // The pasteboard type is only a marker; the actual clip is
+            // remembered in-process when the drag starts.
+            guard let id = AppController.shared.draggedClipID else {
+                pinboardDragLog.debug("row clip drop: no dragged clip (cancelled?)")
+                return false
+            }
+            onClipDrop(id, x)
+            return true
+        }
+        guard let provider = info.itemProviders(for: [.plainText]).first else { return false }
         _ = provider.loadObject(ofClass: NSString.self) { reading, _ in
             guard let idString = reading as? String, let id = UUID(uuidString: idString) else { return }
             DispatchQueue.main.async {
@@ -80,6 +119,9 @@ struct PinboardTabs: View {
     // is currently over, drawn as the insertion caret — nil when no drag
     // is active over the row.
     @State private var insertionX: CGFloat?
+    // The Pinboard tab a dragged clip card is currently over — highlighted
+    // as the pin target. nil when no clip drag is over the row.
+    @State private var clipDropBoardID: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -142,25 +184,56 @@ struct PinboardTabs: View {
             // narrow per-tab targets: a drop anywhere on (or well past the
             // top/bottom of) the row resolves to the nearest gap.
             .contentShape(Rectangle().inset(by: -20))
-            .onDrop(of: [.plainText], delegate: PinboardRowDropDelegate(
+            .onDrop(of: [.plainText, .pestyClipID], delegate: PinboardRowDropDelegate(
                 onHover: { x in
                     insertionX = x.flatMap { snappedInsertionX(forHoverX: $0) }
                 },
                 onDrop: { draggedID, x in
                     let index = insertionIndex(forX: x)
                     pinboardDragLog.debug("row drop RECEIVED at x=\(x) -> index=\(index)")
+                    defer { AppController.shared.restoreFocusAfterInBarDrop() }
                     guard draggedID != store.pinboards[safe: index]?.id else { return }
                     if index >= store.pinboards.count {
                         store.movePinboardToEnd(draggedID)
                     } else {
                         store.movePinboard(draggedID, before: store.pinboards[index].id)
                     }
+                },
+                onClipHover: { x in
+                    let target = x.flatMap { boardID(atX: $0) }
+                    if target != clipDropBoardID {
+                        pinboardDragLog.debug("clipDropBoardID -> \(target?.uuidString ?? "nil", privacy: .public)")
+                        clipDropBoardID = target
+                    }
+                },
+                onClipDrop: { clipID, x in
+                    clipDropBoardID = nil
+                    let frameDesc = store.pinboards
+                        .map { b in "\(b.name):\(tabFrames[b.id].map { "\(Int($0.minX))-\(Int($0.maxX))" } ?? "nil")" }
+                        .joined(separator: " ")
+                    pinboardDragLog.debug("clip drop id=\(clipID) x=\(x) frames=[\(frameDesc, privacy: .public)]")
+                    guard let boardID = boardID(atX: x) else {
+                        pinboardDragLog.debug("clip drop MISSED every tab")
+                        return
+                    }
+                    AppController.shared.pinClip(id: clipID, toBoard: boardID)
                 }
             ))
         }
         .onChange(of: focusedBoardID) { oldValue, newValue in
             if let oldValue, oldValue == editingBoardID, newValue != oldValue {
                 finishEditing()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pestyDragSessionEnded)) { _ in
+            pinboardDragLog.debug("drag ended: clearing row hover chrome")
+            insertionX = nil
+            clipDropBoardID = nil
+            // A trailing dropUpdated delivered after this notification can
+            // repaint; sweep once more after the session is definitely gone.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                insertionX = nil
+                clipDropBoardID = nil
             }
         }
     }
@@ -210,8 +283,15 @@ struct PinboardTabs: View {
             })
             .onDrag {
                 pinboardDragLog.debug("onDrag FIRED for \(board.name, privacy: .public)")
+                AppController.shared.beginTabDrag()
                 return NSItemProvider(object: board.id.uuidString as NSString)
             }
+            .overlay(
+                Capsule()
+                    .strokeBorder(Theme.selection, lineWidth: 2)
+                    .opacity(clipDropBoardID == board.id ? 1 : 0)
+            )
+            .animation(.easeOut(duration: 0.1), value: clipDropBoardID == board.id)
             .help("Drag to reorder Pinboards")
         }
     }
@@ -247,8 +327,10 @@ struct PinboardTabs: View {
         }
         .disabled(store.pinboards.last?.id == board.id)
         Divider()
-        Button("Delete Pinboard", role: .destructive) {
+        Button(role: .destructive) {
             store.deletePinboard(board.id)
+        } label: {
+            Label("Delete Pinboard", systemImage: "trash")
         }
     }
 
@@ -331,6 +413,15 @@ struct PinboardTabs: View {
         return store.pinboards.count
     }
 
+    /// The Pinboard tab under an x-position (in the row's coordinate space),
+    /// with a small tolerance so a drop just past a pill's edge still counts.
+    private func boardID(atX x: CGFloat) -> UUID? {
+        store.pinboards.first { board in
+            guard let frame = tabFrames[board.id] else { return false }
+            return x >= frame.minX - 4 && x <= frame.maxX + 4
+        }?.id
+    }
+
     /// The visual x-position for the insertion caret: the midpoint of the
     /// gap on either side of `insertionIndex(forX:)`, not the raw cursor
     /// position, so the line snaps cleanly between two tabs.
@@ -385,7 +476,15 @@ enum TextPrompt {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.stringValue = defaultValue
         alert.accessoryView = field
+        // `initialFirstResponder` alone is set before the alert has laid out
+        // its accessory view, so the field could come up unfocused — leaving
+        // the prompt looking ready to type into when it was not. Lay out
+        // first, then take first responder and select what is there, so the
+        // existing value can be replaced by typing.
+        alert.layout()
         alert.window.initialFirstResponder = field
+        alert.window.makeFirstResponder(field)
+        field.selectText(nil)
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return nil }
         let v = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)

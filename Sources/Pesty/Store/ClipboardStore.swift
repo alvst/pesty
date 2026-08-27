@@ -92,7 +92,7 @@ final class ClipboardStore {
             // into clipboard history items.
             base = []
         case .pinboard(let id):
-            base = pinboards.first(where: { $0.id == id })?.items ?? []
+            base = pinboards.first(where: { $0.id == id })?.orderedItems ?? []
         }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else {
@@ -215,7 +215,10 @@ final class ClipboardStore {
         guard !payload.allItems.isEmpty else { return }
 
         history.removeAll { $0.id == item.id }
-        for i in pinboards.indices { pinboards[i].items.removeAll { $0.id == item.id } }
+        for i in pinboards.indices {
+            pinboards[i].items.removeAll { $0.id == item.id }
+            pinboards[i].prunePins()
+        }
         if permanently {
             for deletedItem in payload.allItems { deleteImageFile(deletedItem) }
         } else {
@@ -389,6 +392,53 @@ final class ClipboardStore {
         let moved = pinboards.remove(at: from)
         pinboards.append(moved)
         scheduleSave()
+    }
+
+    /// Reorders an item within its Pinboard. `targetID` is the item the moved
+    /// one lands in front of — nil appends at the end. Anchoring to a neighbor
+    /// rather than an index keeps drops correct while a search filter hides
+    /// some of the board's items.
+    func movePinboardItem(_ id: UUID, before targetID: UUID?, inBoard boardID: UUID) {
+        guard id != targetID,
+              let b = pinboards.firstIndex(where: { $0.id == boardID }),
+              let from = pinboards[b].items.firstIndex(where: { $0.id == id }) else { return }
+        let item = pinboards[b].items.remove(at: from)
+        if let targetID, let to = pinboards[b].items.firstIndex(where: { $0.id == targetID }) {
+            pinboards[b].items.insert(item, at: to)
+        } else {
+            pinboards[b].items.append(item)
+        }
+        // Dragging a card to a chosen position is an explicit statement about
+        // where it belongs, so it stops being promoted — otherwise it would
+        // spring back to the front and look like the drag was ignored.
+        pinboards[b].pinnedItemIDs.removeAll { $0 == item.id }
+        scheduleSave()
+    }
+
+    /// Promotes a clip to the front of its board, or returns it to the manual
+    /// order. Pinning is per board: the same clip can sit on two boards and be
+    /// promoted on only one of them.
+    func togglePin(_ itemID: UUID, inBoard boardID: UUID) {
+        guard let b = pinboards.firstIndex(where: { $0.id == boardID }),
+              pinboards[b].items.contains(where: { $0.id == itemID }) else { return }
+        if pinboards[b].pinnedItemIDs.contains(itemID) {
+            pinboards[b].pinnedItemIDs.removeAll { $0 == itemID }
+        } else {
+            pinboards[b].pinnedItemIDs.insert(itemID, at: 0)
+        }
+        pinboards[b].prunePins()
+        scheduleSave()
+    }
+
+    func isPinned(_ itemID: UUID, inBoard boardID: UUID) -> Bool {
+        pinboards.first(where: { $0.id == boardID })?.isPinned(itemID) ?? false
+    }
+
+    /// The board the bar is currently showing, if any — cards need it to know
+    /// whether they are promoted.
+    var currentPinboardID: UUID? {
+        if case .pinboard(let id) = source { return id }
+        return nil
     }
 
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
