@@ -314,8 +314,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         barHeightGhost.hide()
         barController?.show()
         // An open Settings window rises with the bar instead of staying
-        // buried behind whatever app the user summoned Pesty over.
-        if let settings = settingsWindow, settings.isVisible {
+        // buried behind whatever app the user summoned Pesty over — but only
+        // where it already is. Settings is an ordinary window, so it belongs
+        // to the Space it was opened on, and ordering it front from a
+        // different Space is one of the ways macOS switches Spaces. The bar
+        // joins every Space, so it would follow, and summoning the clipboard
+        // would silently move the user somewhere else.
+        if let settings = settingsWindow, settings.isVisible, settings.isOnActiveSpace {
             settings.orderFrontRegardless()
         }
         startKeyMonitor()
@@ -625,6 +630,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         window.setContentSize(NSSize(width: 560, height: 430))
         window.minSize = NSSize(width: 420, height: 280)
         window.isReleasedWhenClosed = false
+        // Kept alive between previews, so without this it would stay pinned to
+        // whichever Space it was first opened on and drag the user back there
+        // the next time they previewed a clip.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.center()
         previewWindow = window
         window.makeKeyAndOrderFront(nil)
