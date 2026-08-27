@@ -106,7 +106,7 @@ final class PasteSequence {
     func visibleEntries(matching searchText: String) -> [PasteStackEntry] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else { return displayEntries }
-        return displayEntries.filter { $0.item.searchableText.contains(query) }
+        return displayEntries.filter { $0.item.matches(query: query) }
     }
 
     var selectedEntry: PasteStackEntry? {

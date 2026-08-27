@@ -277,10 +277,12 @@ struct ClipCardView: View {
                             titleOverride: item.customTitle)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         case .richText:
-            RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", lineLimit: 10)
+            RichTextContent(rtfData: item.rtfData, fallback: item.cardPreviewText, lineLimit: 10)
                 .foregroundStyle(Theme.textPrimary.opacity(0.9))
         case .text:
-            Text(item.text ?? "")
+            // Bounded on purpose: `lineLimit` caps what is drawn, but Text
+            // still lays out everything it is handed.
+            Text(item.cardPreviewText)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.textPrimary.opacity(0.9))
                 .lineLimit(10)
@@ -431,7 +433,7 @@ struct ClipCardView: View {
     private var metaLeft: String {
         switch item.type {
         case .text, .richText:
-            return "\(item.charCount) characters"
+            return "\(ClipTextMetrics.characterCount(of: item)) characters"
         case .link:
             return (item.text ?? "").replacingOccurrences(of: "https://", with: "")
                                     .replacingOccurrences(of: "http://", with: "")

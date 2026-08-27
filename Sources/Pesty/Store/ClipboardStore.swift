@@ -17,8 +17,13 @@ enum BarInputMode: Equatable {
 final class ClipboardStore {
     static let shared = ClipboardStore()
 
-    private(set) var history: [ClipItem] = []
-    private(set) var pinboards: [Pinboard] = []
+    private(set) var history: [ClipItem] = [] { didSet { contentVersion &+= 1 } }
+    private(set) var pinboards: [Pinboard] = [] { didSet { contentVersion &+= 1 } }
+
+    /// Bumped by any change to the clips themselves, so the search cache below
+    /// can tell "same query, same clips" from "same query, new clips" without
+    /// comparing arrays.
+    @ObservationIgnored private var contentVersion = 0
     private(set) var hasUndoableDeletion = false
 
     var source: BarSource = .history
@@ -109,6 +114,27 @@ final class ClipboardStore {
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: baseDir.path)
     }
 
+    /// Search is memoized because `visibleItems` is a computed property that
+    /// the bar evaluates several times per frame — the card strip, the empty
+    /// state, the scroll targets, and the selection all ask for it — while
+    /// matching a query against a multi-megabyte clip costs a full scan of it.
+    /// Recomputing that per access is what made typing in the search field
+    /// lock the bar up.
+    @ObservationIgnored private var searchCache: (source: BarSource, query: String,
+                                                  version: Int, items: [ClipItem])?
+
+    private func searchResults(in base: [ClipItem], query: String) -> [ClipItem] {
+        if let cache = searchCache,
+           cache.version == contentVersion,
+           cache.source == source,
+           cache.query == query {
+            return cache.items
+        }
+        let items = base.filter { $0.matches(query: query) }
+        searchCache = (source, query, contentVersion, items)
+        return items
+    }
+
     var visibleItems: [ClipItem] {
         let base: [ClipItem]
         switch source {
@@ -132,7 +158,7 @@ final class ClipboardStore {
                   PasteSequence.shared.hasSavedStacks else { return base }
             return base.filter { !PasteSequence.shared.containsHistoryItemID($0.id) }
         }
-        return base.filter { $0.searchableText.contains(q) }
+        return searchResults(in: base, query: q)
     }
 
     var selectedItem: ClipItem? {
