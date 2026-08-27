@@ -793,8 +793,8 @@ private struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
             HStack(spacing: 16) {
-                Link("Fork on GitHub", destination: URL(string: "https://github.com/alvst/pesty")!)
-                Link("Report an Issue", destination: URL(string: "https://github.com/alvst/pesty/issues")!)
+                Link("Fork on GitHub", destination: URL(string: "https://github.com/momenbasel/pesty")!)
+                Link("Report an Issue", destination: URL(string: "https://github.com/momenbasel/pesty/issues")!)
             }
             .padding(.top, 4)
             Button("Quit Pesty-Alvie", role: .destructive) {
