@@ -1,12 +1,15 @@
 import AppKit
 
-/// Edits a clip's payload without conflating it with the optional card title.
-/// Text editing is intentionally a dedicated surface, rather than an alert,
-/// so long clipboard entries remain comfortable to read and format.
+/// Edits a clip's payload and its optional card title together. Text editing
+/// is intentionally a dedicated surface, rather than an alert, so long
+/// clipboard entries remain comfortable to read and format.
 @MainActor
 enum ClipEditor {
     enum Edit {
-        case text(String, richTextData: Data?)
+        /// `title` is the card's optional display name. `nil` means the clip
+        /// has no title — an emptied field clears one rather than leaving the
+        /// old value in place.
+        case text(String, richTextData: Data?, title: String?, bodyChanged: Bool)
         case color(String)
     }
 
@@ -54,10 +57,36 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
     private let launchWritingTools: Bool
     private let panel: NSPanel
     private let textView = NSTextView()
+    private var initialBody = NSAttributedString(string: "")
+    private let titleField = NSTextField()
     private let saveButton = NSButton()
     private let statsLabel = NSTextField(labelWithString: "")
     private var result: ClipEditor.Edit?
-    private var appliedRichFormatting = false
+    private weak var boldButton: NSButton?
+    private weak var italicButton: NSButton?
+    private weak var underlineButton: NSButton?
+    private weak var strikethroughButton: NSButton?
+    private var fontPanelOriginalLevel: NSWindow.Level?
+    private var fontPanelOriginalWorksWhenModal: Bool?
+    private weak var fontManagerOriginalTarget: AnyObject?
+    private var fontManagerOriginalAction: Selector?
+    private var colorPanelOriginalLevel: NSWindow.Level?
+    private var colorPanelOriginalWorksWhenModal: Bool?
+    private var colorPanelOriginalShowsAlpha: Bool?
+
+    private enum ColorTarget {
+        case text
+        case highlight
+
+        var attribute: NSAttributedString.Key {
+            switch self {
+            case .text: .foregroundColor
+            case .highlight: .backgroundColor
+            }
+        }
+    }
+
+    private var colorTarget: ColorTarget = .text
 
     init(item: ClipItem, launchWritingTools: Bool) {
         self.item = item
@@ -74,9 +103,17 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         buildInterface()
         loadInitialContent()
         updateStats()
+        updateFormattingControls()
     }
 
     func run() -> ClipEditor.Edit? {
+        defer {
+            // Shared AppKit formatting panels outlive this controller. Always
+            // release their targets and restore their window configuration,
+            // including if modal execution exits through an unusual path.
+            closeFormattingPanels()
+            panel.orderOut(nil)
+        }
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -89,12 +126,20 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         }
 
         NSApp.runModal(for: panel)
-        panel.orderOut(nil)
         return result
     }
 
     func textDidChange(_ notification: Notification) {
         updateStats()
+        updateFormattingControls()
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        updateFormattingControls()
+    }
+
+    func textViewDidChangeTypingAttributes(_ notification: Notification) {
+        updateFormattingControls()
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -109,6 +154,10 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
         panel.isReleasedWhenClosed = false
+        // A utility panel hides itself when the app deactivates. Clicking
+        // another app mid-edit would take the editor off screen while
+        // `runModal` kept spinning, leaving no way back to the open session.
+        panel.hidesOnDeactivate = false
         // The Paste Bar deliberately sits at the modal-panel level so it can
         // stay visible without activating Pesty. The editor must clear that
         // surface while it owns focus.
@@ -128,6 +177,7 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         textView.importsGraphics = false
         textView.allowsUndo = true
         textView.usesFindBar = true
+        textView.usesFontPanel = true
         textView.font = .systemFont(ofSize: 17)
         textView.textColor = .labelColor
         textView.backgroundColor = .textBackgroundColor
@@ -167,7 +217,13 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         saveButton.target = self
         saveButton.action = #selector(save)
         saveButton.bezelStyle = .rounded
+        // ⌘Return, not Return: this is a multi-line editor, and a plain
+        // Return default button claims the key before the text view can
+        // insert a newline with it. The button keeps its accent fill, so it
+        // still reads as the default action without owning the key.
         saveButton.keyEquivalent = "\r"
+        saveButton.keyEquivalentModifierMask = .command
+        saveButton.toolTip = "Save (⌘↩)"
         saveButton.bezelColor = .controlAccentColor
         saveButton.contentTintColor = .white
         saveButton.attributedTitle = NSAttributedString(
@@ -178,18 +234,31 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
             ]
         )
 
+        let bold = toolbarTextButton("B", label: "Bold", tooltip: "Bold (⌘B)",
+                                     action: #selector(toggleBold),
+                                     key: "b",
+                                     font: .systemFont(ofSize: 17, weight: .bold))
+        let italic = toolbarTextButton(
+            "I", label: "Italic", tooltip: "Italic (⌘I)",
+            action: #selector(toggleItalic), key: "i",
+            font: NSFontManager.shared.convert(
+                .systemFont(ofSize: 17, weight: .semibold), toHaveTrait: .italicFontMask
+            )
+        )
+        let underline = toolbarTextButton("U", label: "Underline", tooltip: "Underline (⌘U)",
+                                          action: #selector(toggleUnderline), key: "u",
+                                          underline: true)
+        let strikethrough = toolbarTextButton("S", label: "Strikethrough",
+                                              tooltip: "Strikethrough",
+                                              action: #selector(toggleStrikethrough),
+                                              strikethrough: true)
+        boldButton = bold
+        italicButton = italic
+        underlineButton = underline
+        strikethroughButton = strikethrough
+
         let formatting = NSStackView(views: [
-            toolbarTextButton("B", tooltip: "Bold", action: #selector(toggleBold),
-                              font: .systemFont(ofSize: 17, weight: .bold)),
-            toolbarTextButton("I", tooltip: "Italic", action: #selector(toggleItalic),
-                              font: NSFontManager.shared.convert(
-                                .systemFont(ofSize: 17, weight: .semibold),
-                                toHaveTrait: .italicFontMask
-                              )),
-            toolbarTextButton("U", tooltip: "Underline", action: #selector(toggleUnderline),
-                              underline: true),
-            toolbarTextButton("S", tooltip: "Strikethrough", action: #selector(toggleStrikethrough),
-                              strikethrough: true)
+            bold, italic, underline, strikethrough, formattingMenuButton()
         ])
         formatting.orientation = .horizontal
         formatting.spacing = 6
@@ -197,6 +266,7 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         if writingToolsAvailable {
             formatting.addArrangedSubview(
                 toolbarSymbolButton(symbol: "pencil.and.scribble",
+                                    label: "Writing Tools",
                                     tooltip: "Writing Tools",
                                     action: #selector(showWritingTools))
             )
@@ -214,6 +284,21 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         toolbar.addArrangedSubview(trailingSpacer)
         toolbar.addArrangedSubview(saveButton)
 
+        titleField.placeholderString = "Title (optional)"
+        titleField.stringValue = item.customTitle ?? ""
+        titleField.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleField.bezelStyle = .roundedBezel
+        titleField.isBezeled = true
+        titleField.focusRingType = .default
+        titleField.setAccessibilityLabel("Card title")
+        titleField.toolTip = "Shown on the clip's card in place of its contents"
+        // Return in a single-line field commits it; here that means moving on
+        // to the body rather than saving, so the whole panel treats Return as
+        // "keep going" and ⌘Return as "done".
+        titleField.target = self
+        titleField.action = #selector(focusBody)
+        titleField.nextKeyView = textView
+
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.borderType = .lineBorder
@@ -229,7 +314,7 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         statsLabel.textColor = .secondaryLabelColor
         statsLabel.lineBreakMode = .byTruncatingTail
 
-        for view in [toolbar, scrollView, statsLabel] {
+        for view in [toolbar, titleField, scrollView, statsLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
@@ -245,9 +330,14 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
             toolbar.topAnchor.constraint(equalTo: content.topAnchor),
             toolbar.heightAnchor.constraint(equalToConstant: 36),
 
+            titleField.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            titleField.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            titleField.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 12),
+            titleField.heightAnchor.constraint(equalToConstant: 28),
+
             scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 12),
+            scrollView.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 10),
             scrollView.bottomAnchor.constraint(equalTo: statsLabel.topAnchor, constant: -10),
             scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
 
@@ -258,6 +348,7 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         ])
 
         leadingSpacer.widthAnchor.constraint(equalTo: trailingSpacer.widthAnchor).isActive = true
+        updateFormattingControls()
     }
 
     private func loadInitialContent() {
@@ -273,6 +364,9 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
             textView.string = item.text ?? ""
         }
         textView.setSelectedRange(NSRange(location: 0, length: 0))
+        if let storage = textView.textStorage {
+            initialBody = NSAttributedString(attributedString: storage)
+        }
     }
 
     private var writingToolsAvailable: Bool {
@@ -281,12 +375,22 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
     }
 
     private func toolbarTextButton(_ title: String,
+                                   label: String,
                                    tooltip: String,
                                    action: Selector,
+                                   key: String = "",
                                    font: NSFont = .systemFont(ofSize: 17, weight: .semibold),
                                    underline: Bool = false,
                                    strikethrough: Bool = false) -> NSButton {
-        let button = configuredToolbarButton(tooltip: tooltip, action: action)
+        let button = configuredToolbarButton(label: label, tooltip: tooltip, action: action)
+        button.setButtonType(.pushOnPushOff)
+        // Rich-text formatting is expected on ⌘B/⌘I/⌘U. These live on the
+        // buttons rather than in the main menu because they are this editor's
+        // own actions, not responder-chain ones.
+        if !key.isEmpty {
+            button.keyEquivalent = key
+            button.keyEquivalentModifierMask = .command
+        }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor.labelColor
@@ -298,18 +402,98 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
     }
 
     private func toolbarSymbolButton(symbol: String,
+                                     label: String,
                                      tooltip: String,
                                      action: Selector) -> NSButton {
-        let button = configuredToolbarButton(tooltip: tooltip, action: action)
+        let button = configuredToolbarButton(label: label, tooltip: tooltip, action: action)
         let configuration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip)?
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration)
         button.image?.isTemplate = true
         button.imagePosition = .imageOnly
         return button
     }
 
-    private func configuredToolbarButton(tooltip: String,
+    /// Keeps the common character styles one click away while grouping the
+    /// less-frequent, full rich-text controls into a compact native menu. That
+    /// still fits when the editor is resized to its 520-point minimum width.
+    private func formattingMenuButton() -> NSPopUpButton {
+        let menu = NSMenu(title: "Formatting")
+        let label = NSMenuItem(title: "Formatting", action: nil, keyEquivalent: "")
+        label.image = toolbarSymbol(named: "textformat")
+        menu.addItem(label)
+
+        menu.addItem(menuItem("Fonts & Size…", action: #selector(showFontPanel),
+                              symbol: "textformat.size"))
+        menu.addItem(menuItem("Text Color…", action: #selector(showTextColorPanel),
+                              symbol: "paintpalette"))
+        menu.addItem(menuItem("Highlight Color…", action: #selector(showHighlightColorPanel),
+                              symbol: "highlighter"))
+        menu.addItem(menuItem("Remove Highlight", action: #selector(removeHighlight),
+                              symbol: "eraser"))
+
+        let sizeMenu = NSMenu(title: "Font Size")
+        sizeMenu.addItem(menuItem("Increase", action: #selector(increaseFontSize),
+                                  symbol: "plus"))
+        sizeMenu.addItem(menuItem("Decrease", action: #selector(decreaseFontSize),
+                                  symbol: "minus"))
+        sizeMenu.addItem(menuItem("Reset to 17 pt", action: #selector(resetFontSize),
+                                  symbol: "arrow.counterclockwise"))
+        let sizeItem = NSMenuItem(title: "Font Size", action: nil, keyEquivalent: "")
+        sizeItem.image = toolbarSymbol(named: "textformat.size")
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
+        let alignmentMenu = NSMenu(title: "Alignment")
+        alignmentMenu.addItem(menuItem("Left", action: #selector(alignLeft),
+                                       symbol: "text.alignleft"))
+        alignmentMenu.addItem(menuItem("Center", action: #selector(alignCenter),
+                                       symbol: "text.aligncenter"))
+        alignmentMenu.addItem(menuItem("Right", action: #selector(alignRight),
+                                       symbol: "text.alignright"))
+        alignmentMenu.addItem(menuItem("Justified", action: #selector(alignJustified),
+                                       symbol: "text.justify"))
+        let alignmentItem = NSMenuItem(title: "Alignment", action: nil, keyEquivalent: "")
+        alignmentItem.image = toolbarSymbol(named: "text.alignleft")
+        alignmentItem.submenu = alignmentMenu
+        menu.addItem(alignmentItem)
+
+        menu.addItem(.separator())
+        menu.addItem(menuItem("Clear Formatting", action: #selector(clearFormatting),
+                              symbol: "eraser.fill"))
+
+        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        button.menu = menu
+        button.selectItem(at: 0)
+        button.bezelStyle = .rounded
+        (button.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
+        button.imagePosition = .imageOnly
+        button.toolTip = "More Formatting"
+        button.setAccessibilityLabel("More Formatting")
+        button.widthAnchor.constraint(equalToConstant: 42).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        return button
+    }
+
+    private func menuItem(_ title: String,
+                          action: Selector,
+                          symbol: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.image = toolbarSymbol(named: symbol)
+        return item
+    }
+
+    private func toolbarSymbol(named name: String) -> NSImage? {
+        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        image?.isTemplate = true
+        return image
+    }
+
+    private func configuredToolbarButton(label: String,
+                                         tooltip: String,
                                          action: Selector) -> NSButton {
         let button = NSButton()
         button.bezelStyle = .rounded
@@ -318,7 +502,8 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         button.target = self
         button.action = action
         button.toolTip = tooltip
-        button.setAccessibilityLabel(tooltip)
+        button.setAccessibilityLabel(label)
+        if tooltip != label { button.setAccessibilityHelp(tooltip) }
         button.widthAnchor.constraint(equalToConstant: 38).isActive = true
         button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         return button
@@ -331,6 +516,10 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         return spacer
     }
 
+    @objc private func focusBody() {
+        panel.makeFirstResponder(textView)
+    }
+
     @objc private func cancel() {
         finish(with: nil)
     }
@@ -339,16 +528,167 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         let text = textView.string
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-        let shouldSaveRichText = item.type == .richText || appliedRichFormatting
         let range = NSRange(location: 0, length: textView.textStorage?.length ?? 0)
+        let shouldSaveRichText = textView.textStorage.map {
+            RichTextFormatting.hasMeaningfulFormatting($0)
+        } ?? false
         let richTextData = shouldSaveRichText ? textView.rtf(from: range) : nil
-        finish(with: .text(text, richTextData: richTextData))
+        let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bodyChanged = textView.textStorage.map { !initialBody.isEqual(to: $0) } ?? false
+        finish(with: .text(text, richTextData: richTextData,
+                           title: title.isEmpty ? nil : title,
+                           bodyChanged: bodyChanged))
     }
 
     @objc private func showWritingTools() {
         guard #available(macOS 15.2, *), NSWritingToolsCoordinator.isWritingToolsAvailable else { return }
         panel.makeFirstResponder(textView)
         textView.showWritingTools(nil)
+    }
+
+    @objc private func showFontPanel() {
+        panel.makeFirstResponder(textView)
+        let manager = NSFontManager.shared
+        guard let fontPanel = manager.fontPanel(true) else { return }
+        if fontPanelOriginalLevel == nil {
+            fontPanelOriginalLevel = fontPanel.level
+            fontPanelOriginalWorksWhenModal = fontPanel.worksWhenModal
+            fontManagerOriginalTarget = manager.target as AnyObject?
+            fontManagerOriginalAction = manager.action
+        }
+        synchronizeFontPanel()
+        fontPanel.worksWhenModal = true
+        fontPanel.level = NSWindow.Level(rawValue: panel.level.rawValue + 1)
+        fontPanel.orderFront(nil)
+    }
+
+    @objc private func changeFont(_ manager: NSFontManager) {
+        applyFontTransform { manager.convert($0) }
+    }
+
+    @objc private func showTextColorPanel() {
+        showColorPanel(for: .text)
+    }
+
+    @objc private func showHighlightColorPanel() {
+        showColorPanel(for: .highlight)
+    }
+
+    private func showColorPanel(for target: ColorTarget) {
+        panel.makeFirstResponder(textView)
+        colorTarget = target
+        let colorPanel = NSColorPanel.shared
+        if colorPanelOriginalLevel == nil {
+            colorPanelOriginalLevel = colorPanel.level
+            colorPanelOriginalWorksWhenModal = colorPanel.worksWhenModal
+            colorPanelOriginalShowsAlpha = colorPanel.showsAlpha
+        }
+        // Assigning `color` sends the shared panel's current action. Detach
+        // first so merely opening the picker never flattens the selection to
+        // its first color (or applies the default highlight).
+        synchronizeColorPanel()
+        colorPanel.showsAlpha = true
+        colorPanel.worksWhenModal = true
+        colorPanel.level = NSWindow.Level(rawValue: panel.level.rawValue + 1)
+        colorPanel.orderFront(nil)
+    }
+
+    @objc private func changeColor(_ sender: NSColorPanel) {
+        applySelectedAttribute(colorTarget.attribute, value: sender.color, restoreEditorFocus: false)
+    }
+
+    @objc private func increaseFontSize() {
+        resizeFont(by: 1)
+    }
+
+    @objc private func decreaseFontSize() {
+        resizeFont(by: -1)
+    }
+
+    @objc private func resetFontSize() {
+        applyFontTransform {
+            NSFontManager.shared.convert($0, toSize: RichTextFormatting.defaultFontSize)
+        }
+    }
+
+    private func resizeFont(by delta: CGFloat) {
+        applyFontTransform { font in
+            let size = min(288, max(6, font.pointSize + delta))
+            return NSFontManager.shared.convert(font, toSize: size)
+        }
+    }
+
+    @objc private func alignLeft() { applyAlignment(.left) }
+    @objc private func alignCenter() { applyAlignment(.center) }
+    @objc private func alignRight() { applyAlignment(.right) }
+    @objc private func alignJustified() { applyAlignment(.justified) }
+
+    private func applyAlignment(_ alignment: NSTextAlignment) {
+        guard let storage = textView.textStorage else { return }
+        let selection = textView.selectedRange()
+        if storage.length == 0 {
+            applyTypingAlignment(alignment)
+            return
+        }
+
+        let paragraphRange = RichTextFormatting.paragraphRange(for: selection, in: storage)
+        // A caret immediately after a trailing newline belongs to a real but
+        // empty paragraph. It has no storage range yet, so configure the
+        // typing paragraph style that its future characters will inherit.
+        guard paragraphRange.length > 0 else {
+            applyTypingAlignment(alignment)
+            return
+        }
+        mutateStorage(in: paragraphRange) { storage, _ in
+            RichTextFormatting.setAlignment(alignment, in: storage, selection: selection)
+        }
+        textView.setSelectedRange(selection)
+    }
+
+    private func applyTypingAlignment(_ alignment: NSTextAlignment) {
+        var attributes = textView.typingAttributes
+        let style = ((attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy()
+                     as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        style.alignment = alignment
+        attributes[.paragraphStyle] = style
+        textView.typingAttributes = attributes
+        updateFormattingControls()
+        panel.makeFirstResponder(textView)
+    }
+
+    @objc private func removeHighlight() {
+        removeSelectedAttribute(.backgroundColor)
+    }
+
+    @objc private func clearFormatting() {
+        guard let storage = textView.textStorage else { return }
+        let selection = textView.selectedRange()
+        guard storage.length > 0 else {
+            textView.typingAttributes = [
+                .font: RichTextFormatting.defaultFont,
+                .foregroundColor: RichTextFormatting.defaultTextColor
+            ]
+            updateFormattingControls()
+            panel.makeFirstResponder(textView)
+            return
+        }
+
+        // With no selection, clearing the entire body provides an intentional
+        // one-click escape from copied Terminal/web styling. A nonempty
+        // selection remains precisely scoped.
+        let target = selection.length > 0
+            ? selection
+            : NSRange(location: 0, length: storage.length)
+        mutateStorage(in: target) { storage, range in
+            RichTextFormatting.clear(in: storage, range: range)
+        }
+        if selection.length == 0 {
+            textView.typingAttributes = [
+                .font: RichTextFormatting.defaultFont,
+                .foregroundColor: RichTextFormatting.defaultTextColor
+            ]
+        }
+        textView.setSelectedRange(selection)
     }
 
     @objc private func toggleBold() {
@@ -369,69 +709,200 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
 
     private func toggleFontTrait(_ trait: NSFontTraitMask) {
         let range = textView.selectedRange()
-        let currentFont = font(at: range.location)
-        let isEnabled = NSFontManager.shared.traits(of: currentFont).contains(trait)
-        let transform: (NSFont) -> NSFont = { font in
-            isEnabled
+        if range.length == 0 {
+            var attributes = textView.typingAttributes
+            let font = (attributes[.font] as? NSFont) ?? RichTextFormatting.defaultFont
+            let isEnabled = NSFontManager.shared.traits(of: font).contains(trait)
+            attributes[.font] = isEnabled
                 ? NSFontManager.shared.convert(font, toNotHaveTrait: trait)
                 : NSFontManager.shared.convert(font, toHaveTrait: trait)
+            textView.typingAttributes = attributes
+            updateFormattingControls()
+            panel.makeFirstResponder(textView)
+            return
         }
-
-        applyAttribute(.font, range: range, transform: transform)
+        mutateStorage(in: range) { storage, safeRange in
+            RichTextFormatting.toggleFontTrait(trait, in: storage, range: safeRange)
+        }
     }
 
     private func toggleDecoration(_ key: NSAttributedString.Key, enabledValue: Int) {
         let range = textView.selectedRange()
-        let current = decorationValue(for: key, at: range.location)
-        let target = current == 0 ? enabledValue : 0
-
         if range.length == 0 {
             var attributes = textView.typingAttributes
-            attributes[key] = target
-            textView.typingAttributes = attributes
-        } else {
-            textView.textStorage?.addAttribute(key, value: target, range: range)
-        }
-        appliedRichFormatting = true
-        panel.makeFirstResponder(textView)
-    }
-
-    private func applyAttribute(_ key: NSAttributedString.Key,
-                                range: NSRange,
-                                transform: (NSFont) -> NSFont) {
-        if range.length == 0 {
-            var attributes = textView.typingAttributes
-            let font = (attributes[key] as? NSFont) ?? textView.font ?? .systemFont(ofSize: 17)
-            attributes[key] = transform(font)
-            textView.typingAttributes = attributes
-        } else if let storage = textView.textStorage {
-            storage.beginEditing()
-            storage.enumerateAttribute(key, in: range, options: []) { value, subrange, _ in
-                let font = (value as? NSFont) ?? self.textView.font ?? .systemFont(ofSize: 17)
-                storage.addAttribute(key, value: transform(font), range: subrange)
+            if RichTextFormatting.integerValue(attributes[key]) == 0 {
+                attributes[key] = enabledValue
+            } else {
+                attributes.removeValue(forKey: key)
             }
-            storage.endEditing()
+            textView.typingAttributes = attributes
+            updateFormattingControls()
+            panel.makeFirstResponder(textView)
+            return
         }
-        appliedRichFormatting = true
-        panel.makeFirstResponder(textView)
+        mutateStorage(in: range) { storage, safeRange in
+            RichTextFormatting.toggleDecoration(key, enabledValue: enabledValue,
+                                                in: storage, range: safeRange)
+        }
     }
 
-    private func font(at location: Int) -> NSFont {
-        guard let storage = textView.textStorage, storage.length > 0 else {
-            return (textView.typingAttributes[.font] as? NSFont) ?? textView.font ?? .systemFont(ofSize: 17)
+    private func applyFontTransform(_ transform: @escaping (NSFont) -> NSFont) {
+        let range = textView.selectedRange()
+        if range.length == 0 {
+            var attributes = textView.typingAttributes
+            let font = (attributes[.font] as? NSFont) ?? RichTextFormatting.defaultFont
+            attributes[.font] = transform(font)
+            textView.typingAttributes = attributes
+            updateFormattingControls()
+            panel.makeFirstResponder(textView)
+            return
         }
-        let safeLocation = min(max(location, 0), storage.length - 1)
-        return (storage.attribute(.font, at: safeLocation, effectiveRange: nil) as? NSFont)
-            ?? textView.font
-            ?? .systemFont(ofSize: 17)
+        mutateStorage(in: range) { storage, safeRange in
+            RichTextFormatting.transformFonts(in: storage, range: safeRange,
+                                              transform: transform)
+        }
     }
 
-    private func decorationValue(for key: NSAttributedString.Key, at location: Int) -> Int {
-        guard let storage = textView.textStorage, storage.length > 0 else {
-            return textView.typingAttributes[key] as? Int ?? 0
+    private func applySelectedAttribute(_ key: NSAttributedString.Key,
+                                        value: Any,
+                                        restoreEditorFocus: Bool = true) {
+        let range = textView.selectedRange()
+        if range.length == 0 {
+            var attributes = textView.typingAttributes
+            attributes[key] = value
+            textView.typingAttributes = attributes
+            updateFormattingControls()
+            if restoreEditorFocus { panel.makeFirstResponder(textView) }
+            return
         }
-        let safeLocation = min(max(location, 0), storage.length - 1)
-        return storage.attribute(key, at: safeLocation, effectiveRange: nil) as? Int ?? 0
+        mutateStorage(in: range, restoreEditorFocus: restoreEditorFocus) { storage, safeRange in
+            RichTextFormatting.setAttribute(key, value: value, in: storage, range: safeRange)
+        }
+    }
+
+    private func removeSelectedAttribute(_ key: NSAttributedString.Key) {
+        let range = textView.selectedRange()
+        if range.length == 0 {
+            var attributes = textView.typingAttributes
+            attributes.removeValue(forKey: key)
+            textView.typingAttributes = attributes
+            updateFormattingControls()
+            panel.makeFirstResponder(textView)
+            return
+        }
+        mutateStorage(in: range) { storage, safeRange in
+            RichTextFormatting.removeAttribute(key, in: storage, range: safeRange)
+        }
+    }
+
+    private func mutateStorage(in range: NSRange,
+                               restoreEditorFocus: Bool = true,
+                               mutation: (NSMutableAttributedString, NSRange) -> Void) {
+        guard let storage = textView.textStorage else { return }
+        let safeRange = RichTextFormatting.clampedRange(range, length: storage.length)
+        guard safeRange.length > 0,
+              textView.shouldChangeText(in: safeRange, replacementString: nil) else { return }
+        mutation(storage, safeRange)
+        textView.didChangeText()
+        updateFormattingControls()
+        if restoreEditorFocus { panel.makeFirstResponder(textView) }
+    }
+
+    private func currentFont() -> NSFont {
+        let attributes = textView.typingAttributes
+        if textView.selectedRange().length == 0,
+           let font = attributes[.font] as? NSFont { return font }
+        guard let storage = textView.textStorage else { return RichTextFormatting.defaultFont }
+        return RichTextFormatting.font(at: textView.selectedRange().location, in: storage)
+    }
+
+    private func currentColor(for target: ColorTarget) -> NSColor {
+        let range = textView.selectedRange()
+        if range.length == 0,
+           let color = textView.typingAttributes[target.attribute] as? NSColor { return color }
+        if let storage = textView.textStorage, storage.length > 0 {
+            let location = min(max(range.location, 0), storage.length - 1)
+            if let color = storage.attribute(target.attribute, at: location,
+                                             effectiveRange: nil) as? NSColor { return color }
+        }
+        switch target {
+        case .text: return RichTextFormatting.defaultTextColor
+        case .highlight: return .yellow.withAlphaComponent(0.45)
+        }
+    }
+
+    private func updateFormattingControls() {
+        defer { synchronizeOpenFormattingPanels() }
+        let range = textView.selectedRange()
+        guard let storage = textView.textStorage else { return }
+        if range.length == 0 {
+            let attributes = textView.typingAttributes
+            let font = (attributes[.font] as? NSFont) ?? RichTextFormatting.defaultFont
+            update(button: boldButton,
+                   state: NSFontManager.shared.traits(of: font).contains(.boldFontMask) ? .on : .off)
+            update(button: italicButton,
+                   state: NSFontManager.shared.traits(of: font).contains(.italicFontMask) ? .on : .off)
+            update(button: underlineButton,
+                   state: RichTextFormatting.integerValue(attributes[.underlineStyle]) == 0 ? .off : .on)
+            update(button: strikethroughButton,
+                   state: RichTextFormatting.integerValue(attributes[.strikethroughStyle]) == 0 ? .off : .on)
+            return
+        }
+        update(button: boldButton,
+               state: RichTextFormatting.fontTraitState(.boldFontMask, in: storage, range: range))
+        update(button: italicButton,
+               state: RichTextFormatting.fontTraitState(.italicFontMask, in: storage, range: range))
+        update(button: underlineButton,
+               state: RichTextFormatting.decorationState(.underlineStyle, in: storage, range: range))
+        update(button: strikethroughButton,
+               state: RichTextFormatting.decorationState(.strikethroughStyle, in: storage, range: range))
+    }
+
+    private func update(button: NSButton?, state: RichTextFormatting.UniformState) {
+        guard let button else { return }
+        button.allowsMixedState = true
+        switch state {
+        case .off: button.state = .off
+        case .on: button.state = .on
+        case .mixed: button.state = .mixed
+        }
+    }
+
+    private func synchronizeOpenFormattingPanels() {
+        if fontPanelOriginalLevel != nil,
+           NSFontManager.shared.fontPanel(false)?.isVisible == true {
+            synchronizeFontPanel()
+        }
+        if colorPanelOriginalLevel != nil,
+           NSColorPanel.sharedColorPanelExists,
+           NSColorPanel.shared.isVisible {
+            synchronizeColorPanel()
+        }
+    }
+
+    private func synchronizeFontPanel() {
+        let manager = NSFontManager.shared
+        let range = textView.selectedRange()
+        // Keep programmatic synchronization from invoking either this
+        // editor's action or whichever target owned the shared manager first.
+        manager.target = nil
+        manager.setSelectedFont(currentFont(), isMultiple: range.length > 0
+            && textView.textStorage.map {
+                RichTextFormatting.hasMultipleFonts(in: $0, range: range)
+            } == true)
+        manager.target = self
+        manager.action = #selector(changeFont(_:))
+    }
+
+    private func synchronizeColorPanel() {
+        let colorPanel = NSColorPanel.shared
+        // `color` sends the configured action, so synchronization must be
+        // inert. Reattach only after the visible color is current.
+        colorPanel.setTarget(nil)
+        colorPanel.setAction(nil)
+        colorPanel.color = currentColor(for: colorTarget)
+        colorPanel.setTarget(self)
+        colorPanel.setAction(#selector(changeColor(_:)))
     }
 
     private func updateStats() {
@@ -459,9 +930,49 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
     }
 
     private func finish(with value: ClipEditor.Edit?) {
+        closeFormattingPanels()
         result = value
         panel.orderOut(nil)
         NSApp.stopModal()
+    }
+
+    private func closeFormattingPanels() {
+        let fontManager = NSFontManager.shared
+        if let originalLevel = fontPanelOriginalLevel,
+           let fontPanel = fontManager.fontPanel(false) {
+            fontManager.target = fontManagerOriginalTarget
+            if let originalAction = fontManagerOriginalAction {
+                fontManager.action = originalAction
+            }
+            fontPanel.orderOut(nil)
+            fontPanel.level = originalLevel
+            if let originalWorksWhenModal = fontPanelOriginalWorksWhenModal {
+                fontPanel.worksWhenModal = originalWorksWhenModal
+            }
+        }
+        fontPanelOriginalLevel = nil
+        fontPanelOriginalWorksWhenModal = nil
+        fontManagerOriginalTarget = nil
+        fontManagerOriginalAction = nil
+
+        if let originalLevel = colorPanelOriginalLevel {
+            // Checking the captured state avoids creating the process-global
+            // color panel during ordinary editor sessions that never used it.
+            let colorPanel = NSColorPanel.shared
+            colorPanel.setTarget(nil)
+            colorPanel.setAction(nil)
+            colorPanel.orderOut(nil)
+            colorPanel.level = originalLevel
+            if let originalWorksWhenModal = colorPanelOriginalWorksWhenModal {
+                colorPanel.worksWhenModal = originalWorksWhenModal
+            }
+            if let originalShowsAlpha = colorPanelOriginalShowsAlpha {
+                colorPanel.showsAlpha = originalShowsAlpha
+            }
+        }
+        colorPanelOriginalLevel = nil
+        colorPanelOriginalWorksWhenModal = nil
+        colorPanelOriginalShowsAlpha = nil
     }
 }
 

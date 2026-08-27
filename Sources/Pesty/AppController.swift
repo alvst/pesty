@@ -42,6 +42,11 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     var suppressAutoHide = false
 
+    /// True for as long as the clip editor owns the screen. Editing suppresses
+    /// auto-hide so the bar survives the editor taking focus, but the bar must
+    /// still get out of the way if the user leaves for another app entirely.
+    private var isEditorOpen = false
+
     /// The editor is an activating panel, while the Paste Bar deliberately is
     /// not. Retain the original app so closing the editor restores its input
     /// focus without dismissing the still-visible bar.
@@ -55,6 +60,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        installMainMenu()
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appActivated(_:)),
@@ -124,7 +130,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             // Command-Tab and app switching do not reliably make our borderless
             // panel resign key. Treat activation of another app as an explicit
             // dismissal so the bar never stays above the newly active app.
-            if barController?.window?.isVisible == true, !suppressAutoHide {
+            // While the editor is open, auto-hide is suppressed on purpose —
+            // but that suppression is about the editor's own focus, not about
+            // the user switching to a different app. Leaving for another app
+            // should still drop the bar.
+            if barController?.window?.isVisible == true, !suppressAutoHide || isEditorOpen {
                 hideBar()
             }
         }
@@ -431,27 +441,67 @@ final class AppController: NSObject, NSApplicationDelegate {
         suppressAutoHide = true
         if resumeBarKeys { stopKeyMonitor() }
 
+        isEditorOpen = true
+        // The editor supersedes Quick Look. Dismiss it only after marking the
+        // editor open so its normal close callback does not hand focus back to
+        // the previous app in the middle of this window transition.
+        QuickLookService.shared.dismiss()
         let edit = ClipEditor.run(for: item, launchWritingTools: launchWritingTools)
-        guard let edit else {
-            restoreFocusAfterEditing(to: focusTarget,
-                                     restoreAutoHide: wasSuppressingAutoHide,
-                                     resumeBarKeys: resumeBarKeys)
-            return
+        isEditorOpen = false
+
+        // Cancelling or dismissing ends the session the bar was opened for,
+        // so the bar leaves with the editor. Saving does not: the edit lands
+        // on a card the user is still looking at, so the bar stays up.
+        //
+        // This is a `defer` rather than a step inside the focus-restore
+        // callback on purpose. That callback is only reached by way of an
+        // app-activation notification, and every path to it can bail early —
+        // no app to return to, activation refused, the restore already
+        // consumed. A dismissal the user explicitly asked for must not hinge
+        // on one of those notifications arriving. `defer` runs on every exit
+        // below, including the guards.
+        //
+        // Not gated on `hideOnClickOutside`: that setting is about focus
+        // drifting away from the bar, whereas abandoning the editor is a
+        // deliberate end to the interaction.
+        let dismissesBar = resumeBarKeys && edit == nil
+        defer {
+            if dismissesBar {
+                suppressAutoHide = wasSuppressingAutoHide
+                editorFocusRestore = nil
+                hideBar()
+                // `hideBar` yields activation only when no other Pesty window
+                // holds key, and the just-closed editor panel can still be key
+                // for an instant. Hand focus back explicitly so dismissing the
+                // bar always lands the user in the app they came from.
+                if let focusTarget, !focusTarget.isTerminated, !focusTarget.isActive,
+                   focusTarget.bundleIdentifier != Bundle.main.bundleIdentifier {
+                    NSApp.yieldActivation(to: focusTarget)
+                    focusTarget.activate()
+                }
+            } else {
+                restoreFocusAfterEditing(to: focusTarget,
+                                         restoreAutoHide: wasSuppressingAutoHide,
+                                         resumeBarKeys: resumeBarKeys)
+            }
         }
 
-        let changed: Bool
+        guard let edit else { return }
+
+        var changed = false
         switch edit {
-        case let .text(text, richTextData):
-            changed = store.updateTextContent(text, richTextData: richTextData, for: item)
+        case let .text(text, richTextData, title, bodyChanged):
+            if bodyChanged {
+                changed = store.updateTextContent(text, richTextData: richTextData, for: item)
+            }
+            if title != item.customTitle {
+                store.setTitle(title, for: item)
+                changed = true
+            }
         case let .color(hex):
             changed = store.updateColorContent(hex, for: item)
         }
-        guard changed, let updatedItem = store.item(withID: item.id) else {
-            restoreFocusAfterEditing(to: focusTarget,
-                                     restoreAutoHide: wasSuppressingAutoHide,
-                                     resumeBarKeys: resumeBarKeys)
-            return
-        }
+        guard changed, let updatedItem = store.item(withID: item.id) else { return }
 
         // Keep the system clipboard in sync, without treating an in-place edit
         // as a new capture or reordering the item's history position.
@@ -462,10 +512,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         if previewedItemID == item.id, previewWindow?.isVisible == true {
             showPreview(for: updatedItem)
         }
-
-        restoreFocusAfterEditing(to: focusTarget,
-                                 restoreAutoHide: wasSuppressingAutoHide,
-                                 resumeBarKeys: resumeBarKeys)
     }
 
     private func restoreFocusAfterEditing(to target: NSRunningApplication?,
@@ -519,7 +565,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func completeEditorFocusRestore(restoreAutoHide: Bool,
                                             resumeBarKeys: Bool) {
         suppressAutoHide = restoreAutoHide
-        if resumeBarKeys { startKeyMonitor() }
+        if resumeBarKeys {
+            // The editor took key away from the panel. Hand it back the
+            // nonactivating way the bar normally holds it, so a bar left open
+            // after a save responds to arrows and Return straight away.
+            if barController?.isPresented == true { barController?.bringToFront() }
+            startKeyMonitor()
+        }
     }
 
     func showPreview(for item: ClipItem) {
@@ -691,7 +743,9 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// and the bar — if still up — retakes key the nonactivating way, so
     /// arrows and Return work again immediately.
     private func quickLookDidClose() {
-        guard NSApp.isActive else { return }
+        // When Edit dismisses Quick Look, the editor owns focus restoration;
+        // the panel's ordinary handoff would race the new modal window.
+        guard NSApp.isActive, !isEditorOpen else { return }
         suppressAutoHide = true
         yieldActivationToPreviousApp()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
@@ -999,8 +1053,66 @@ final class AppController: NSObject, NSApplicationDelegate {
         win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
         win.isReleasedWhenClosed = false
+        // Same reasoning as the preview window: Settings outlives its first
+        // appearance, so it has to come to the user's Space rather than
+        // sending the user to it.
+        win.collectionBehavior.insert(.moveToActiveSpace)
         settingsWindow = win
         win.makeKeyAndOrderFront(nil)
+    }
+
+    /// Pesty is an `LSUIElement` app, so this menu is never drawn — but
+    /// `NSApplication` matches ⌘-key equivalents against the main menu on its
+    /// way to the first responder, and with no main menu at all there is
+    /// nothing to match. That left every standard text command dead in the
+    /// clip editor, the bar's search field, and Pinboard rename: no Undo, no
+    /// Cut/Copy/Paste, no Select All, no Find.
+    ///
+    /// Only Edit is installed. An application menu would put ⌘Q and ⌘W in
+    /// front of the bar's own key handling, which is not worth reintroducing
+    /// for a menu bar the user cannot see.
+    private func installMainMenu() {
+        let edit = NSMenu(title: "Edit")
+
+        func add(_ title: String, _ action: String, _ key: String,
+                 _ modifiers: NSEvent.ModifierFlags = .command, tag: Int = 0) {
+            let item = NSMenuItem(title: title, action: Selector((action)), keyEquivalent: key)
+            item.keyEquivalentModifierMask = modifiers
+            item.tag = tag
+            // A nil target sends the action down the responder chain, so
+            // whichever text view or field is editing gets it.
+            item.target = nil
+            edit.addItem(item)
+        }
+
+        add("Undo", "undo:", "z")
+        add("Redo", "redo:", "z", [.command, .shift])
+        edit.addItem(.separator())
+        add("Cut", "cut:", "x")
+        add("Copy", "copy:", "c")
+        add("Paste", "paste:", "v")
+        add("Paste and Match Style", "pasteAsPlainText:", "v", [.command, .option, .shift])
+        add("Delete", "delete:", "")
+        add("Select All", "selectAll:", "a")
+        edit.addItem(.separator())
+        add("Find…", "performTextFinderAction:", "f",
+            tag: NSTextFinder.Action.showFindInterface.rawValue)
+        add("Find Next", "performTextFinderAction:", "g",
+            tag: NSTextFinder.Action.nextMatch.rawValue)
+        add("Find Previous", "performTextFinderAction:", "g", [.command, .shift],
+            tag: NSTextFinder.Action.previousMatch.rawValue)
+
+        let editItem = NSMenuItem()
+        editItem.submenu = edit
+
+        let main = NSMenu()
+        // AppKit reserves the first submenu for the application menu. Leaving
+        // it empty keeps Edit's key equivalents working without claiming any.
+        let appItem = NSMenuItem()
+        appItem.submenu = NSMenu()
+        main.addItem(appItem)
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     private func startKeyMonitor() {

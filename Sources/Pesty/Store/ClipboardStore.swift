@@ -472,7 +472,12 @@ final class ClipboardStore {
         scheduleSave()
     }
 
-    func setTitle(_ title: String, for item: ClipItem) {
+    /// `nil` or an all-whitespace title clears the card's name rather than
+    /// storing an empty one, so `displayTitle` falls back to the contents and
+    /// search never matches on a blank.
+    func setTitle(_ title: String?, for item: ClipItem) {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title: String? = (trimmed?.isEmpty ?? true) ? nil : trimmed
         var changed = false
         if let i = history.firstIndex(where: { $0.id == item.id }),
            history[i].customTitle != title {
@@ -515,6 +520,10 @@ final class ClipboardStore {
             updated.type = type
             updated.text = text
             updated.rtfData = richTextData
+            // Editor-produced RTF is now the authoritative rich payload. The
+            // captured HTML described the pre-edit contents, and keeping it
+            // would make Clean/Markdown paste prefer stale formatting/text.
+            updated.htmlData = nil
             updated.colorHex = nil
             return updated
         }
