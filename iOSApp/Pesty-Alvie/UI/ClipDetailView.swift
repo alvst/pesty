@@ -52,13 +52,13 @@ struct ClipDetailView: View {
                                     .font(.headline)
                                 ForEach(store.boards) { board in
                                     Button {
-                                        store.add(clip, to: board)
+                                        store.toggle(clip, in: board)
                                     } label: {
                                         HStack {
                                             Circle().fill(board.color).frame(width: 10, height: 10)
                                             Text(board.name)
                                             Spacer()
-                                            if board.clipIDs.contains(clip.id) {
+                                            if store.contains(clip, in: board) {
                                                 Image(systemName: "checkmark")
                                                     .foregroundStyle(.secondary)
                                             } else {
@@ -87,7 +87,14 @@ struct ClipDetailView: View {
                     .background(.ultraThinMaterial)
                 }
                 .toolbar {
-                    if let text = clip.copyableText {
+                    if clip.kind == .image,
+                       let imageURL = LocalAssetPersistence.url(for: clip.imageAssetID) {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            ShareLink(item: imageURL) {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                        }
+                    } else if let text = clip.copyableText {
                         ToolbarItem(placement: .topBarTrailing) {
                             ShareLink(item: text) {
                                 Image(systemName: "square.and.arrow.up")
@@ -127,8 +134,18 @@ private struct ClipPreview: View {
                             .font(.title2.monospaced().weight(.bold))
                             .foregroundStyle(color.isLight ? .black : .white)
                     }
-            } else if clip.kind == .image && clip.imageAssetID == nil {
-                UnavailablePayloadPreview(symbol: "photo", text: "Image asset pending sync")
+            } else if clip.kind == .image,
+                      let url = LocalAssetPersistence.url(for: clip.imageAssetID),
+                      let image = UIImage(contentsOfFile: url.path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 420)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .accessibilityLabel(clip.displayTitle)
+            } else if clip.kind == .image {
+                UnavailablePayloadPreview(symbol: "photo", text: "Image asset unavailable on this device")
             } else if clip.kind == .file && clip.fileNames.isEmpty {
                 UnavailablePayloadPreview(symbol: "doc", text: "File is available on its source device")
             } else {

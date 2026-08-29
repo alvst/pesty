@@ -52,9 +52,18 @@ struct LibraryView: View {
                                             Label("Copy", systemImage: "doc.on.doc")
                                         }
                                         if !store.boards.isEmpty {
-                                            Menu("Add to Pinboard") {
+                                            Menu("Pinboards") {
                                                 ForEach(store.boards) { board in
-                                                    Button(board.name) { store.add(clip, to: board) }
+                                                    Button {
+                                                        store.toggle(clip, in: board)
+                                                    } label: {
+                                                        Label(
+                                                            board.name,
+                                                            systemImage: store.contains(clip, in: board)
+                                                                ? "checkmark"
+                                                                : "plus"
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -153,7 +162,7 @@ private struct EmptyLibraryView: View {
         ContentUnavailableView {
             Label("Your Pesty-Alvie library is empty", systemImage: "doc.on.clipboard")
         } description: {
-            Text("Add a clip here, or import your existing Pesty-Alvie store from iCloud Drive. Live Mac sync will arrive when the Mac app adopts the shared sync service.")
+            Text("Add a clip here, import an existing Pesty-Alvie store, or let iCloud sync it from your Mac.")
         } actions: {
             VStack(spacing: 10) {
                 Button("Add a clip", action: addClip)
@@ -246,7 +255,7 @@ struct SyncStatusBanner: View {
                 ProgressView().controlSize(.small)
             } else {
                 Image(systemName: status.symbol)
-                    .foregroundStyle(status == .readyForMacBridge ? .indigo : .secondary)
+                    .foregroundStyle(status.isReady ? .indigo : .secondary)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(status.title)

@@ -9,25 +9,23 @@ final class LibraryStore {
     private(set) var syncStatus: SyncStatus = .checking
     private(set) var lastCopiedClipID: UUID?
     private(set) var undoableDeletedClip: PestyClip?
-    private(set) var undoableDeletedBoard: PestyBoard?
     var errorMessage: String?
 
-    private let syncChecker: any LibrarySyncing
+    private let syncService: any LibrarySyncing
     private let currentDate: () -> Date
     @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
 
     init(
         library: PestyLibrary? = nil,
-        syncChecker: any LibrarySyncing = CloudKitReadinessChecker(),
+        syncService: (any LibrarySyncing)? = nil,
         currentDate: @escaping () -> Date = { .now }
     ) {
         let initialLibrary = library ?? LocalLibraryPersistence.load()
         let now = currentDate()
         self.library = initialLibrary
-        self.syncChecker = syncChecker
+        self.syncService = syncService ?? CloudSyncService()
         self.currentDate = currentDate
         self.undoableDeletedClip = initialLibrary.undoableDeletedClip(at: now)
-        self.undoableDeletedBoard = initialLibrary.undoableDeletedBoard(at: now)
     }
 
     deinit {
@@ -39,12 +37,11 @@ final class LibraryStore {
 
     func start() {
         refreshUndoAvailability()
-        Task { await refreshSyncStatus() }
+        syncService.start(target: self)
     }
 
     func refreshSyncStatus() async {
-        syncStatus = .checking
-        syncStatus = await syncChecker.checkAvailability()
+        syncService.fetchNow()
     }
 
     func clip(id: UUID) -> PestyClip? { library.clip(id: id) }
@@ -69,6 +66,28 @@ final class LibraryStore {
         )
         library.upsert(clip)
         persist()
+    }
+
+    @discardableResult
+    func addImageClip(data: Data, title: String? = nil) -> Bool {
+        do {
+            let stored = try LocalAssetPersistence.storeImageData(data)
+            let now = Date.now
+            library.upsert(PestyClip(
+                kind: .image,
+                imageAssetID: stored.name,
+                imageHash: stored.hash,
+                sourceDeviceName: UIDevice.current.name,
+                customTitle: title?.trimmingCharacters(in: .whitespacesAndNewlines),
+                capturedAt: now,
+                updatedAt: now
+            ))
+            persist()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     func update(_ clip: PestyClip) {
@@ -104,7 +123,12 @@ final class LibraryStore {
     func addBoard(name: String, colorHex: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        library.upsert(PestyBoard(name: trimmed, colorHex: colorHex))
+        let nextSortIndex = (library.activeBoards.map(\.sortIndex).max() ?? -1) + 1
+        library.upsert(PestyBoard(
+            name: trimmed,
+            colorHex: colorHex,
+            sortIndex: nextSortIndex
+        ))
         persist()
     }
 
@@ -112,25 +136,32 @@ final class LibraryStore {
         library.deleteBoard(id: id, at: currentDate())
         persist()
         refreshUndoAvailability()
-    }
-
-    func undoBoardDeletion() {
-        guard library.undoMostRecentBoardDeletion(at: currentDate()) else {
-            refreshUndoAvailability()
-            return
-        }
-        persist()
-        refreshUndoAvailability()
+        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
     }
 
     func add(_ clip: PestyClip, to board: PestyBoard) {
-        library.add(clipID: clip.id, to: board.id)
+        _ = library.add(clipID: clip.id, to: board.id)
         persist()
+    }
+
+    func contains(_ clip: PestyClip, in board: PestyBoard) -> Bool {
+        library.containsEquivalent(clip, in: board)
     }
 
     func remove(_ clip: PestyClip, from board: PestyBoard) {
         library.remove(clipID: clip.id, from: board.id)
         persist()
+        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
+    }
+
+    func toggle(_ clip: PestyClip, in board: PestyBoard) {
+        if let ownedCopy = library.clips(in: board).first(where: { $0.hasSameContent(as: clip) }) {
+            library.remove(clipID: ownedCopy.id, from: board.id)
+        } else {
+            _ = library.add(clipID: clip.id, to: board.id)
+        }
+        persist()
+        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
     }
 
     func importMacStore(data: Data) {
@@ -150,14 +181,17 @@ final class LibraryStore {
         refreshUndoAvailability()
         do {
             try LocalLibraryPersistence.removeAll()
+            try LocalAssetPersistence.removeAll()
+            syncService.rebuildLocalReplica()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func persist() {
+    private func persist(notifySync: Bool = true) {
         do {
             try LocalLibraryPersistence.save(library)
+            if notifySync { syncService.localLibraryDidChange() }
         } catch {
             errorMessage = "Pesty-Alvie could not save this change. \(error.localizedDescription)"
         }
@@ -165,8 +199,16 @@ final class LibraryStore {
 
     private func refreshUndoAvailability() {
         let now = currentDate()
+        let hadExpiredRecords = library.clips.contains {
+            $0.deletedAt.map { $0.addingTimeInterval(PestyLibrary.deletionUndoInterval) <= now }
+                == true && $0.deletionFinalizedAt == nil
+        }
+        library.finalizeExpiredDeletions(at: now)
         undoableDeletedClip = library.undoableDeletedClip(at: now)
-        undoableDeletedBoard = library.undoableDeletedBoard(at: now)
+        if hadExpiredRecords {
+            persist()
+            LocalAssetPersistence.removeUnreferencedAssets(in: library, at: now)
+        }
         scheduleUndoExpiry(after: now)
     }
 
@@ -175,8 +217,7 @@ final class LibraryStore {
         undoExpiryTask = nil
 
         let expirations = [
-            undoableDeletedClip?.deletedAt?.addingTimeInterval(PestyLibrary.deletionUndoInterval),
-            undoableDeletedBoard?.deletedAt?.addingTimeInterval(PestyLibrary.deletionUndoInterval)
+            undoableDeletedClip?.deletedAt?.addingTimeInterval(PestyLibrary.deletionUndoInterval)
         ].compactMap { $0 }
         guard let expiration = expirations.min() else { return }
 
@@ -193,5 +234,58 @@ final class LibraryStore {
             guard !Task.isCancelled else { return }
             self?.refreshUndoAvailability()
         }
+    }
+}
+
+extension LibraryStore: LibrarySyncTarget {
+    var cloudSyncLibrary: PestyLibrary { library }
+
+    func updateSyncStatus(_ status: SyncStatus) {
+        syncStatus = status
+    }
+
+    func applyRemoteSync(
+        clips decodedClips: [CloudRecordCodec.DecodedClip],
+        boards remoteBoards: [PestyBoard],
+        deletedIDs: [UUID]
+    ) {
+        var remote = PestyLibrary()
+        for board in remoteBoards { remote.upsert(board) }
+
+        for decoded in decodedClips {
+            var clip = decoded.clip
+            if let existing = library.clips.first(where: { $0.id == clip.id }),
+               existing.updatedAt > clip.updatedAt {
+                continue
+            }
+            if let assetURL = decoded.imageAssetURL {
+                do {
+                    let stored = try LocalAssetPersistence.replaceAsset(
+                        from: assetURL,
+                        preferredName: "\(clip.id.uuidString).image"
+                    )
+                    clip.imageAssetID = stored.name
+                    clip.imageHash = clip.imageHash ?? stored.hash
+                } catch {
+                    errorMessage = "An image could not be saved from iCloud. \(error.localizedDescription)"
+                    clip.imageAssetID = nil
+                }
+            }
+            remote.upsert(clip)
+            if let boardID = clip.containerID {
+                var board = remote.board(id: boardID)
+                    ?? library.board(id: boardID)
+                    ?? PestyBoard(id: boardID, name: "Pinboard")
+                if !board.clipIDs.contains(clip.id) { board.clipIDs.append(clip.id) }
+                board.updatedAt = max(board.updatedAt, clip.updatedAt)
+                remote.upsert(board)
+            }
+        }
+
+        library = library.merged(with: remote)
+        for id in deletedIDs { library.applyRemoteDeletion(id: id, at: currentDate()) }
+        persist(notifySync: false)
+        refreshUndoAvailability()
+        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
     }
 }

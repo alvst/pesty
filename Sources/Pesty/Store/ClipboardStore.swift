@@ -1,6 +1,10 @@
 import AppKit
 import Observation
 
+extension Notification.Name {
+    static let pestyStoreDidSave = Notification.Name("PestyStoreDidSave")
+}
+
 enum BarSource: Equatable {
     case history
     case pasteStack
@@ -58,6 +62,7 @@ final class ClipboardStore {
     private var saveWorkItem: DispatchWorkItem?
     private var undoExpirationWorkItem: DispatchWorkItem?
     private var deletionLedger = ClipDeletionLedger()
+    private(set) var cloudRetentionExcludedIDs: Set<UUID> = []
 
     private var fileWatch: DispatchSourceFileSystemObject?
     private var lastSavedData: Data?
@@ -96,6 +101,7 @@ final class ClipboardStore {
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         storeURL = base.appendingPathComponent("store.json")
         prepareDirectories()
+        cloudRetentionExcludedIDs = loadCloudRetentionExclusions()
         let tombstonesApplied = load()
         let historyChanged = applyHistoryPolicyNow()
         let deletionsChanged = refreshDeletionState(at: .now)
@@ -194,6 +200,9 @@ final class ClipboardStore {
 
     @discardableResult
     func addCaptured(_ item: ClipItem) -> ClipItem {
+        if cloudRetentionExcludedIDs.remove(item.id) != nil {
+            saveCloudRetentionExclusions()
+        }
         let itemRestoration = deletionLedger.restoreItemIfNeeded(item.id, at: item.createdAt)
         if itemRestoration != nil { _ = refreshDeletionState(at: item.createdAt) }
         defer {
@@ -205,6 +214,8 @@ final class ClipboardStore {
             if item.imageFileName != history[idx].imageFileName { deleteImageFile(item) }
             var existing = history.remove(at: idx)
             existing.createdAt = item.createdAt
+            existing.lastUsedAt = item.createdAt
+            existing.updatedAt = max(item.updatedAt, item.createdAt)
             history.insert(existing, at: 0)
             applyHistoryPolicyNow()
             if source == .history && searchText.isEmpty { selectedID = existing.id }
@@ -229,6 +240,8 @@ final class ClipboardStore {
     func promoteCopiedItem(_ item: ClipItem, at date: Date = .now) -> ClipItem {
         var copied = item
         copied.createdAt = date
+        copied.lastUsedAt = date
+        copied.updatedAt = max(date, copied.updatedAt.addingTimeInterval(0.000_001))
         return addCaptured(copied)
     }
 
@@ -253,6 +266,7 @@ final class ClipboardStore {
         if Settings.shared.pasteStacksFollowHistory {
             PasteSequence.shared.removeHistoryItems(Set(removed.map(\.id)))
         }
+        recordCloudRetentionExclusions(removed.map(\.id))
         for item in removed { deleteImageFile(item) }
         return true
     }
@@ -300,6 +314,11 @@ final class ClipboardStore {
             pinboards[i].prunePins()
         }
         if permanently {
+            deletionLedger.recordRemoteDeletion(
+                id: item.id,
+                removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
+                at: date
+            )
             for deletedItem in payload.allItems { deleteImageFile(deletedItem) }
         } else {
             deletionLedger.recordDeletion(
@@ -336,13 +355,15 @@ final class ClipboardStore {
             || pinboards.contains { $0.items.contains(where: { $0.id == deletion.id }) }
         for placement in deletion.payload.history.sorted(by: { $0.index < $1.index }) {
             guard !history.contains(where: { $0.id == placement.item.id }) else { continue }
+            var restoredItem = placement.item
+            restoredItem.updatedAt = max(date, restoredItem.updatedAt.addingTimeInterval(0.000_001))
             let index = restorationIndex(
                 originalIndex: placement.index,
                 predecessorID: placement.predecessorID,
                 successorID: placement.successorID,
                 in: history
             )
-            history.insert(placement.item, at: index)
+            history.insert(restoredItem, at: index)
             restoredSomewhere = true
         }
         for placement in deletion.payload.pinboards {
@@ -350,13 +371,16 @@ final class ClipboardStore {
                   !pinboards[boardIndex].items.contains(where: { $0.id == placement.item.id }) else {
                 continue
             }
+            var restoredItem = placement.item
+            restoredItem.updatedAt = max(date, restoredItem.updatedAt.addingTimeInterval(0.000_001))
             let index = restorationIndex(
                 originalIndex: placement.index,
                 predecessorID: placement.predecessorID,
                 successorID: placement.successorID,
                 in: pinboards[boardIndex].items
             )
-            pinboards[boardIndex].items.insert(placement.item, at: index)
+            pinboards[boardIndex].items.insert(restoredItem, at: index)
+            pinboards[boardIndex].touch(at: date)
             restoredSomewhere = true
         }
         PasteSequence.shared.restoreHistoryItems(deletion.payload.pasteStackEntries)
@@ -364,7 +388,8 @@ final class ClipboardStore {
 
         // A clip that existed only in a pinboard still needs a destination if
         // that pinboard was deleted during the Undo window.
-        if !restoredSomewhere, let fallback = deletion.payload.allItems.first {
+        if !restoredSomewhere, var fallback = deletion.payload.allItems.first {
+            fallback.updatedAt = max(date, fallback.updatedAt.addingTimeInterval(0.000_001))
             history.insert(fallback, at: 0)
         }
 
@@ -397,10 +422,21 @@ final class ClipboardStore {
 
     func clearHistory() {
         let old = history
+        let finalizedPayloads = deletionLedger.finalizePendingHistoryDeletions(at: .now)
         history.removeAll()
         selectedID = nil
         if Settings.shared.pasteStacksFollowHistory {
             PasteSequence.shared.removeHistoryItems(Set(old.map(\.id)))
+        }
+        for item in old {
+            deletionLedger.recordRemoteDeletion(
+                id: item.id,
+                removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
+                at: .now
+            )
+        }
+        for payload in finalizedPayloads {
+            for item in payload.allItems { deleteImageFile(item) }
         }
         for item in old { deleteImageFile(item) }
         scheduleSave()
@@ -417,7 +453,7 @@ final class ClipboardStore {
 
     @discardableResult
     func addPinboard(name: String, colorHex: String = "#5B8DEF") -> Pinboard {
-        let b = Pinboard(name: name, colorHex: colorHex)
+        let b = Pinboard(name: name, colorHex: colorHex, sortIndex: pinboards.count)
         pinboards.append(b)
         scheduleSave()
         return b
@@ -426,21 +462,35 @@ final class ClipboardStore {
     func renamePinboard(_ id: UUID, to name: String) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         pinboards[i].name = name
+        pinboards[i].touch()
         scheduleSave()
     }
 
     func setPinboardColor(_ id: UUID, to colorHex: String) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         pinboards[i].colorHex = colorHex
+        pinboards[i].touch()
         scheduleSave()
     }
 
     func deletePinboard(_ id: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
+        let finalizedPayloads = deletionLedger.finalizePendingDeletions(inPinboard: id, at: .now)
         if case .pinboard(let cur) = source, cur == id { source = .history }
         let removedItems = pinboards[i].items
+        for item in removedItems {
+            deletionLedger.recordRemoteDeletion(
+                id: item.id,
+                removesFromPasteStacks: false,
+                at: .now
+            )
+        }
         pinboards.remove(at: i)
+        _ = normalizePinboardOrder(touchChanges: true)
         for item in removedItems { deleteImageFile(item) }
+        for payload in finalizedPayloads {
+            for item in payload.allItems { deleteImageFile(item) }
+        }
         scheduleSave()
     }
 
@@ -454,6 +504,7 @@ final class ClipboardStore {
         // `to` is the target's pre-removal index. Inserting at that same index
         // lands after it when dragging right, and before it when dragging left.
         pinboards.insert(moved, at: to)
+        _ = normalizePinboardOrder(touchChanges: true)
         scheduleSave()
     }
 
@@ -468,9 +519,12 @@ final class ClipboardStore {
         let moved = pinboards.remove(at: from)
         guard let targetIndex = pinboards.firstIndex(where: { $0.id == targetID }) else {
             pinboards.insert(moved, at: min(from, pinboards.count))
+            _ = normalizePinboardOrder(touchChanges: true)
+            scheduleSave()
             return
         }
         pinboards.insert(moved, at: targetIndex)
+        _ = normalizePinboardOrder(touchChanges: true)
         scheduleSave()
     }
 
@@ -479,6 +533,7 @@ final class ClipboardStore {
         let to = min(pinboards.count - 1, max(0, from + offset))
         guard from != to else { return }
         pinboards.swapAt(from, to)
+        _ = normalizePinboardOrder(touchChanges: true)
         scheduleSave()
     }
 
@@ -487,6 +542,7 @@ final class ClipboardStore {
               from != pinboards.count - 1 else { return }
         let moved = pinboards.remove(at: from)
         pinboards.append(moved)
+        _ = normalizePinboardOrder(touchChanges: true)
         scheduleSave()
     }
 
@@ -508,6 +564,7 @@ final class ClipboardStore {
         // where it belongs, so it stops being promoted — otherwise it would
         // spring back to the front and look like the drag was ignored.
         pinboards[b].pinnedItemIDs.removeAll { $0 == item.id }
+        pinboards[b].touch()
         scheduleSave()
     }
 
@@ -523,6 +580,7 @@ final class ClipboardStore {
             pinboards[b].pinnedItemIDs.insert(itemID, at: 0)
         }
         pinboards[b].prunePins()
+        pinboards[b].touch()
         scheduleSave()
     }
 
@@ -540,9 +598,10 @@ final class ClipboardStore {
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
         if pinboards[i].items.contains(where: { $0.sameContent(as: item) }) { return }
-        var copy = item
+        var copy = item.copiedWithFreshID()
         if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
         pinboards[i].items.insert(copy, at: 0)
+        pinboards[i].touch()
         scheduleSave()
     }
 
@@ -556,12 +615,18 @@ final class ClipboardStore {
         if let i = history.firstIndex(where: { $0.id == item.id }),
            history[i].customTitle != title {
             history[i].customTitle = title
+            history[i].updatedAt = max(.now, history[i].updatedAt.addingTimeInterval(0.000_001))
             changed = true
         }
         for b in pinboards.indices {
             if let i = pinboards[b].items.firstIndex(where: { $0.id == item.id }),
                pinboards[b].items[i].customTitle != title {
                 pinboards[b].items[i].customTitle = title
+                pinboards[b].items[i].updatedAt = max(
+                    .now,
+                    pinboards[b].items[i].updatedAt.addingTimeInterval(0.000_001)
+                )
+                pinboards[b].touch()
                 changed = true
             }
         }
@@ -624,8 +689,9 @@ final class ClipboardStore {
         var changed = false
 
         if let i = history.firstIndex(where: { $0.id == item.id }) {
-            let updated = transform(history[i])
+            var updated = transform(history[i])
             if updated != history[i] {
+                updated.updatedAt = max(.now, history[i].updatedAt.addingTimeInterval(0.000_001))
                 history[i] = updated
                 changed = true
             }
@@ -634,9 +700,14 @@ final class ClipboardStore {
         for boardIndex in pinboards.indices {
             for itemIndex in pinboards[boardIndex].items.indices
             where pinboards[boardIndex].items[itemIndex].id == item.id {
-                let updated = transform(pinboards[boardIndex].items[itemIndex])
+                var updated = transform(pinboards[boardIndex].items[itemIndex])
                 if updated != pinboards[boardIndex].items[itemIndex] {
+                    updated.updatedAt = max(
+                        .now,
+                        pinboards[boardIndex].items[itemIndex].updatedAt.addingTimeInterval(0.000_001)
+                    )
                     pinboards[boardIndex].items[itemIndex] = updated
+                    pinboards[boardIndex].touch()
                     changed = true
                 }
             }
@@ -707,6 +778,216 @@ final class ClipboardStore {
         } catch { return nil }
     }
 
+    // MARK: - CloudKit bridge (Mac App Store build)
+
+    struct CloudSyncClip {
+        var item: ClipItem
+        var container: String
+    }
+
+    /// Pending five-minute deletions remain visible to the sync engine until
+    /// their payload expires. At that boundary they disappear from this
+    /// projection and CKSyncEngine queues the hard record deletion.
+    var cloudSyncClips: [CloudSyncClip] {
+        var byID: [UUID: CloudSyncClip] = [:]
+        for board in pinboards {
+            for item in board.items {
+                byID[item.id] = CloudSyncClip(item: item, container: board.id.uuidString)
+            }
+        }
+        for item in history where byID[item.id] == nil {
+            byID[item.id] = CloudSyncClip(item: item, container: CKSchema.historyContainerValue)
+        }
+        for record in deletionLedger.records
+        where record.isDeleted && record.finalizedAt == nil {
+            guard let payload = record.payload else { continue }
+            for placement in payload.pinboards where byID[placement.item.id] == nil {
+                byID[placement.item.id] = CloudSyncClip(
+                    item: placement.item,
+                    container: placement.pinboardID.uuidString
+                )
+            }
+            for placement in payload.history where byID[placement.item.id] == nil {
+                byID[placement.item.id] = CloudSyncClip(
+                    item: placement.item,
+                    container: CKSchema.historyContainerValue
+                )
+            }
+        }
+        return Array(byID.values)
+    }
+
+    func applyRemote(
+        clips: [CloudRecordCodec.DecodedClip],
+        boards: [CloudRecordCodec.DecodedBoard],
+        deletedIDs: [UUID],
+        at date: Date = .now
+    ) {
+        guard !clips.isEmpty || !boards.isEmpty || !deletedIDs.isEmpty else { return }
+        var removedAssets: [ClipItem] = []
+
+        // Clips first: a Pinboard record in the same batch can then impose its
+        // authoritative membership order in one pass.
+        for decoded in clips {
+            var item = decoded.item
+            guard deletionLedger.permitsRemotePresence(id: item.id, updatedAt: item.updatedAt),
+                  !Settings.shared.isIgnoringSourceApp(item.sourceBundleID) else { continue }
+            if let source = decoded.imageAssetURL {
+                item = copyRemoteImageAsset(for: item, from: source)
+            }
+            deletionLedger.acceptRemotePresence(id: item.id, at: item.updatedAt)
+
+            if decoded.container == CKSchema.historyContainerValue {
+                removedAssets += removeClipEverywhere(id: item.id)
+                if let duplicateIndex = history.firstIndex(where: { $0.sameContent(as: item) }) {
+                    let duplicate = history[duplicateIndex]
+                    if duplicate.updatedAt > item.updatedAt {
+                        removedAssets.append(item)
+                        continue
+                    }
+                    removedAssets.append(history.remove(at: duplicateIndex))
+                }
+                insertByUsageDate(item, into: &history)
+            } else if let boardID = UUID(uuidString: decoded.container) {
+                removedAssets += removeClipEverywhere(id: item.id)
+                if !pinboards.contains(where: { $0.id == boardID }) {
+                    pinboards.append(Pinboard(
+                        id: boardID,
+                        name: "Pinboard",
+                        items: [],
+                        createdAt: .distantPast,
+                        updatedAt: .distantPast,
+                        sortIndex: Int.max
+                    ))
+                }
+                guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { continue }
+                if let duplicateIndex = pinboards[boardIndex].items.firstIndex(
+                    where: { $0.sameContent(as: item) }
+                ) {
+                    let duplicate = pinboards[boardIndex].items[duplicateIndex]
+                    if duplicate.updatedAt > item.updatedAt {
+                        removedAssets.append(item)
+                        continue
+                    }
+                    removedAssets.append(pinboards[boardIndex].items.remove(at: duplicateIndex))
+                }
+                insertByUsageDate(item, into: &pinboards[boardIndex].items)
+            }
+        }
+
+        for decoded in boards {
+            let remote = decoded.board
+            if let index = pinboards.firstIndex(where: { $0.id == remote.id }) {
+                guard remote.updatedAt >= pinboards[index].updatedAt else { continue }
+                let existingByID = Dictionary(
+                    pinboards[index].items.map { ($0.id, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                let ordered = decoded.clipIDs.compactMap { existingByID[$0] }
+                let retainedIDs = Set(ordered.map(\.id))
+                removedAssets += pinboards[index].items.filter { !retainedIDs.contains($0.id) }
+                pinboards[index].name = remote.name
+                pinboards[index].colorHex = remote.colorHex
+                pinboards[index].createdAt = remote.createdAt
+                pinboards[index].updatedAt = remote.updatedAt
+                pinboards[index].sortIndex = remote.sortIndex
+                pinboards[index].items = ordered
+                pinboards[index].pinnedItemIDs = remote.pinnedItemIDs.filter(retainedIDs.contains)
+            } else {
+                pinboards.append(remote)
+            }
+        }
+        pinboards.sort {
+            if $0.sortIndex != $1.sortIndex { return $0.sortIndex < $1.sortIndex }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+
+        if !deletedIDs.isEmpty {
+            let deleted = Set(deletedIDs)
+            let removedBoards = pinboards.filter { deleted.contains($0.id) }
+            removedAssets += removedBoards.flatMap(\.items)
+            for item in removedBoards.flatMap(\.items) {
+                deletionLedger.recordRemoteDeletion(
+                    id: item.id,
+                    removesFromPasteStacks: false,
+                    at: date
+                )
+            }
+            pinboards.removeAll { deleted.contains($0.id) }
+            for id in deletedIDs {
+                if cloudRetentionExcludedIDs.remove(id) != nil {
+                    saveCloudRetentionExclusions()
+                }
+                let removed = removeClipEverywhere(id: id)
+                removedAssets += removed
+                if !removed.isEmpty || deletionLedger.records.contains(where: { $0.id == id }) {
+                    deletionLedger.recordRemoteDeletion(
+                        id: id,
+                        removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
+                        at: date
+                    )
+                }
+                if !removed.isEmpty, Settings.shared.pasteStacksFollowHistory {
+                    PasteSequence.shared.removeHistoryItems([id])
+                }
+            }
+            if case .pinboard(let current) = source, deleted.contains(current) {
+                source = .history
+            }
+        }
+
+        _ = normalizePinboardOrder(touchChanges: false)
+
+        applyHistoryPolicyNow()
+        for index in pinboards.indices { pinboards[index].prunePins() }
+        pruneSelection()
+        if selectedID == nil { selectFirst() }
+        _ = refreshDeletionState(at: date)
+        for item in removedAssets { deleteImageFile(item) }
+        saveNow()
+    }
+
+    private func removeClipEverywhere(id: UUID) -> [ClipItem] {
+        var removed = history.filter { $0.id == id }
+        history.removeAll { $0.id == id }
+        for index in pinboards.indices {
+            removed += pinboards[index].items.filter { $0.id == id }
+            pinboards[index].items.removeAll { $0.id == id }
+            pinboards[index].pinnedItemIDs.removeAll { $0 == id }
+        }
+        return removed
+    }
+
+    private func insertByUsageDate(_ item: ClipItem, into items: inout [ClipItem]) {
+        let date = item.lastUsedAt ?? item.createdAt
+        let index = items.firstIndex {
+            ($0.lastUsedAt ?? $0.createdAt) < date
+        } ?? items.endIndex
+        items.insert(item, at: index)
+    }
+
+    private func copyRemoteImageAsset(for item: ClipItem, from source: URL) -> ClipItem {
+        var item = item
+        guard let name = item.imageFileName,
+              URL(fileURLWithPath: name).lastPathComponent == name,
+              let data = try? Data(contentsOf: source),
+              data.count <= CKSchema.maximumAssetBytes else {
+            item.imageFileName = nil
+            return item
+        }
+        let destination = imagesDir.appendingPathComponent(name)
+        do {
+            try data.write(to: destination, options: .atomic)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: destination.path
+            )
+        } catch {
+            item.imageFileName = nil
+        }
+        return item
+    }
+
     private func duplicateImageFile(_ item: ClipItem) -> String? {
         guard let src = imageURL(for: item), FileManager.default.fileExists(atPath: src.path) else { return nil }
         let name = "\(UUID().uuidString).png"
@@ -717,6 +998,84 @@ final class ClipboardStore {
         } catch {
             return nil
         }
+    }
+
+    /// Stores written before per-container identity could reuse one UUID in
+    /// History and one or more Pinboards. Repair only collisions: already
+    /// distinct Pinboard entities retain their stable IDs.
+    @discardableResult
+    private func migrateLegacySharedClipIDs() -> Bool {
+        var seen = Set(history.map(\.id))
+        var changed = false
+
+        for boardIndex in pinboards.indices {
+            var remappedPins: [UUID: UUID] = [:]
+            for itemIndex in pinboards[boardIndex].items.indices {
+                let item = pinboards[boardIndex].items[itemIndex]
+                guard !seen.insert(item.id).inserted else { continue }
+
+                var copy = item.copiedWithFreshID()
+                if let duplicateName = duplicateImageFile(item) {
+                    copy.imageFileName = duplicateName
+                }
+                pinboards[boardIndex].items[itemIndex] = copy
+                remappedPins[item.id] = copy.id
+                seen.insert(copy.id)
+                changed = true
+            }
+            if !remappedPins.isEmpty {
+                pinboards[boardIndex].pinnedItemIDs = pinboards[boardIndex].pinnedItemIDs.map {
+                    remappedPins[$0] ?? $0
+                }
+                pinboards[boardIndex].touch()
+            }
+        }
+        return changed
+    }
+
+    @discardableResult
+    private func normalizePinboardOrder(
+        at date: Date = .now,
+        touchChanges: Bool
+    ) -> Bool {
+        var changed = false
+        for index in pinboards.indices where pinboards[index].sortIndex != index {
+            pinboards[index].sortIndex = index
+            if touchChanges { pinboards[index].touch(at: date) }
+            changed = true
+        }
+        return changed
+    }
+
+    private var cloudRetentionExclusionsURL: URL {
+        ClipboardStore.localBase.appendingPathComponent("ck-retention-exclusions.json")
+    }
+
+    private func loadCloudRetentionExclusions() -> Set<UUID> {
+        guard let data = try? Data(contentsOf: cloudRetentionExclusionsURL),
+              let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data) else { return [] }
+        return ids
+    }
+
+    private func recordCloudRetentionExclusions<S: Sequence>(_ ids: S) where S.Element == UUID {
+        let previousCount = cloudRetentionExcludedIDs.count
+        cloudRetentionExcludedIDs.formUnion(ids)
+        guard cloudRetentionExcludedIDs.count != previousCount else { return }
+        saveCloudRetentionExclusions()
+    }
+
+    private func saveCloudRetentionExclusions() {
+        guard let data = try? JSONEncoder().encode(cloudRetentionExcludedIDs) else { return }
+        try? FileManager.default.createDirectory(
+            at: ClipboardStore.localBase,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try? data.write(to: cloudRetentionExclusionsURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: cloudRetentionExclusionsURL.path
+        )
     }
 
     private func deleteImageFile(_ item: ClipItem) {
@@ -746,10 +1105,15 @@ final class ClipboardStore {
         pinboards = snap.pinboards
         deletionLedger = snap.deletionLedger ?? ClipDeletionLedger()
         PasteSequence.shared.restoreSavedStacks(snap.pasteStacks ?? [])
-        let removed = applyDeletionTombstones()
+        var removed = applyDeletionTombstones()
+        let retentionExcluded = history.filter { cloudRetentionExcludedIDs.contains($0.id) }
+        history.removeAll { cloudRetentionExcludedIDs.contains($0.id) }
+        removed += retentionExcluded
+        let migratedLegacyIDs = migrateLegacySharedClipIDs()
+        let normalizedBoardOrder = normalizePinboardOrder(touchChanges: false)
         for item in removed { deleteImageFile(item) }
         selectFirst()
-        return !removed.isEmpty
+        return !removed.isEmpty || migratedLegacyIDs || normalizedBoardOrder
     }
 
     private func scheduleSave() {
@@ -796,9 +1160,17 @@ final class ClipboardStore {
                             pasteStacks: PasteSequence.shared.savedStacks,
                             deletionLedger: deletionLedger)
         guard let data = try? JSONEncoder().encode(snap) else { return }
-        lastSavedData = data
-        try? data.write(to: storeURL, options: .atomic)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storeURL.path)
+        do {
+            try data.write(to: storeURL, options: .atomic)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: storeURL.path
+            )
+            lastSavedData = data
+            NotificationCenter.default.post(name: .pestyStoreDidSave, object: self)
+        } catch {
+            return
+        }
     }
 
     func setICloudSync(_ enabled: Bool) {
@@ -881,7 +1253,7 @@ final class ClipboardStore {
         }
 
         var combined = (history + snap.history)
-            .filter { !isDeleted($0) }
+            .filter { !isDeleted($0) && !cloudRetentionExcludedIDs.contains($0.id) }
             .sorted { $0.createdAt > $1.createdAt }
         var seen = Set<UUID>()
         var merged: [ClipItem] = []

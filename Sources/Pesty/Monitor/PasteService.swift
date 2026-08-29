@@ -123,6 +123,9 @@ enum PasteService {
                       monitor: ClipboardMonitor,
                       format: PasteFormat = .original,
                       imageOverride: NSImage? = nil) {
+        // Whatever is on the pasteboard right now is about to be replaced;
+        // make sure history has it before it goes.
+        monitor.pollNow()
         let change = copy(item, format: format, imageOverride: imageOverride)
         monitor.suppressUntilChangeCount = change
         if Settings.shared.playSound { FeedbackSound.play(FeedbackSound.paste) }

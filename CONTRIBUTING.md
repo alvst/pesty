@@ -5,7 +5,7 @@ Thanks for your interest. Pesty-Alvie is a small, native macOS app with no third
 ## Prerequisites
 
 - macOS 14 (Sonoma) or later
-- Xcode 16+ / Swift 6 toolchain
+- Xcode 26.3 for the pinned Mac/iOS matrix
 
 ## Build and run
 
@@ -15,6 +15,8 @@ cd pesty
 swift build                    # compile
 swift run Pesty-Alvie          # run in place
 swift run Pesty-Alvie --demo   # run with sample clips and the strip open (for UI work)
+swift test                     # macOS unit tests
+swift build -Xswiftc -DMAS     # sandboxed/CloudKit compile check
 ```
 
 To build a distributable bundle:
@@ -42,7 +44,8 @@ open packaging/Pesty-Alvie.app
 ## Pull requests
 
 1. Fork and branch from `main`.
-2. Make your change; ensure `swift build` is clean (no warnings).
+2. Make your change; run `swift test`, `swift build -Xswiftc -DMAS`, the iOS
+   simulator tests when relevant, and `git diff --check`.
 3. Open a PR with a clear description and screenshots for UI changes.
 
 ## Good first issues
@@ -50,7 +53,6 @@ open packaging/Pesty-Alvie.app
 - Large preview pane for the selected clip
 - Drag-and-drop out of a card
 - Resize handle on the strip (Paste-style)
-- iCloud / file-based sync
 - Richer renderers (RTF, link previews with favicons)
 
 ## Code of conduct

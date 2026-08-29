@@ -5,6 +5,9 @@ struct Pinboard: Identifiable, Codable, Equatable {
     var name: String
     var colorHex: String
     var items: [ClipItem]
+    var createdAt: Date
+    var updatedAt: Date
+    var sortIndex: Int
 
     /// Clips promoted to the front of this board, newest promotion first.
     ///
@@ -15,16 +18,20 @@ struct Pinboard: Identifiable, Codable, Equatable {
     var pinnedItemIDs: [UUID]
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, colorHex, items, pinnedItemIDs
+        case id, name, colorHex, items, pinnedItemIDs, createdAt, updatedAt, sortIndex
     }
 
     init(id: UUID = UUID(), name: String, colorHex: String = "#5B8DEF",
-         items: [ClipItem] = [], pinnedItemIDs: [UUID] = []) {
+         items: [ClipItem] = [], pinnedItemIDs: [UUID] = [],
+         createdAt: Date = .now, updatedAt: Date? = nil, sortIndex: Int = 0) {
         self.id = id
         self.name = name
         self.colorHex = colorHex
         self.items = items
         self.pinnedItemIDs = pinnedItemIDs
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.sortIndex = sortIndex
     }
 
     /// Boards saved before pinning existed have no `pinnedItemIDs` key.
@@ -35,6 +42,13 @@ struct Pinboard: Identifiable, Codable, Equatable {
         colorHex = try c.decode(String.self, forKey: .colorHex)
         items = try c.decodeIfPresent([ClipItem].self, forKey: .items) ?? []
         pinnedItemIDs = try c.decodeIfPresent([UUID].self, forKey: .pinnedItemIDs) ?? []
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? .now
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        sortIndex = try c.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
+    }
+
+    mutating func touch(at date: Date = .now) {
+        updatedAt = max(date, updatedAt.addingTimeInterval(0.000_001))
     }
 
     var color: Color { Color(hex: colorHex) ?? .accentColor }

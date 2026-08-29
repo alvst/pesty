@@ -1,29 +1,39 @@
 # Pesty-Alvie Companion for iPhone and iPad
 
-This is an isolated iOS 17+ SwiftUI app. It deliberately has no build-time or
-source dependency on the existing macOS application.
+This is an iOS 17+ SwiftUI companion with the same private CloudKit record
+contract as the sandboxed macOS build. The targets share no source dependency;
+their two copies of `CloudKitSchema.swift` must remain byte-identical.
 
 ## What works now
 
-- Local clip library, search, type filtering, pinboards, copy-back, and share.
+- Bidirectional private-database sync for text, rich text, links, colors,
+  images, file metadata, Pinboard membership/order, edits, and hard deletes.
+- Offline changes and change tokens persisted with `CKSyncEngine`.
+- Local clip creation, photo import, search, type filtering, Pinboards,
+  copy-back, and sharing.
 - A manual `store.json` importer for a Pesty-Alvie library exported through iCloud
-  Drive. Text, links, colors, and pinboard membership import immediately.
-- Portable companion-domain models with stable IDs, update timestamps, and
-  deletion tombstones so they can later be backed by shared CloudKit records.
-- iCloud account readiness UI and the required CloudKit entitlement.
+  Drive. It repairs legacy shared IDs into stable, per-Pinboard copies.
+- Five-minute local Undo for clip deletions. CloudKit keeps the last active
+  record during the grace period and sends the hard delete only after expiry.
+- Owner-only local persistence, bounded CloudKit assets, and local-cache erase.
 
-## What deliberately waits for the Mac bridge
+## Sync boundary
 
-The current macOS app stores its library in a macOS iCloud Drive folder; it
-does not write a shared CloudKit record set. Therefore no iOS-only change can
-produce live Mac-to-iPhone history yet. A future Mac change should implement
-the same record-level CloudKit sync protocol and upload image/RTF assets.
+The Mac App Store (`MAS`) build uses CloudKit and can sync with this companion.
+The direct-download Mac build continues to offer iCloud Drive sync between
+Macs and does not talk to the companion. The iOS simulator intentionally runs
+as a local-only library; entitlement and push behavior must be tested with a
+signed physical-device build.
 
 ## Open and test
 
-Open `Pesty-Alvie.xcodeproj` in Xcode, select a development team, and
-register and enable the `iCloud.com.alvst.pesty-alvie` CloudKit container before testing
-CloudKit on a physical device.
+Open `Pesty-Alvie.xcodeproj` in Xcode 26.3, select Alvie's development team,
+and use automatic signing. In the Apple Developer portal, register the
+`com.alvst.pesty-alvie.companion` App ID, enable iCloud/CloudKit and push
+notifications, and assign `iCloud.com.alvst.pesty-alvie`. The sandboxed Mac App
+ID must be assigned the same container. After validating the Development
+environment on two devices, deploy its schema to Production in CloudKit
+Console before distributing either app.
 
 ```bash
 cd iOSApp
@@ -35,3 +45,8 @@ xcodebuild test \
   -derivedDataPath /tmp/Pesty-AlvieTestData \
   CODE_SIGNING_ALLOWED=NO
 ```
+
+The unsigned simulator suite verifies local behavior and record encoding. A
+release gate still requires a real iPhone/iPad and a provisioned Mac to prove
+account status, push delivery, offline convergence, conflict handling, images,
+and deletes against the actual container.

@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import os.log
 
-private let pinboardDragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
+private let pinboardDragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
 
 /// Each tab's frame, measured live in the row's own coordinate space, so a
 /// drop's location can be resolved to "insert before whichever tab this

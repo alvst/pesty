@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import os.log
 
-private let clipDragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
+private let clipDragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
@@ -135,10 +135,15 @@ struct BarView: View {
 
     private var undoDeleteButton: some View {
         Button { store.undoLastDelete() } label: {
-            Label("Undo", systemImage: "arrow.uturn.backward")
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.uturn.backward")
+                Text("Undo").fixedSize()
+            }
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.chromeText)
                 .padding(.horizontal, 10)
+                .frame(minWidth: 86)
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(height: 30)
                 .background(Theme.fieldBG, in: Capsule())
         }

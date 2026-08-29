@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 @preconcurrency import QuickLookUI
 import os.log
 
-private let dragLog = Logger(subsystem: "com.greycorelabs.pesty", category: "PinboardDrag")
+private let dragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
 
 extension Notification.Name {
     /// Posted when a drag that started in the bar ends (drop, abandon, or
@@ -68,6 +68,13 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         monitor.start()
 
+        #if MAS
+        if Settings.shared.cloudKitSync {
+            NSApp.registerForRemoteNotifications()
+            CloudSyncService.shared.start()
+        }
+        #endif
+
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
         HotKeyCenter.shared.start()
@@ -97,8 +104,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         // The bar is non-activating, so this still preserves the front app's
         // selected input for a later paste.
         if !Settings.shared.onboarded { Settings.shared.onboarded = true }
+        // Read the modifier now, not after the delay: ⌥ is typically released
+        // as soon as the app starts to appear.
+        let openSettings = Self.isOptionHeld
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.presentBarForApplicationOpen()
+            self?.presentBarForApplicationOpen(openingSettings: openSettings)
         }
     }
 
@@ -111,10 +121,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard !isReopenPresentationPending else { return false }
         isReopenPresentationPending = true
 
+        let openSettings = Self.isOptionHeld
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isReopenPresentationPending = false
-            self.presentBarForApplicationOpen()
+            self.presentBarForApplicationOpen(openingSettings: openSettings)
         }
         return false
     }
@@ -234,6 +245,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         ClipboardStore.shared.setICloudSync(enabling)
     }
 
+    #if MAS
+    func toggleCloudKitSync() {
+        let enabling = !Settings.shared.cloudKitSync
+        Settings.shared.cloudKitSync = enabling
+        if enabling {
+            NSApp.registerForRemoteNotifications()
+            CloudSyncService.shared.enable()
+        } else {
+            CloudSyncService.shared.stop()
+            NSApp.unregisterForRemoteNotifications()
+        }
+    }
+    #endif
+
     static func restart() {
         let path = Bundle.main.bundlePath
         let task = Process()
@@ -255,10 +280,22 @@ final class AppController: NSObject, NSApplicationDelegate {
         toggleBar()
     }
 
+    /// Opening an app with ⌥ held is the macOS convention for "open its
+    /// settings instead" — the app has no main window to speak of, so this is
+    /// the only way to reach Settings from Finder, the Dock, or Spotlight
+    /// without going through the menu bar icon.
+    private static var isOptionHeld: Bool {
+        NSEvent.modifierFlags.contains(.option)
+    }
+
     /// Used by macOS application-open events rather than the toggle shortcut.
     /// Reopening Pesty must always surface a bar that is currently hidden or
     /// moving below the display; an already exposed bar simply stays frontmost.
-    private func presentBarForApplicationOpen() {
+    private func presentBarForApplicationOpen(openingSettings: Bool = false) {
+        if openingSettings {
+            showSettings()
+            return
+        }
         if let bar = barController, bar.isPresented {
             bar.bringToFront()
             startKeyMonitor()
@@ -302,6 +339,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.barInputMode = .cards
         store.source = availableBarSource(requestedSource ?? .history)
         store.applyHistoryPolicy()
+        // Pick up a copy the timer has not seen yet, so the bar opens on it.
+        monitor.pollNow()
         store.prepareForBarPresentation()
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
@@ -403,6 +442,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func pasteSelected(format: PasteFormat = .original) {
+        // A copy made just before summoning the bar may not have been polled
+        // yet; capturing it now moves the selection onto it, so Return pastes
+        // the newest clip rather than the one before it.
+        monitor.pollNow()
         let items = store.selectedItems
         if items.count > 1 {
             pasteCombined(items)
@@ -1082,6 +1125,11 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func showSettings() {
+        // Mission Control, ⌘-Tab, and the Dock draw an app's icon from its
+        // Dock tile, and an accessory app has none — so the Settings window
+        // showed up there as a bare name. Become a regular app for as long as
+        // Settings is open; `settingsWindowWillClose` drops back.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         if let win = settingsWindow {
             win.makeKeyAndOrderFront(nil)
@@ -1100,7 +1148,22 @@ final class AppController: NSObject, NSApplicationDelegate {
         // sending the user to it.
         win.collectionBehavior.insert(.moveToActiveSpace)
         settingsWindow = win
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(settingsWindowWillClose),
+                                               name: NSWindow.willCloseNotification,
+                                               object: win)
         win.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func settingsWindowWillClose() {
+        NSApp.setActivationPolicy(.accessory)
+        // Leaving the regular policy with no window left can strand focus on
+        // an app that has nothing on screen; return it to where the user was.
+        if let app = lastActiveApp, !app.isTerminated,
+           app.bundleIdentifier != Bundle.main.bundleIdentifier {
+            NSApp.yieldActivation(to: app)
+            app.activate()
+        }
     }
 
     /// Pesty is an `LSUIElement` app, so this menu is never drawn — but
@@ -1151,7 +1214,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         // AppKit reserves the first submenu for the application menu. Leaving
         // it empty keeps Edit's key equivalents working without claiming any.
         let appItem = NSMenuItem()
-        appItem.submenu = NSMenu()
+        let appMenu = NSMenu()
+        let settingsItem = NSMenuItem(title: "Settings…",
+                                      action: #selector(menuSettings),
+                                      keyEquivalent: ",")
+        settingsItem.keyEquivalentModifierMask = [.command]
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        let pauseItem = NSMenuItem(title: "Pause Pesty-Alvie",
+                                   action: #selector(menuTogglePause),
+                                   keyEquivalent: "p")
+        pauseItem.keyEquivalentModifierMask = [.command, .shift]
+        pauseItem.target = self
+        appMenu.addItem(pauseItem)
+        appItem.submenu = appMenu
         main.addItem(appItem)
         main.addItem(editItem)
         NSApp.mainMenu = main
@@ -1202,6 +1278,25 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         let searchHasFocus = barController?.searchOwnsFirstResponder == true
 
+        // Application-level commands must work even when the search field or
+        // another bar control currently owns first responder.
+        if code == kVK_ANSI_Comma,
+           cmd,
+           !flags.contains(.shift),
+           !flags.contains(.option),
+           !flags.contains(.control) {
+            showSettings()
+            return nil
+        }
+        if code == kVK_ANSI_P,
+           cmd,
+           flags.contains(.shift),
+           !flags.contains(.option),
+           !flags.contains(.control) {
+            togglePestyPause()
+            return nil
+        }
+
         // Other live editors, such as Pinboard rename, retain native key
         // behavior. Requiring `currentEditor` avoids reviving a stale field
         // editor that an ordered-out panel retained from an earlier search.
@@ -1238,6 +1333,7 @@ final class AppController: NSObject, NSApplicationDelegate {
            includes(Settings.shared.quickPasteModifier, in: flags),
            let chars = event.charactersIgnoringModifiers,
            let n = Int(chars), (1...9).contains(n) {
+            monitor.pollNow()
             let items = store.visibleItems
             if n <= items.count {
                 pasteItem(items[n - 1],

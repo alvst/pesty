@@ -13,9 +13,14 @@ struct ClipItem: Identifiable, Codable, Equatable {
 
     var sourceBundleID: String?
     var sourceAppName: String?
+    var sourceDeviceName: String?
 
     var customTitle: String?
     var createdAt: Date
+    /// Last content/metadata change used by record-level CloudKit conflict
+    /// resolution. Older stores decode this as `createdAt`.
+    var updatedAt: Date
+    var lastUsedAt: Date?
 
     init(id: UUID = UUID(),
          type: ClipType,
@@ -28,8 +33,11 @@ struct ClipItem: Identifiable, Codable, Equatable {
          colorHex: String? = nil,
          sourceBundleID: String? = nil,
          sourceAppName: String? = nil,
+         sourceDeviceName: String? = nil,
          customTitle: String? = nil,
-         createdAt: Date = Date()) {
+         createdAt: Date = Date(),
+         updatedAt: Date? = nil,
+         lastUsedAt: Date? = nil) {
         self.id = id
         self.type = type
         self.text = text
@@ -41,8 +49,59 @@ struct ClipItem: Identifiable, Codable, Equatable {
         self.colorHex = colorHex
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
+        self.sourceDeviceName = sourceDeviceName
         self.customTitle = customTitle
         self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.lastUsedAt = lastUsedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type, text, rtfData, htmlData, imageFileName, imageHash
+        case fileURLs, colorHex, sourceBundleID, sourceAppName, sourceDeviceName
+        case customTitle, createdAt, updatedAt, lastUsedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        type = try container.decode(ClipType.self, forKey: .type)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        rtfData = try container.decodeIfPresent(Data.self, forKey: .rtfData)
+        htmlData = try container.decodeIfPresent(Data.self, forKey: .htmlData)
+        imageFileName = try container.decodeIfPresent(String.self, forKey: .imageFileName)
+        imageHash = try container.decodeIfPresent(String.self, forKey: .imageHash)
+        fileURLs = try container.decodeIfPresent([String].self, forKey: .fileURLs) ?? []
+        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex)
+        sourceBundleID = try container.decodeIfPresent(String.self, forKey: .sourceBundleID)
+        sourceAppName = try container.decodeIfPresent(String.self, forKey: .sourceAppName)
+        sourceDeviceName = try container.decodeIfPresent(String.self, forKey: .sourceDeviceName)
+        customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? .now
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        lastUsedAt = try container.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+    }
+
+    /// Pinboards own copies rather than sharing an entity ID with History or
+    /// another Pinboard. The caller duplicates any image file separately.
+    func copiedWithFreshID(at date: Date = .now) -> ClipItem {
+        ClipItem(
+            type: type,
+            text: text,
+            rtfData: rtfData,
+            htmlData: htmlData,
+            imageFileName: imageFileName,
+            imageHash: imageHash,
+            fileURLs: fileURLs,
+            colorHex: colorHex,
+            sourceBundleID: sourceBundleID,
+            sourceAppName: sourceAppName,
+            sourceDeviceName: sourceDeviceName,
+            customTitle: customTitle,
+            createdAt: createdAt,
+            updatedAt: date,
+            lastUsedAt: lastUsedAt
+        )
     }
 
     var charCount: Int { text?.count ?? 0 }

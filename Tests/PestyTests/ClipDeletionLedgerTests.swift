@@ -123,6 +123,44 @@ final class ClipDeletionLedgerTests: XCTestCase {
         XCTAssertEqual(decoded.records.first?.payload?.history.first?.item, item)
     }
 
+    func testRemoteDeletionIsFinalAndNeverUndoable() {
+        let item = ClipItem(type: .text, text: "Remote delete", createdAt: deletedAt)
+        var ledger = ClipDeletionLedger()
+
+        ledger.recordRemoteDeletion(id: item.id, removesFromPasteStacks: true, at: deletedAt)
+
+        XCTAssertTrue(ledger.deletedIDs.contains(item.id))
+        XCTAssertFalse(ledger.hasUndoableDeletion(at: deletedAt))
+        XCTAssertNil(ledger.records.first?.payload)
+        XCTAssertNotNil(ledger.records.first?.finalizedAt)
+    }
+
+    func testNewerRemotePresenceSupersedesOlderFinalTombstone() {
+        let item = ClipItem(type: .text, text: "Remote restore", createdAt: deletedAt)
+        var ledger = ClipDeletionLedger()
+        ledger.recordRemoteDeletion(id: item.id, removesFromPasteStacks: false, at: deletedAt)
+        let restoredAt = deletedAt.addingTimeInterval(10)
+
+        XCTAssertTrue(ledger.permitsRemotePresence(id: item.id, updatedAt: restoredAt))
+        ledger.acceptRemotePresence(id: item.id, at: restoredAt)
+
+        XCTAssertFalse(ledger.deletedIDs.contains(item.id))
+    }
+
+    func testImmediateHistoryMaintenanceFinalizesPendingUndo() {
+        let item = ClipItem(type: .text, text: "Clear me", createdAt: deletedAt)
+        var ledger = ClipDeletionLedger()
+        ledger.recordDeletion(id: item.id, payload: payload(for: item), at: deletedAt)
+
+        let finalized = ledger.finalizePendingHistoryDeletions(
+            at: deletedAt.addingTimeInterval(10)
+        )
+
+        XCTAssertEqual(finalized.first?.history.first?.item.id, item.id)
+        XCTAssertFalse(ledger.hasUndoableDeletion(at: deletedAt.addingTimeInterval(10)))
+        XCTAssertNotNil(ledger.records.first?.finalizedAt)
+    }
+
     private func payload(for item: ClipItem) -> ClipDeletionPayload {
         ClipDeletionPayload(
             history: [HistoryClipPlacement(index: 0, item: item)],

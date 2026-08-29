@@ -249,6 +249,7 @@ final class Settings {
         static let pasteDirectly = "pasteDirectly"
         static let playSound = "playSound"
         static let playSoundOnCopy = "playSoundOnCopy"
+        static let pauseClipboardCaptureDuringSleep = "pauseClipboardCaptureDuringSleep"
         static let promoteOnPaste = "promoteOnPaste"
         static let ignoreConcealed = "ignoreConcealed"
         static let deletePermanently = "deletePermanently"
@@ -266,6 +267,7 @@ final class Settings {
         static let showMenuBarIcon = "showMenuBarIcon"
         static let onboarded = "onboarded"
         static let iCloudSync = "iCloudSync"
+        static let cloudKitSync = "cloudKitSync"
     }
 
     var historyLimit: Int {
@@ -377,6 +379,12 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(playSoundOnCopy, forKey: Keys.playSoundOnCopy) }
     }
 
+    /// When enabled, clipboard changes made while the Mac is asleep (usually
+    /// because its lid is closed) are not imported into Pesty-Alvie.
+    var pauseClipboardCaptureDuringSleep: Bool {
+        didSet { guard isLoaded else { return }; d.set(pauseClipboardCaptureDuringSleep, forKey: Keys.pauseClipboardCaptureDuringSleep) }
+    }
+
     var promoteOnPaste: Bool {
         didSet { guard isLoaded else { return }; d.set(promoteOnPaste, forKey: Keys.promoteOnPaste) }
     }
@@ -464,6 +472,13 @@ final class Settings {
         didSet { guard isLoaded else { return }; d.set(iCloudSync, forKey: Keys.iCloudSync) }
     }
 
+    /// Record-level Mac/iPhone/iPad sync is available only in the sandboxed
+    /// Mac App Store build. It remains opt-in because clipboard history can
+    /// contain sensitive content.
+    var cloudKitSync: Bool {
+        didSet { guard isLoaded else { return }; d.set(cloudKitSync, forKey: Keys.cloudKitSync) }
+    }
+
     private init() {
         d.register(defaults: [
             Keys.historyLimit: 500,
@@ -486,6 +501,7 @@ final class Settings {
             Keys.pasteDirectly: true,
             Keys.playSound: false,
             Keys.playSoundOnCopy: true,
+            Keys.pauseClipboardCaptureDuringSleep: false,
             Keys.promoteOnPaste: true,
             Keys.ignoreConcealed: true,
             Keys.deletePermanently: false,
@@ -502,7 +518,8 @@ final class Settings {
             Keys.previewLinkApplicationBundleID: PreviewOpenTarget.link.defaultApplicationBundleID,
             Keys.showMenuBarIcon: true,
             Keys.onboarded: false,
-            Keys.iCloudSync: false
+            Keys.iCloudSync: false,
+            Keys.cloudKitSync: false
         ])
         historyLimit = d.integer(forKey: Keys.historyLimit)
         historyRetentionMode = HistoryRetentionMode(rawValue: d.integer(forKey: Keys.historyRetentionMode)) ?? .itemCount
@@ -522,6 +539,7 @@ final class Settings {
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
         playSound = d.bool(forKey: Keys.playSound)
         playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
+        pauseClipboardCaptureDuringSleep = d.bool(forKey: Keys.pauseClipboardCaptureDuringSleep)
         promoteOnPaste = d.bool(forKey: Keys.promoteOnPaste)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
         deletePermanently = d.bool(forKey: Keys.deletePermanently)
@@ -551,6 +569,7 @@ final class Settings {
         showMenuBarIcon = d.bool(forKey: Keys.showMenuBarIcon)
         onboarded = d.bool(forKey: Keys.onboarded)
         iCloudSync = d.bool(forKey: Keys.iCloudSync)
+        cloudKitSync = d.bool(forKey: Keys.cloudKitSync)
         isLoaded = true
     }
 

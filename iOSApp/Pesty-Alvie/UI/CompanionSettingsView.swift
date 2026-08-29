@@ -12,7 +12,7 @@ struct CompanionSettingsView: View {
                 Section("Sync") {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: store.syncStatus.symbol)
-                            .foregroundStyle(store.syncStatus == .readyForMacBridge ? .indigo : .secondary)
+                            .foregroundStyle(store.syncStatus.isReady ? .indigo : .secondary)
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(store.syncStatus.title)
@@ -33,7 +33,7 @@ struct CompanionSettingsView: View {
                     } label: {
                         Label("Import Pesty-Alvie store.json", systemImage: "square.and.arrow.down")
                     }
-                    Text("Choose the store.json in iCloud Drive/Pesty-Alvie. Text, links, colors, and pinboards import now; image and file payloads require the future shared sync service.")
+                    Text("Choose store.json in iCloud Drive/Pesty-Alvie for a one-time import. Ongoing changes sync through your private iCloud database.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -76,7 +76,7 @@ struct CompanionSettingsView: View {
                 Button("Clear Library", role: .destructive) { store.clearLocalLibrary() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This removes only the clips saved in this iOS app. It does not affect Pesty-Alvie on your Mac.")
+                Text("This clears the local cache without deleting iCloud records. Synced items may download again while sync is enabled.")
             }
         }
     }

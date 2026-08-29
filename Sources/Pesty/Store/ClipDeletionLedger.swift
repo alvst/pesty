@@ -110,6 +110,78 @@ struct ClipDeletionLedger: Codable {
         }
     }
 
+    /// A downloaded live record may supersede an older local deletion marker.
+    /// Keeping that newer active marker prevents an iCloud Drive snapshot or
+    /// delayed CloudKit change from immediately deleting it again.
+    mutating func acceptRemotePresence(id: UUID, at date: Date) {
+        guard let index = records.firstIndex(where: { $0.id == id }),
+              date > records[index].presenceChangedAt else { return }
+        records[index].restoredAt = date
+        records[index].finalizedAt = nil
+        records[index].payload = nil
+    }
+
+    /// CloudKit hard deletions are final and never enter the local Undo UI.
+    mutating func recordRemoteDeletion(id: UUID,
+                                       removesFromPasteStacks: Bool,
+                                       at date: Date) {
+        let previousChange = records
+            .filter { $0.id == id }
+            .map(\.presenceChangedAt)
+            .max()
+        let deletionDate = max(date, previousChange?.addingTimeInterval(0.000_001) ?? date)
+        let record = ClipDeletionRecord(
+            id: id,
+            operationID: UUID(),
+            deletedAt: deletionDate,
+            restoredAt: nil,
+            finalizedAt: deletionDate,
+            removesFromPasteStacks: removesFromPasteStacks,
+            payload: nil
+        )
+        if let index = records.firstIndex(where: { $0.id == id }) {
+            records[index] = record
+        } else {
+            records.append(record)
+        }
+    }
+
+    mutating func finalizePendingHistoryDeletions(at date: Date) -> [ClipDeletionPayload] {
+        finalizePending(at: date) { payload in !payload.history.isEmpty }
+    }
+
+    mutating func finalizePendingDeletions(inPinboard id: UUID,
+                                           at date: Date) -> [ClipDeletionPayload] {
+        finalizePending(at: date) { payload in
+            payload.pinboards.contains(where: { $0.pinboardID == id })
+        }
+    }
+
+    func permitsRemotePresence(id: UUID, updatedAt: Date) -> Bool {
+        guard let record = records.first(where: { $0.id == id }) else { return true }
+        if record.presenceChangedAt != updatedAt {
+            return updatedAt > record.presenceChangedAt
+        }
+        return !record.isDeleted
+    }
+
+    private mutating func finalizePending(
+        at date: Date,
+        where matches: (ClipDeletionPayload) -> Bool
+    ) -> [ClipDeletionPayload] {
+        var finalized: [ClipDeletionPayload] = []
+        for index in records.indices {
+            guard records[index].isDeleted,
+                  records[index].finalizedAt == nil,
+                  let payload = records[index].payload,
+                  matches(payload) else { continue }
+            finalized.append(payload)
+            records[index].payload = nil
+            records[index].finalizedAt = max(date, records[index].deletedAt)
+        }
+        return finalized
+    }
+
     /// A clip retained in a Paste Stack can be copied back into history after
     /// deletion. That explicit recapture publishes a newer active marker for
     /// the same entity instead of letting the tombstone remove it on relaunch.

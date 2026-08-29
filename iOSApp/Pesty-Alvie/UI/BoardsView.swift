@@ -3,6 +3,7 @@ import SwiftUI
 struct BoardsView: View {
     @Environment(LibraryStore.self) private var store
     @State private var isPresentingNewBoard = false
+    @State private var pendingDeleteBoardID: UUID?
 
     var body: some View {
         NavigationStack {
@@ -24,13 +25,10 @@ struct BoardsView: View {
                             } label: {
                                 BoardRow(board: board, count: store.clips(in: board).count)
                             }
-                        }
-                        .onDelete { offsets in
-                            let visibleBoards = store.boards
-                            for id in offsets.compactMap({ index in
-                                visibleBoards.indices.contains(index) ? visibleBoards[index].id : nil
-                            }) {
-                                store.deleteBoard(id: id)
+                            .swipeActions {
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    pendingDeleteBoardID = board.id
+                                }
                             }
                         }
                     }
@@ -38,13 +36,7 @@ struct BoardsView: View {
             }
             .navigationTitle("Pinboards")
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if store.undoableDeletedBoard != nil {
-                        Button("Undo", systemImage: "arrow.uturn.backward") {
-                            store.undoBoardDeletion()
-                        }
-                        .accessibilityLabel("Undo pinboard deletion")
-                    }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         isPresentingNewBoard = true
                     } label: {
@@ -55,6 +47,22 @@ struct BoardsView: View {
             }
             .sheet(isPresented: $isPresentingNewBoard) {
                 NewBoardSheet()
+            }
+            .confirmationDialog(
+                "Delete this Pinboard and its copies?",
+                isPresented: Binding(
+                    get: { pendingDeleteBoardID != nil },
+                    set: { if !$0 { pendingDeleteBoardID = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete Pinboard", role: .destructive) {
+                    if let id = pendingDeleteBoardID { store.deleteBoard(id: id) }
+                    pendingDeleteBoardID = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDeleteBoardID = nil }
+            } message: {
+                Text("This deletion is immediate and cannot be undone. History clips are not affected.")
             }
         }
     }
@@ -89,6 +97,7 @@ struct BoardDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(LibraryStore.self) private var store
     let boardID: UUID
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         Group {
@@ -129,14 +138,26 @@ struct BoardDetailView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Delete", role: .destructive) {
-                            store.deleteBoard(id: board.id)
-                            dismiss()
+                            isConfirmingDelete = true
                         }
                     }
                 }
             } else {
                 ContentUnavailableView("Pinboard unavailable", systemImage: "exclamationmark.triangle")
             }
+        }
+        .confirmationDialog(
+            "Delete this Pinboard and its copies?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Pinboard", role: .destructive) {
+                store.deleteBoard(id: boardID)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletion is immediate and cannot be undone. History clips are not affected.")
         }
     }
 }

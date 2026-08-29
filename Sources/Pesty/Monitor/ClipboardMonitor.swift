@@ -9,17 +9,31 @@ final class ClipboardMonitor {
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
     private var timer: Timer?
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var isAsleep = false
 
     var suppressUntilChangeCount: Int = -1
     private(set) var isPaused = false
 
     init() {
         lastChangeCount = pasteboard.changeCount
+
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers = [
+            center.addObserver(forName: NSWorkspace.willSleepNotification,
+                              object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.handleWillSleep() }
+            },
+            center.addObserver(forName: NSWorkspace.didWakeNotification,
+                              object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.handleDidWake() }
+            }
+        ]
     }
 
     func start() {
         timer?.invalidate()
-        let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -30,10 +44,19 @@ final class ClipboardMonitor {
 
     func togglePause() { isPaused.toggle() }
 
+    /// Captures anything on the pasteboard the timer has not seen yet. The
+    /// timer only looks every 0.2s, which is long enough for a copy followed
+    /// by an immediate summon-and-paste to beat it: the bar would open with
+    /// the previous clip selected, paste that, and its own pasteboard write
+    /// would bury the fresh copy before it was ever captured. Callers poll
+    /// here before reading the selection or overwriting the pasteboard.
+    func pollNow() { poll() }
+
     private func poll() {
         let current = pasteboard.changeCount
         guard current != lastChangeCount else { return }
         lastChangeCount = current
+        guard !isAsleep || !Settings.shared.pauseClipboardCaptureDuringSleep else { return }
         guard !isPaused else { return }
         if current == suppressUntilChangeCount { return }
         guard let item = makeItem() else { return }
@@ -42,6 +65,19 @@ final class ClipboardMonitor {
         // so stacking the raw capture would leave an invalid preview behind.
         let storedItem = ClipboardStore.shared.addCaptured(item)
         AppController.shared.capturePasteStackItem(storedItem)
+    }
+
+    private func handleWillSleep() {
+        guard Settings.shared.pauseClipboardCaptureDuringSleep else { return }
+        isAsleep = true
+    }
+
+    private func handleDidWake() {
+        guard isAsleep else { return }
+        isAsleep = false
+        // Discard changes that happened while the Mac was asleep rather than
+        // importing a stale clipboard value on the first post-wake poll.
+        lastChangeCount = pasteboard.changeCount
     }
 
     /// Every file in a multi-file copy, not just the first. Some sources put
@@ -84,6 +120,7 @@ final class ClipboardMonitor {
         func decorate(_ item: inout ClipItem) {
             item.sourceBundleID = bundleID
             item.sourceAppName = appName
+            item.sourceDeviceName = Host.current().localizedName
         }
 
         if let urls = copiedFileURLs(), !urls.isEmpty {

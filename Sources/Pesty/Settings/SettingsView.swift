@@ -93,7 +93,7 @@ private enum SettingsSection: CaseIterable, Identifiable {
         case .general: "History, behavior, and app preferences"
         case .privacy: "Keep clips from selected apps out of Pesty-Alvie"
         case .shortcuts: "Keyboard controls for Pesty-Alvie and Paste Stack"
-        case .sync: "Keep your clipboard history available on every Mac"
+        case .sync: "Keep your clipboard library available across your devices"
         case .about: "Pesty-Alvie for macOS"
         }
     }
@@ -215,7 +215,7 @@ private struct GeneralSettings: View {
                     }
                 }
 
-                settingsGroup("Behavior") {
+                settingsGroup("Pasting") {
                     settingCard {
                         VStack(alignment: .leading, spacing: 0) {
                             #if !MAS
@@ -226,7 +226,13 @@ private struct GeneralSettings: View {
                             Divider()
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
                             settingToggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
-                            Divider()
+                        }
+                    }
+                }
+
+                settingsGroup("Window & Appearance") {
+                    settingCard {
+                        VStack(alignment: .leading, spacing: 0) {
                             settingToggle("Hide Pesty-Alvie when clicking outside", isOn: $settings.hideOnClickOutside)
                             Divider()
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
@@ -530,6 +536,10 @@ private struct PrivacySettings: View {
                                                    description: Text("Add an app to keep its copied content out of Pesty-Alvie."))
                             .font(.system(size: 12))
                             .padding(.vertical, 14)
+                            // The surface is a leading-aligned stack; without
+                            // a full-width frame the empty state hugs its own
+                            // widest line and sits left of the card's center.
+                            .frame(maxWidth: .infinity)
                         } else {
                             ForEach(settings.ignoredSourceAppBundleIDs, id: \.self) { bundleID in
                                 Divider()
@@ -551,6 +561,19 @@ private struct PrivacySettings: View {
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Pesty-Alvie also respects the standard macOS concealed-clipboard marker used by password managers.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
+                    }
+                }
+
+                SettingsFormGroup("Sleep & Lid") {
+                    SettingsSurface {
+                        SettingSwitchRow(title: "Pause clipboard capture while the Mac sleeps",
+                                         isOn: $settings.pauseClipboardCaptureDuringSleep)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("When enabled, clipboard changes made while the Mac is asleep are not added to history. Closing a Mac laptop’s lid usually puts it to sleep.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 8)
@@ -703,10 +726,45 @@ private struct ShortcutsSettings: View {
 
 private struct SyncSettings: View {
     @Bindable private var settings = Settings.shared
+    #if MAS
+    @Bindable private var cloudSync = CloudSyncService.shared
+    @State private var isConfirmingAccountChange = false
+    #endif
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                #if MAS
+                SettingsFormGroup("iCloud") {
+                    SettingsSurface {
+                        SettingSwitchRow(title: "Sync with iPhone, iPad, and Mac", isOn: Binding(
+                            get: { settings.cloudKitSync },
+                            set: { _ in AppController.shared.toggleCloudKitSync() }))
+                            .padding(.vertical, 10)
+                        Divider()
+                        HStack {
+                            Label(cloudSync.status, systemImage: "icloud")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Sync Now") { cloudSync.refreshNow() }
+                                .disabled(!settings.cloudKitSync)
+                        }
+                        .padding(.vertical, 10)
+                        Text("Uses your private iCloud database. Pesty-Alvie never places clipboard content in the public database or application logs.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
+                        if cloudSync.requiresAccountConfirmation {
+                            Divider()
+                            Button("Use Current iCloud Account…") {
+                                isConfirmingAccountChange = true
+                            }
+                            .padding(.vertical, 10)
+                        }
+                    }
+                }
+                #else
                 SettingsFormGroup("iCloud Drive") {
                     SettingsSurface {
                     SettingSwitchRow(title: "Sync clipboard via iCloud Drive", isOn: Binding(
@@ -721,11 +779,26 @@ private struct SyncSettings: View {
                             .padding(.bottom, 8)
                     }
                 }
+                #endif
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        #if MAS
+        .confirmationDialog(
+            "Use the current iCloud account?",
+            isPresented: $isConfirmingAccountChange,
+            titleVisibility: .visible
+        ) {
+            Button("Use Account and Upload Local Library") {
+                cloudSync.confirmAccountChangeKeepingLocalLibrary()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your current local Pesty-Alvie library will be uploaded to this iCloud account. Nothing from the previous account is fetched or changed.")
+        }
+        #endif
     }
 }
 

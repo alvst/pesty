@@ -83,7 +83,7 @@ final class PestyLibraryTests: XCTestCase {
         XCTAssertNil(library.clip(id: clip.id))
     }
 
-    func testUndoBoardDeletionRestoresContentsWithNewerVersion() throws {
+    func testBoardDeletionIsImmediateAndFinal() throws {
         let deletedAt = Date(timeIntervalSince1970: 300)
         let clip = PestyClip(kind: .text, text: "Pinned")
         let board = PestyBoard(
@@ -96,12 +96,8 @@ final class PestyLibraryTests: XCTestCase {
         library.deleteBoard(id: board.id, at: deletedAt)
 
         XCTAssertNil(library.board(id: board.id))
-        XCTAssertTrue(library.undoMostRecentBoardDeletion(at: deletedAt))
-
-        let restored = try XCTUnwrap(library.board(id: board.id))
-        XCTAssertEqual(restored.clipIDs, [clip.id])
-        XCTAssertNil(restored.deletedAt)
-        XCTAssertGreaterThan(restored.updatedAt, deletedAt)
+        XCTAssertNotNil(library.boards.first?.deletionFinalizedAt)
+        XCTAssertNotNil(library.clips.first?.deletionFinalizedAt)
     }
 
     func testUndoRestorationWinsLastWriterMergeAgainstTombstone() throws {
@@ -236,7 +232,7 @@ final class PestyLibraryTests: XCTestCase {
         XCTAssertNil(merged.board(id: board.id))
     }
 
-    func testMacStoreImportPreservesClipAndPinboardIdentity() throws {
+    func testMacStoreImportRepairsSharedClipIdentityDeterministically() throws {
         let clipID = UUID()
         let boardID = UUID()
         let document: [String: Any] = [
@@ -266,8 +262,79 @@ final class PestyLibraryTests: XCTestCase {
 
         let library = try MacPestyStoreImporter.library(from: data)
 
+        let importedAgain = try MacPestyStoreImporter.library(from: data)
+        let boardClipID = try XCTUnwrap(library.board(id: boardID)?.clipIDs.first)
+
         XCTAssertEqual(library.clip(id: clipID)?.displayTitle, "example.com")
-        XCTAssertEqual(library.board(id: boardID)?.clipIDs, [clipID])
+        XCTAssertNotEqual(boardClipID, clipID)
+        XCTAssertEqual(importedAgain.board(id: boardID)?.clipIDs, [boardClipID])
         XCTAssertEqual(library.clips(in: library.board(id: boardID)!).count, 1)
+        XCTAssertEqual(library.clip(id: boardClipID)?.containerID, boardID)
+    }
+
+    func testAddingToTwoPinboardsCreatesContainerOwnedCopies() throws {
+        let clip = PestyClip(kind: .text, text: "Reusable")
+        let firstBoard = PestyBoard(name: "One")
+        let secondBoard = PestyBoard(name: "Two")
+        var library = PestyLibrary(clips: [clip], boards: [firstBoard, secondBoard])
+
+        let firstCopyID = try XCTUnwrap(library.add(clipID: clip.id, to: firstBoard.id))
+        let secondCopyID = try XCTUnwrap(library.add(clipID: clip.id, to: secondBoard.id))
+
+        XCTAssertNotEqual(firstCopyID, clip.id)
+        XCTAssertNotEqual(secondCopyID, clip.id)
+        XCTAssertNotEqual(firstCopyID, secondCopyID)
+        XCTAssertEqual(library.clip(id: firstCopyID)?.containerID, firstBoard.id)
+        XCTAssertEqual(library.clip(id: secondCopyID)?.containerID, secondBoard.id)
+    }
+
+    func testEqualTimestampDeletionWinsMerge() {
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 900)
+        let active = PestyClip(id: id, kind: .text, text: "Conflict", capturedAt: date, updatedAt: date)
+        let deleted = PestyClip(
+            id: id,
+            kind: .text,
+            text: "Conflict",
+            capturedAt: date,
+            updatedAt: date,
+            deletedAt: date,
+            deletionFinalizedAt: date
+        )
+
+        let merged = PestyLibrary(clips: [active]).merged(with: PestyLibrary(clips: [deleted]))
+
+        XCTAssertNil(merged.clip(id: id))
+        XCTAssertNotNil(merged.clips.first?.deletionFinalizedAt)
+    }
+
+    func testPendingDeletionProjectsLastActiveCloudRecordUntilExpiry() throws {
+        let createdAt = Date(timeIntervalSince1970: 1_000)
+        let deletedAt = Date(timeIntervalSince1970: 2_000)
+        let clip = PestyClip(
+            kind: .text,
+            text: "Grace period",
+            capturedAt: createdAt,
+            updatedAt: createdAt
+        )
+        var library = PestyLibrary(clips: [clip])
+
+        library.deleteClip(id: clip.id, at: deletedAt)
+        let deleted = try XCTUnwrap(library.clips.first)
+        let projected = CloudSyncProjection.clip(deleted)
+
+        XCTAssertNil(projected.deletedAt)
+        XCTAssertEqual(projected.updatedAt, createdAt)
+        XCTAssertEqual(projected.text, clip.text)
+        XCTAssertEqual(deleted.deletedAt, deletedAt)
+    }
+
+    func testPinboardsUseSyncedSortOrder() {
+        let first = PestyBoard(name: "Zulu", sortIndex: 0)
+        let second = PestyBoard(name: "Alpha", sortIndex: 1)
+
+        let library = PestyLibrary(boards: [second, first])
+
+        XCTAssertEqual(library.activeBoards.map(\.id), [first.id, second.id])
     }
 }

@@ -4,6 +4,11 @@ enum LocalLibraryPersistence {
     private static let directoryName = "Pesty-Alvie"
     private static let fileName = "library.json"
 
+    static var supportDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
     static func load() -> PestyLibrary {
         guard let data = try? Data(contentsOf: libraryURL()),
               let library = try? JSONDecoder.pesty.decode(PestyLibrary.self, from: data) else {
@@ -16,10 +21,16 @@ enum LocalLibraryPersistence {
         let url = libraryURL()
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: supportDirectory.path
         )
         let data = try JSONEncoder.pesty.encode(library)
-        try data.write(to: url, options: [.atomic])
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     static func removeAll() throws {
@@ -29,9 +40,7 @@ enum LocalLibraryPersistence {
     }
 
     static func libraryURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base
-            .appendingPathComponent(directoryName, isDirectory: true)
+        supportDirectory
             .appendingPathComponent(fileName, isDirectory: false)
     }
 }

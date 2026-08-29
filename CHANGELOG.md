@@ -14,6 +14,11 @@ All notable changes to Pesty-Alvie are documented here. The format is based on
   and default global shortcuts from upstream Pesty.
 - Renamed the iOS companion product and project to Pesty-Alvie with separate
   app, test, and CloudKit identifiers.
+- Added live private-CloudKit sync between the sandboxed Mac build and the
+  iPhone/iPad companion, including offline work, images/RTF assets, Pinboard
+  order, conflicts, per-container IDs, and delayed hard deletes for Undo.
+- Added local image creation/copying on iOS, owner-protected asset storage,
+  CloudKit status UI, device provisioning guidance, and Mac/iOS sync tests.
 
 The entries below describe the inherited upstream Pesty release history.
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct NewClipSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -8,12 +9,16 @@ struct NewClipSheet: View {
     @State private var text = ""
     @State private var title = ""
     @State private var colorHex = "#5B8DEF"
+    @State private var photoSelection: PhotosPickerItem?
+    @State private var imageData: Data?
 
     private var canSave: Bool {
         switch kind {
         case .color:
             return Color(hex: colorHex) != nil
-        case .image, .file:
+        case .image:
+            return imageData != nil
+        case .file:
             return false
         default:
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -25,14 +30,28 @@ struct NewClipSheet: View {
             Form {
                 Section("Type") {
                     Picker("Clip type", selection: $kind) {
-                        ForEach([ClipKind.text, .link, .richText, .color]) { kind in
+                        ForEach([ClipKind.text, .link, .richText, .image, .color]) { kind in
                             Label(kind.title, systemImage: kind.symbol).tag(kind)
                         }
                     }
                 }
 
                 Section("Content") {
-                    if kind == .color {
+                    if kind == .image {
+                        PhotosPicker(selection: $photoSelection, matching: .images) {
+                            Label(
+                                imageData == nil ? "Choose Photo" : "Choose Another Photo",
+                                systemImage: "photo.on.rectangle"
+                            )
+                        }
+                        if let imageData, let image = UIImage(data: imageData) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 260)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                    } else if kind == .color {
                         TextField("#RRGGBB", text: $colorHex)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
@@ -63,15 +82,35 @@ struct NewClipSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.addClip(
-                            kind: kind,
-                            text: text,
-                            title: title,
-                            colorHex: kind == .color ? colorHex : nil
-                        )
-                        dismiss()
+                        if kind == .image, let imageData {
+                            if store.addImageClip(data: imageData, title: title) {
+                                dismiss()
+                            }
+                        } else {
+                            store.addClip(
+                                kind: kind,
+                                text: text,
+                                title: title,
+                                colorHex: kind == .color ? colorHex : nil
+                            )
+                            dismiss()
+                        }
                     }
                     .disabled(!canSave)
+                }
+            }
+            .onChange(of: photoSelection) { _, selection in
+                guard let selection else {
+                    imageData = nil
+                    return
+                }
+                Task {
+                    do {
+                        let data = try await selection.loadTransferable(type: Data.self)
+                        await MainActor.run { imageData = data }
+                    } catch {
+                        await MainActor.run { store.errorMessage = error.localizedDescription }
+                    }
                 }
             }
         }
