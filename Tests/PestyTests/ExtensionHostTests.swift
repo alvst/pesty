@@ -246,62 +246,6 @@ final class ExtensionHostTests: XCTestCase {
         XCTAssertEqual(badgeMessage.count, 200)
     }
 
-    func testInfiniteLoopTimesOutAndAnotherExtensionStillRuns() {
-        let host = ExtensionHost()
-        let loopingSource = script(
-            id: "com.example.loop",
-            badgeBody: "while (true) {}"
-        )
-        let startedAt = Date()
-
-        XCTAssertEqual(
-            host.badgeSync(
-                clipType: "text",
-                text: "hello",
-                extension: installed(source: loopingSource, id: "com.example.loop")
-            ),
-            .failure(.timedOut)
-        )
-        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 2)
-        XCTAssertTrue(host.isQuarantined("com.example.loop"))
-
-        let healthySource = script(id: "com.example.after-loop", badgeBody: #"return "ok";"#)
-        XCTAssertEqual(
-            host.badgeSync(
-                clipType: "text",
-                text: "hello",
-                extension: installed(source: healthySource, id: "com.example.after-loop")
-            ),
-            .success("ok")
-        )
-    }
-
-    func testQuarantineReadDoesNotWaitBehindEvaluationQueue() {
-        let host = ExtensionHost()
-        let extensionID = "com.example.nonblocking-quarantine-read"
-        let loopingExtension = installed(
-            source: script(id: extensionID, badgeBody: "while (true) {}"),
-            id: extensionID
-        )
-        let evaluationFinished = expectation(description: "looping evaluation finished")
-
-        host.badge(
-            clipType: "text",
-            text: "hello",
-            extension: loopingExtension
-        ) { _ in
-            evaluationFinished.fulfill()
-        }
-
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        _ = host.isQuarantined(extensionID)
-        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
-
-        XCTAssertLessThan(elapsed, 0.05)
-        wait(for: [evaluationFinished], timeout: 2)
-        XCTAssertTrue(host.isQuarantined(extensionID))
-    }
-
     func testFiveConsecutiveFailuresQuarantineOnlyThatExtension() {
         let host = ExtensionHost()
         let failingSource = script(
@@ -405,6 +349,92 @@ final class ExtensionHostTests: XCTestCase {
           name: "\(name)",
           version: "\(version)",
           api: \(api),
+          badge: function (clip) { \(badgeBody) }
+        });
+        """
+    }
+
+    private func installed(source: String, id: String) -> InstalledExtension {
+        InstalledExtension(
+            manifest: ExtensionManifest(id: id, name: "Example", version: "1.0", api: 1),
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+    }
+}
+
+/// Public JavaScriptCore API cannot stop these scripts, so their workers live
+/// until the test process exits. Keep this suite after the result-store stress
+/// tests so the intentional runaways cannot consume their execution budgets.
+final class RunawayExtensionHostTests: XCTestCase {
+    func testInfiniteLoopTimesOutAndAnotherExtensionStillRuns() {
+        let host = ExtensionHost()
+        let loopingSource = script(
+            id: "com.example.loop",
+            badgeBody: "while (true) {}"
+        )
+        let startedAt = Date()
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(source: loopingSource, id: "com.example.loop")
+            ),
+            .failure(.timedOut)
+        )
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 2)
+        XCTAssertTrue(host.isQuarantined("com.example.loop"))
+
+        let healthySource = script(id: "com.example.after-loop", badgeBody: #"return "ok";"#)
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(source: healthySource, id: "com.example.after-loop")
+            ),
+            .success("ok")
+        )
+    }
+
+    func testQuarantineReadDoesNotWaitBehindEvaluationQueue() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.nonblocking-quarantine-read"
+        let loopingExtension = installed(
+            source: script(id: extensionID, badgeBody: "while (true) {}"),
+            id: extensionID
+        )
+        let evaluationFinished = expectation(description: "looping evaluation finished")
+
+        host.badge(
+            clipType: "text",
+            text: "hello",
+            extension: loopingExtension
+        ) { _ in
+            evaluationFinished.fulfill()
+        }
+
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        _ = host.isQuarantined(extensionID)
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+
+        XCTAssertLessThan(elapsed, 0.05)
+        wait(for: [evaluationFinished], timeout: 2)
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
+    private func script(
+        id: String,
+        badgeBody: String
+    ) -> String {
+        """
+        pesty.register({
+          id: "\(id)",
+          name: "Example",
+          version: "1.0",
+          api: 1,
           badge: function (clip) { \(badgeBody) }
         });
         """

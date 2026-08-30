@@ -73,6 +73,7 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
     var enabled: Bool
     var isBundled: Bool
     var installedAt: Date
+    var autoDisabledAt: Date? = nil
 
     var id: String { manifest.id }
 }

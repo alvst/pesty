@@ -29,6 +29,10 @@ final class ExtensionCatalog {
             seedBundledExtensions()
             saveNow()
         }
+
+        host.onQuarantine = { [weak self] id in
+            self?.autoDisableQuarantinedExtension(id: id)
+        }
     }
 
     var enabledExtensions: [InstalledExtension] {
@@ -78,11 +82,26 @@ final class ExtensionCatalog {
     }
 
     func setEnabled(_ enabled: Bool, id: String) {
-        guard let index = extensions.firstIndex(where: { $0.id == id }),
-              extensions[index].enabled != enabled else { return }
+        guard let index = extensions.firstIndex(where: { $0.id == id }) else { return }
+
+        let enabledChanged = extensions[index].enabled != enabled
+        let clearsAutoDisable = enabled && extensions[index].autoDisabledAt != nil
+        if enabled {
+            host.liftQuarantine(id)
+            extensions[index].autoDisabledAt = nil
+        }
+        let persistsAutoDisable = !enabled && extensions[index].autoDisabledAt != nil
+        guard enabledChanged || clearsAutoDisable || persistsAutoDisable else { return }
+
         extensions[index].enabled = enabled
         saveNow()
         if !enabled { onExtensionInvalidated?(id) }
+    }
+
+    private func autoDisableQuarantinedExtension(id: String) {
+        guard let index = extensions.firstIndex(where: { $0.id == id }) else { return }
+        extensions[index].autoDisabledAt = .now
+        setEnabled(false, id: id)
     }
 
     private func prepareDirectory() {

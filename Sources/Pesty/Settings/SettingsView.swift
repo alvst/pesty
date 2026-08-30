@@ -841,6 +841,7 @@ private struct ExtensionsSettings: View {
 
     private func extensionRow(_ installedExtension: InstalledExtension) -> some View {
         let isQuarantined = catalog.isQuarantined(installedExtension.id)
+        let showsQuarantineWarning = isQuarantined || installedExtension.autoDisabledAt != nil
 
         return HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -862,7 +863,7 @@ private struct ExtensionsSettings: View {
                 Text(installedExtension.id)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
-                if isQuarantined {
+                if showsQuarantineWarning {
                     Label(
                         "Turned off after repeated failures or a timeout",
                         systemImage: "exclamationmark.triangle.fill"
@@ -878,13 +879,12 @@ private struct ExtensionsSettings: View {
                 Toggle(
                     "Enable \(installedExtension.manifest.name)",
                     isOn: Binding(
-                        get: { installedExtension.enabled && !isQuarantined },
+                        get: { installedExtension.enabled },
                         set: { catalog.setEnabled($0, id: installedExtension.id) }
                     )
                 )
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .disabled(isQuarantined)
                 .accessibilityLabel("Enable \(installedExtension.manifest.name)")
 
                 Button("Uninstall", role: .destructive) {

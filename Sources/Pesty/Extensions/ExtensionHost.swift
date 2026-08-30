@@ -17,9 +17,23 @@ final class ExtensionHost {
     private let failureStateLock = NSLock()
     private var consecutiveFailures: [String: Int] = [:]
     private var quarantinedIDs: Set<String> = []
+    private var quarantineHandler: (@MainActor @Sendable (String) -> Void)?
 
     init() {
         queue.setSpecific(key: queueKey, value: 1)
+    }
+
+    var onQuarantine: (@MainActor @Sendable (String) -> Void)? {
+        get {
+            failureStateLock.lock()
+            defer { failureStateLock.unlock() }
+            return quarantineHandler
+        }
+        set {
+            failureStateLock.lock()
+            quarantineHandler = newValue
+            failureStateLock.unlock()
+        }
     }
 
     func validate(source: String) -> Result<ExtensionManifest, ExtensionError> {
@@ -70,6 +84,13 @@ final class ExtensionHost {
         return quarantinedIDs.contains(id)
     }
 
+    func liftQuarantine(_ id: String) {
+        failureStateLock.lock()
+        quarantinedIDs.remove(id)
+        consecutiveFailures.removeValue(forKey: id)
+        failureStateLock.unlock()
+    }
+
     private func badgeOnQueue(
         clipType: String,
         text: String,
@@ -94,20 +115,30 @@ final class ExtensionHost {
         _ result: Result<String?, ExtensionError>,
         for id: String
     ) {
+        var callback: (@MainActor @Sendable (String) -> Void)?
         failureStateLock.lock()
-        defer { failureStateLock.unlock() }
 
         switch result {
         case .success:
             consecutiveFailures.removeValue(forKey: id)
         case .failure(.timedOut):
-            quarantinedIDs.insert(id)
             consecutiveFailures[id] = Self.quarantineThreshold
+            if quarantinedIDs.insert(id).inserted {
+                callback = quarantineHandler
+            }
         case .failure:
             let failures = (consecutiveFailures[id] ?? 0) + 1
             consecutiveFailures[id] = failures
-            if failures >= Self.quarantineThreshold {
-                quarantinedIDs.insert(id)
+            if failures >= Self.quarantineThreshold,
+               quarantinedIDs.insert(id).inserted {
+                callback = quarantineHandler
+            }
+        }
+        failureStateLock.unlock()
+
+        if let callback {
+            DispatchQueue.main.async {
+                callback(id)
             }
         }
     }

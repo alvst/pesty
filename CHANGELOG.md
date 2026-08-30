@@ -21,8 +21,9 @@ companions:
 
 #### Added
 - Added Mac-only JavaScript extensions for bounded clip-card badges, including
-  per-extension settings, strict execution limits and quarantine, an in-memory
-  result cache, and the bundled Token Count example.
+  per-extension settings, strict execution limits, persistent auto-disable
+  after quarantine, an in-memory result cache, and the bundled Token Count
+  example.
 
 #### Changed
 - Renamed the personal fork's app, executable, bundle, icon, packaging, and

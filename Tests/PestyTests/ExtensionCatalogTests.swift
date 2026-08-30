@@ -128,7 +128,7 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertEqual(reloaded.enabledExtensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
     }
 
-    func testQuarantineDelegatesToInjectedHostAndExcludesEnabledExtension() throws {
+    func testQuarantineAutoDisablesAndPersistsAcrossReload() throws {
         let host = ExtensionHost()
         let catalog = ExtensionCatalog(directory: directory, host: host)
         let extensionID = "com.example.catalog-quarantine"
@@ -138,6 +138,10 @@ final class ExtensionCatalogTests: XCTestCase {
         )
         _ = catalog.install(source: source)
         catalog.setEnabled(true, id: extensionID)
+        let invalidated = expectation(description: "quarantined extension invalidated")
+        catalog.onExtensionInvalidated = { id in
+            if id == extensionID { invalidated.fulfill() }
+        }
         let installedExtension = try XCTUnwrap(
             catalog.extensions.first(where: { $0.id == extensionID })
         )
@@ -152,8 +156,118 @@ final class ExtensionCatalogTests: XCTestCase {
             ),
             .failure(.timedOut)
         )
+        wait(for: [invalidated], timeout: 1)
+
         XCTAssertTrue(catalog.isQuarantined(extensionID))
         XCTAssertFalse(catalog.enabledExtensions.contains { $0.id == extensionID })
+        let autoDisabled = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+        XCTAssertFalse(autoDisabled.enabled)
+        XCTAssertNotNil(autoDisabled.autoDisabledAt)
+
+        let storedData = try Data(
+            contentsOf: directory.appendingPathComponent("extensions.json")
+        )
+        let stored = try JSONDecoder().decode([InstalledExtension].self, from: storedData)
+        let storedExtension = try XCTUnwrap(stored.first(where: { $0.id == extensionID }))
+        XCTAssertFalse(storedExtension.enabled)
+        XCTAssertEqual(storedExtension.autoDisabledAt, autoDisabled.autoDisabledAt)
+
+        let reloaded = ExtensionCatalog(directory: directory, host: ExtensionHost())
+        let reloadedExtension = try XCTUnwrap(
+            reloaded.extensions.first(where: { $0.id == extensionID })
+        )
+        XCTAssertFalse(reloadedExtension.enabled)
+        XCTAssertEqual(reloadedExtension.autoDisabledAt, autoDisabled.autoDisabledAt)
+    }
+
+    func testReenableClearsAutoDisableAndLiftsHostQuarantine() throws {
+        let host = ExtensionHost()
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let extensionID = "com.example.catalog-reenable"
+        let timeoutSource = script(
+            id: extensionID,
+            badgeBody: "var deadline = Date.now() + 250; while (Date.now() < deadline) {}"
+        )
+        _ = catalog.install(source: timeoutSource)
+        catalog.setEnabled(true, id: extensionID)
+        let invalidated = expectation(description: "quarantined extension invalidated")
+        catalog.onExtensionInvalidated = { id in
+            if id == extensionID { invalidated.fulfill() }
+        }
+        let timedOutExtension = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: timedOutExtension
+            ),
+            .failure(.timedOut)
+        )
+        wait(for: [invalidated], timeout: 1)
+        catalog.onExtensionInvalidated = nil
+        XCTAssertTrue(host.isQuarantined(extensionID))
+
+        let validSource = script(
+            id: extensionID,
+            badgeBody: #"return "recovered";"#
+        )
+        _ = catalog.install(source: validSource)
+        catalog.setEnabled(true, id: extensionID)
+
+        let reenabled = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+        XCTAssertTrue(reenabled.enabled)
+        XCTAssertNil(reenabled.autoDisabledAt)
+        XCTAssertFalse(host.isQuarantined(extensionID))
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: reenabled
+            ),
+            .success("recovered")
+        )
+
+        let storedData = try Data(
+            contentsOf: directory.appendingPathComponent("extensions.json")
+        )
+        let stored = try JSONDecoder().decode([InstalledExtension].self, from: storedData)
+        XCTAssertNil(stored.first(where: { $0.id == extensionID })?.autoDisabledAt)
+    }
+
+    func testInstalledExtensionDecodesOldJSONWithoutAutoDisabledAt() throws {
+        let fixture = #"""
+        [
+          {
+            "manifest": {
+              "id": "com.example.legacy",
+              "name": "Legacy",
+              "version": "1.0",
+              "api": 1
+            },
+            "source": "pesty.register({});",
+            "enabled": true,
+            "isBundled": false,
+            "installedAt": 0
+          }
+        ]
+        """#
+
+        let decoded = try JSONDecoder().decode(
+            [InstalledExtension].self,
+            from: Data(fixture.utf8)
+        )
+        let installedExtension = try XCTUnwrap(decoded.first)
+
+        XCTAssertEqual(installedExtension.id, "com.example.legacy")
+        XCTAssertTrue(installedExtension.enabled)
+        XCTAssertNil(installedExtension.autoDisabledAt)
     }
 
     private func permissions(of url: URL) throws -> Int {

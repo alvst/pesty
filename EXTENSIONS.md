@@ -30,10 +30,10 @@ and trust.
 ### Timeouts and quarantine
 
 Loading a script has a 0.5-second budget. Calling its badge function has a
-separate 0.1-second budget. A timeout immediately quarantines an installed
-extension from further evaluation for the current app process. Five
-consecutive script exceptions also quarantine it; a successful call resets
-the exception count.
+separate 0.1-second budget. A timeout immediately quarantines and persistently
+disables an installed extension. Five consecutive script exceptions do the
+same; a successful call resets the exception count. Re-enabling the extension
+in Settings clears its quarantine and persisted auto-disable state.
 
 JavaScriptCore's public API cannot terminate a script that is already running.
 On timeout, Pesty-Alvie stops waiting, abandons the worker thread, and disables
@@ -100,7 +100,7 @@ not supported and produces no badge.
 | Script load or validation | 0.5 seconds per load |
 | Badge function | 0.1 seconds per call, after loading succeeds |
 | Exception quarantine | 5 consecutive failures; a success resets the count |
-| Timeout quarantine | Immediate for an installed extension |
+| Timeout quarantine | Immediate, with the installed extension persistently disabled |
 | Result cache | Outcomes for at most 512 clip IDs; the in-memory cache clears on overflow |
 
 ## Install and manage extensions
@@ -111,7 +111,8 @@ Open **Settings → Extensions** to manage extensions.
    Installation evaluates the script once with the 0.5-second load limit to
    validate its registration.
 2. Newly installed extensions are off by default. Use the switch beside an
-   extension to enable it.
+   extension to enable it. A warning marks an extension that was automatically
+   disabled; switching it on again clears the quarantine.
 3. Use **Uninstall** to remove an extension. Its script text is deleted, so
    keep your own copy if you may need it again.
 
