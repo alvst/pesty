@@ -50,7 +50,10 @@ final class ClipboardStore {
     /// Bumped by any change to the clips themselves, so the search cache below
     /// can tell "same query, same clips" from "same query, new clips" without
     /// comparing arrays.
-    @ObservationIgnored private var contentVersion = 0
+    // Keep this observable: an exact search-cache hit intentionally avoids
+    // materializing its source array, so this lightweight generation is what
+    // invalidates the rendered results after a capture, edit, or deletion.
+    private var contentVersion = 0
     private(set) var hasUndoableDeletion = false
 
     var source: BarSource = .history
@@ -159,19 +162,42 @@ final class ClipboardStore {
     @ObservationIgnored private var searchCache: (source: BarSource, query: String,
                                                   version: Int, items: [ClipItem])?
 
+    private func cachedSearchResults(for query: String) -> [ClipItem]? {
+        guard let cache = searchCache,
+              cache.version == contentVersion,
+              cache.source == source,
+              cache.query == query else { return nil }
+        return cache.items
+    }
+
     private func searchResults(in base: [ClipItem], query: String) -> [ClipItem] {
+        if let cached = cachedSearchResults(for: query) { return cached }
+
+        // Appending characters can only narrow substring-search results. Use
+        // the previous matches as candidates while typing forward; deletion,
+        // replacement, source changes, and content changes correctly restart
+        // from the complete source list.
+        let preparedQuery = TextSearch.Query(query)
+        let candidates: [ClipItem]
         if let cache = searchCache,
            cache.version == contentVersion,
            cache.source == source,
-           cache.query == query {
-            return cache.items
+           preparedQuery.canNarrowResults(from: TextSearch.Query(cache.query)) {
+            candidates = cache.items
+        } else {
+            candidates = base
         }
-        let items = base.filter { $0.matches(query: query) }
+        let items = candidates.filter { $0.matches(query: preparedQuery) }
         searchCache = (source, query, contentVersion, items)
         return items
     }
 
     var visibleItems: [ClipItem] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // A cached query can return before a Pinboard rebuilds its promoted
+        // ordering dictionaries and arrays for every SwiftUI consumer.
+        if !q.isEmpty, let cached = cachedSearchResults(for: q) { return cached }
+
         let base: [ClipItem]
         switch source {
         case .history:
@@ -184,7 +210,6 @@ final class ClipboardStore {
         case .pinboard(let id):
             base = pinboards.first(where: { $0.id == id })?.orderedItems ?? []
         }
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else {
             // Each saved Paste Stack is represented by one deck card on
             // Clipboard. Its member clips remain in history for persistence,
@@ -811,7 +836,13 @@ final class ClipboardStore {
         return true
     }
 
-    func selectFirst() { selectedID = visibleItems.first?.id }
+    func selectFirst() {
+        let firstID = visibleItems.first?.id
+        let alreadySelected = selection.lead == firstID
+            && selection.count == (firstID == nil ? 0 : 1)
+        guard !alreadySelected else { return }
+        selectedID = firstID
+    }
 
     func prepareForBarPresentation() {
         if refreshDeletionState(at: .now) { saveNow() }

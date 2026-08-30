@@ -343,6 +343,7 @@ struct BarView: View {
                 - Theme.cardStripTopInset - Theme.cardStripBottomInset)
 
             ScrollViewReader { proxy in
+                let visibleItems = store.visibleItems
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: Theme.cardStripLayoutSpacing) {
                         // This is a real scroll target, rather than an ID applied
@@ -364,7 +365,7 @@ struct BarView: View {
                             }
                         }
 
-                        ForEach(Array(store.visibleItems.enumerated()), id: \.element.id) { index, item in
+                        ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                             ClipCardView(item: item,
                                          index: index,
                                          selected: store.selectedIDs.contains(item.id),
@@ -407,7 +408,7 @@ struct BarView: View {
                     scrollToSelected(id, proxy: proxy)
                 }
                 .overlay {
-                    if store.visibleItems.isEmpty && !showsStackDeck { emptyState }
+                    if visibleItems.isEmpty && !showsStackDeck { emptyState }
                 }
                 .overlay {
                     if let stripInsertionX {
@@ -476,8 +477,15 @@ struct BarView: View {
     /// anchor preference decides whether the strip parks the selected card
     /// centered or against the right edge, Paste-style.
     private func scrollToSelected(_ id: UUID, proxy: ScrollViewProxy) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-            proxy.scrollTo(id, anchor: settings.selectedClipPosition == .rightEdge ? .trailing : .center)
+        let anchor: UnitPoint = settings.selectedClipPosition == .rightEdge ? .trailing : .center
+        if store.barInputMode == .search {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { proxy.scrollTo(id, anchor: anchor) }
+        } else {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                proxy.scrollTo(id, anchor: anchor)
+            }
         }
     }
 

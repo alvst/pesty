@@ -281,9 +281,6 @@ struct PasteStackContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: store.searchText) { _, query in
-            stack.selectFirst(matching: query)
-        }
         .onChange(of: stack.activeStackID) { _, _ in
             stack.reconcileSelection(matching: store.searchText)
         }
@@ -330,8 +327,16 @@ struct PasteStackContentView: View {
             .onChange(of: stack.selectedEntryID) { _, id in
                 guard let id,
                       visibleEntries.contains(where: { $0.id == id }) else { return }
-                withAnimation(.easeOut(duration: 0.16)) {
-                    proxy.scrollTo(id, anchor: .center)
+                if store.barInputMode == .search {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
                 }
             }
         }
@@ -374,10 +379,16 @@ struct PasteStackContentView: View {
             }
             .onChange(of: stack.selectedEntryID) { _, id in
                 guard let id else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    // Avoid re-centering a card that is already visible; the
-                    // strip advances only enough to bring the next card in.
-                    proxy.scrollTo(id)
+                if store.barInputMode == .search {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { proxy.scrollTo(id) }
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        // Avoid re-centering a card that is already visible;
+                        // the strip advances only enough to reveal the next.
+                        proxy.scrollTo(id)
+                    }
                 }
             }
         }

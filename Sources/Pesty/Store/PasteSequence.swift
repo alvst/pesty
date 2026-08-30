@@ -75,11 +75,20 @@ struct SavedPasteStack: Identifiable, Codable {
 final class PasteSequence {
     static let shared = PasteSequence()
 
-    private(set) var entries: [PasteStackEntry] = []
+    private(set) var entries: [PasteStackEntry] = [] {
+        didSet { entriesVersion &+= 1 }
+    }
     private(set) var isCollecting = false
     private(set) var selectedEntryID: UUID?
     private(set) var savedStacks: [SavedPasteStack] = []
     private(set) var activeStackID: UUID?
+
+    // Cached projections do not read `entries` again, so this generation must
+    // remain observable to invalidate a visible cached search after mutation.
+    private var entriesVersion = 0
+    @ObservationIgnored private var searchCache: (query: String, version: Int,
+                                                   reversed: Bool,
+                                                   entries: [PasteStackEntry])?
 
     var count: Int { pendingCount }
     var pendingCount: Int { entries.count(where: { !$0.isPasted }) }
@@ -105,8 +114,32 @@ final class PasteSequence {
     /// The underlying queue and paste order remain untouched.
     func visibleEntries(matching searchText: String) -> [PasteStackEntry] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return displayEntries }
-        return displayEntries.filter { $0.item.matches(query: query) }
+        let reversed = Settings.shared.stackPasteInReverse
+        if let cache = searchCache,
+           cache.version == entriesVersion,
+           cache.reversed == reversed,
+           cache.query == query {
+            return cache.entries
+        }
+
+        let preparedQuery = TextSearch.Query(query)
+        let candidates: [PasteStackEntry]
+        if let cache = searchCache,
+           cache.version == entriesVersion,
+           cache.reversed == reversed,
+           preparedQuery.canNarrowResults(from: TextSearch.Query(cache.query)) {
+            candidates = cache.entries
+        } else {
+            candidates = displayEntries
+        }
+        let visible: [PasteStackEntry]
+        if query.isEmpty {
+            visible = candidates
+        } else {
+            visible = candidates.filter { $0.item.matches(query: preparedQuery) }
+        }
+        searchCache = (query, entriesVersion, reversed, visible)
+        return visible
     }
 
     var selectedEntry: PasteStackEntry? {
@@ -206,7 +239,9 @@ final class PasteSequence {
     }
 
     func selectFirst(matching searchText: String) {
-        selectedEntryID = visibleEntries(matching: searchText).first?.id
+        let firstID = visibleEntries(matching: searchText).first?.id
+        guard selectedEntryID != firstID else { return }
+        selectedEntryID = firstID
     }
 
     /// Keeps a selection when it still appears in the filtered stack, and

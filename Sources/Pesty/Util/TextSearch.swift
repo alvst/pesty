@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Case-insensitive substring search that never allocates a folded copy of the
@@ -19,22 +20,72 @@ import Foundation
 /// character boundary without matching the characters themselves.
 enum TextSearch {
 
+    /// Compiles the normalized query once for a whole filtering pass. Search
+    /// checks several fields on every clip, so rebuilding these bytes in each
+    /// `contains` call creates hundreds of tiny allocations per keystroke.
+    struct Query {
+        let text: String
+        fileprivate let asciiNeedle: [UInt8]?
+        fileprivate let anchorIndex: Int
+        var usesASCIIFastPath: Bool { asciiNeedle != nil }
+
+        /// A longer ASCII substring can only match an item that matched its
+        /// ASCII prefix. Foundation's Unicode case folding has broader
+        /// equivalences, so crossing into that path must restart from all
+        /// source items instead of reusing a potentially incomplete subset.
+        func canNarrowResults(from previous: Query) -> Bool {
+            usesASCIIFastPath
+                && previous.usesASCIIFastPath
+                && !previous.text.isEmpty
+                && text.hasPrefix(previous.text)
+        }
+
+        init(_ lowercasedText: String) {
+            text = lowercasedText
+            let bytes = Array(lowercasedText.utf8)
+            if bytes.allSatisfy({ $0 < 0x80 }) {
+                asciiNeedle = bytes
+                // Start from the least common byte in the query. Darwin's
+                // vectorized memchr then skips most of a large miss in native
+                // code instead of walking it byte-by-byte in debug Swift.
+                anchorIndex = bytes.indices.min {
+                    Self.frequencyRank(bytes[$0]) < Self.frequencyRank(bytes[$1])
+                } ?? 0
+            } else {
+                asciiNeedle = nil
+                anchorIndex = 0
+            }
+        }
+
+        private static let frequencyOrder = Array("zqjxkvbpygfwmucldrhsnioate \t\n\r".utf8)
+
+        private static func frequencyRank(_ byte: UInt8) -> Int {
+            frequencyOrder.firstIndex(of: byte) ?? -1
+        }
+    }
+
     /// `query` must already be lowercased — callers lowercase once per search
     /// pass rather than once per clip.
     static func contains(_ haystack: String, lowercasedQuery query: String) -> Bool {
-        guard !query.isEmpty else { return true }
+        contains(haystack, query: Query(query))
+    }
+
+    static func contains(_ haystack: String, query: Query) -> Bool {
+        guard !query.text.isEmpty else { return true }
         guard !haystack.isEmpty else { return false }
 
-        let needle = Array(query.utf8)
-        guard needle.allSatisfy({ $0 < 0x80 }) else {
-            return haystack.range(of: query, options: .caseInsensitive) != nil
+        guard let needle = query.asciiNeedle else {
+            return haystack.range(of: query.text, options: .caseInsensitive) != nil
         }
 
-        let utf8 = haystack.utf8
-        if let found = utf8.withContiguousStorageIfAvailable({ scan($0, needle) }) {
+        if let found = haystack.utf8.withContiguousStorageIfAvailable({
+            scan($0, needle: needle, anchorIndex: query.anchorIndex)
+        }) {
             return found
         }
-        return scan(Array(haystack.utf8)[...], needle)
+        return Array(haystack.utf8).withUnsafeBufferPointer {
+            scan($0, needle: needle, anchorIndex: query.anchorIndex)
+        }
     }
 
     private static func fold(_ byte: UInt8) -> UInt8 {
@@ -42,23 +93,59 @@ enum TextSearch {
         (byte >= 0x41 && byte <= 0x5A) ? byte &+ 0x20 : byte
     }
 
-    private static func scan<C: RandomAccessCollection>(_ haystack: C, _ needle: [UInt8]) -> Bool
-    where C.Element == UInt8, C.Index == Int {
-        let needleCount = needle.count
-        guard haystack.count >= needleCount else { return false }
-        let firstByte = needle[0]
-        var index = haystack.startIndex
-        let lastStart = haystack.endIndex - needleCount
+    private static func scan(_ haystack: UnsafeBufferPointer<UInt8>,
+                             needle: [UInt8],
+                             anchorIndex: Int) -> Bool {
+        guard haystack.count >= needle.count,
+              let base = haystack.baseAddress else { return false }
 
-        while index <= lastStart {
-            if fold(haystack[index]) == firstByte {
-                var offset = 1
-                while offset < needleCount, fold(haystack[index + offset]) == needle[offset] {
-                    offset += 1
-                }
-                if offset == needleCount { return true }
+        let anchorByte = needle[anchorIndex]
+        if scan(haystack,
+                needle: needle,
+                anchorIndex: anchorIndex,
+                anchorByte: anchorByte,
+                base: base) {
+            return true
+        }
+        if anchorByte >= 0x61, anchorByte <= 0x7A {
+            return scan(haystack,
+                        needle: needle,
+                        anchorIndex: anchorIndex,
+                        anchorByte: anchorByte - 0x20,
+                        base: base)
+        }
+        return false
+    }
+
+    /// Search every occurrence of one exact anchor byte with Darwin's native
+    /// vectorized scanner, then verify the complete candidate with the same
+    /// ASCII-only case folding as before. Lowercase and uppercase anchors are
+    /// scanned separately, so their combined work stays linear.
+    private static func scan(_ haystack: UnsafeBufferPointer<UInt8>,
+                             needle: [UInt8],
+                             anchorIndex: Int,
+                             anchorByte: UInt8,
+                             base: UnsafePointer<UInt8>) -> Bool {
+        let minimumAnchor = anchorIndex
+        let maximumAnchor = haystack.count - needle.count + anchorIndex
+        var cursor = minimumAnchor
+
+        while cursor <= maximumAnchor {
+            let remaining = maximumAnchor - cursor + 1
+            guard let rawMatch = memchr(base + cursor, Int32(anchorByte), remaining) else {
+                return false
             }
-            index += 1
+            let foundIndex = base.distance(
+                to: rawMatch.assumingMemoryBound(to: UInt8.self)
+            )
+            let candidateStart = foundIndex - anchorIndex
+            var offset = 0
+            while offset < needle.count,
+                  fold(base[candidateStart + offset]) == needle[offset] {
+                offset += 1
+            }
+            if offset == needle.count { return true }
+            cursor = foundIndex + 1
         }
         return false
     }

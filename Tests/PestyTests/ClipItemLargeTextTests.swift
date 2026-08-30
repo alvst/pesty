@@ -150,12 +150,62 @@ final class TextSearchTests: XCTestCase {
         XCTAssertFalse(TextSearch.contains("é", lowercasedQuery: "e"))
     }
 
+    func testPreparedQueryCanBeReusedAcrossFields() {
+        let query = TextSearch.Query("depth")
+        XCTAssertFalse(TextSearch.contains("Safari", query: query))
+        XCTAssertTrue(TextSearch.contains("DEPTH JUMP", query: query))
+        XCTAssertTrue(TextSearch.contains("training/depth-notes.txt", query: query))
+    }
+
+    func testIncrementalNarrowingStaysWithinASCIISemantics() {
+        XCTAssertTrue(
+            TextSearch.Query("depth").canNarrowResults(from: TextSearch.Query("dep"))
+        )
+        XCTAssertFalse(
+            TextSearch.Query("de").canNarrowResults(from: TextSearch.Query("dep"))
+        )
+        XCTAssertFalse(
+            TextSearch.Query("strasseé").canNarrowResults(from: TextSearch.Query("strasse"))
+        )
+        XCTAssertFalse(
+            TextSearch.Query("café").canNarrowResults(from: TextSearch.Query("caf"))
+        )
+    }
+
+    func testSearchContinuesPastEmbeddedNullBytes() {
+        XCTAssertTrue(TextSearch.contains("before\0AFTER", lowercasedQuery: "after"))
+    }
+
+    func testASCIIScannerMatchesNaiveSearchAcrossFixedCorpus() {
+        var state: UInt64 = 0xC0FFEE
+        let alphabet = Array("aAbBcCdDeE xyzXYZ-_/0123456789".utf8) + [0, 9, 10]
+        func makeString(maxLength: Int) -> String {
+            state = state &* 6_364_136_223_846_793_005 &+ 1
+            let length = Int(state % UInt64(maxLength + 1))
+            let bytes = (0..<length).map { _ -> UInt8 in
+                state = state &* 6_364_136_223_846_793_005 &+ 1
+                return alphabet[Int(state % UInt64(alphabet.count))]
+            }
+            return String(decoding: bytes, as: UTF8.self)
+        }
+
+        for _ in 0..<500 {
+            let haystack = makeString(maxLength: 160)
+            let query = makeString(maxLength: 12).lowercased()
+            XCTAssertEqual(
+                TextSearch.contains(haystack, lowercasedQuery: query),
+                query.isEmpty || haystack.lowercased().contains(query),
+                "scanner disagreed for haystack \(haystack.debugDescription), query \(query.debugDescription)"
+            )
+        }
+    }
+
     func testAMissOnALargeStringStaysFast() {
         let large = String(repeating: "  { \"name\": \"Depth Jump\" },\n", count: 200_000)
         let started = Date()
         XCTAssertFalse(TextSearch.contains(large, lowercasedQuery: "zzznotpresent"))
         let elapsed = -started.timeIntervalSinceNow
-        XCTAssertLessThan(elapsed, 1.0,
+        XCTAssertLessThan(elapsed, 0.25,
                           "a single miss took \(elapsed)s — search is allocating or using ICU again")
     }
 }

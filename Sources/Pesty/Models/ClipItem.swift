@@ -178,10 +178,16 @@ struct ClipItem: Identifiable, Codable, Equatable {
     ///
     /// `query` is expected to be lowercased already, as both call sites do.
     func matches(query: String) -> Bool {
-        guard !query.isEmpty else { return true }
+        matches(query: TextSearch.Query(query))
+    }
+
+    /// Uses one prepared query across every field and every clip in a filter
+    /// pass, avoiding repeated UTF-8 query allocation in this inner loop.
+    func matches(query: TextSearch.Query) -> Bool {
+        guard !query.text.isEmpty else { return true }
         func hit(_ value: String?) -> Bool {
             guard let value, !value.isEmpty else { return false }
-            return TextSearch.contains(value, lowercasedQuery: query)
+            return TextSearch.contains(value, query: query)
         }
         if hit(customTitle) || hit(sourceAppName) || hit(colorHex) { return true }
         if fileURLs.contains(where: { hit($0) }) { return true }

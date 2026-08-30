@@ -111,9 +111,10 @@ struct NativeBarSearchField: NSViewRepresentable {
         }
 
         func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField,
-                  parent.text != field.stringValue else { return }
-            parent.text = field.stringValue
+            guard let field = notification.object as? NSTextField else { return }
+            let value = field.stringValue
+            guard parent.text != value else { return }
+            parent.text = value
         }
 
         func control(_ control: NSControl,
