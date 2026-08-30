@@ -30,7 +30,7 @@ enum TextSearch {
             return haystack.range(of: query, options: .caseInsensitive) != nil
         }
 
-        var utf8 = haystack.utf8
+        let utf8 = haystack.utf8
         if let found = utf8.withContiguousStorageIfAvailable({ scan($0, needle) }) {
             return found
         }

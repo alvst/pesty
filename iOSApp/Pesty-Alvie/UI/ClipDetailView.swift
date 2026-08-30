@@ -11,12 +11,18 @@ struct ClipDetailView: View {
             if let clip = store.clip(id: clipID) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        ClipPreview(clip: clip)
+                        RichClipPreview(clip: clip, compact: false)
+                            .background(PestyPalette.cardBody)
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .strokeBorder(PestyPalette.cardBorder)
+                            }
 
                         VStack(alignment: .leading, spacing: 8) {
                             Label(clip.kind.title, systemImage: clip.kind.symbol)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(clip.kind.tint)
+                                .foregroundStyle(PestyPalette.sourceColor(for: clip))
                             Text(clip.displayTitle)
                                 .font(.title2.weight(.bold))
                             if let text = clip.previewText,
@@ -77,9 +83,21 @@ struct ClipDetailView: View {
                 .navigationTitle("Clip")
                 .navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
-                    Button(action: { copy(clip) }) {
+                    // Tap copies as captured; a rich clip's long-press offers
+                    // the same format choices as the Mac's paste menu.
+                    Menu {
+                        if FormatConverter.canConvert(clip) {
+                            ForEach([CopyFormat.plainText, .cleanFormatting, .markdown]) { format in
+                                Button(format.title, systemImage: format.symbol) {
+                                    copy(clip, format: format)
+                                }
+                            }
+                        }
+                    } label: {
                         Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                             .frame(maxWidth: .infinity)
+                    } primaryAction: {
+                        copy(clip)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -108,9 +126,9 @@ struct ClipDetailView: View {
         }
     }
 
-    private func copy(_ clip: PestyClip) {
+    private func copy(_ clip: PestyClip, format: CopyFormat = .original) {
         do {
-            try ClipboardWriter.copy(clip)
+            try ClipboardWriter.copy(clip, format: format)
             store.markCopied(clip)
             didCopy = true
             UIImpactFeedbackGenerator(style: .light).impactOccurred()

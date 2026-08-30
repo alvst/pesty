@@ -50,6 +50,19 @@ struct ClipItemRestoration {
     var deletionPayload: ClipDeletionPayload?
 }
 
+/// A pinboard the user deleted, kept whole until its Undo window closes.
+/// Unlike a clip, a pinboard has no durable tombstone of its own: while it is
+/// pending it simply stays out of `pinboards`, and sync still publishes it so
+/// other devices do not act on a deletion that may yet be undone.
+struct PendingPinboardDeletion: Codable, Identifiable {
+    var board: Pinboard
+    var deletedAt: Date
+
+    var id: UUID { board.id }
+    var expiresAt: Date { deletedAt.addingTimeInterval(ClipDeletionLedger.undoWindow) }
+    func isUndoable(at date: Date) -> Bool { date < expiresAt }
+}
+
 /// A durable last-writer-wins marker for one clip ID. Restored records remain
 /// in the ledger so an older tombstone arriving from iCloud cannot delete the
 /// item again. Finalized deletion records likewise prevent stale live items
@@ -200,6 +213,12 @@ struct ClipDeletionLedger: Codable {
 
     func hasUndoableDeletion(at date: Date) -> Bool {
         latestUndoableIndex(at: date) != nil
+    }
+
+    /// When the newest still-undoable clip deletion happened, so the store
+    /// can decide whether a pending pinboard deletion is more recent.
+    func latestUndoableDeletionDate(at date: Date) -> Date? {
+        latestUndoableIndex(at: date).map { records[$0].deletedAt }
     }
 
     func nextExpirationDate(after date: Date) -> Date? {

@@ -64,7 +64,7 @@ enum PasteService {
                 return pasteboard.changeCount
             }
             // No rich source to clean: plain text is the honest result.
-            if let text = item.plainText {
+            if item.plainText != nil {
                 return copy(item, to: pasteboard, format: .plainText, imageOverride: imageOverride)
             }
         case .markdown:
@@ -74,7 +74,7 @@ enum PasteService {
                 markPestyAsSource(on: pasteboard)
                 return pasteboard.changeCount
             }
-            if let text = item.plainText {
+            if item.plainText != nil {
                 return copy(item, to: pasteboard, format: .plainText, imageOverride: imageOverride)
             }
         case .original:

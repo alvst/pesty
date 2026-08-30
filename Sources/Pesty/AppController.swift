@@ -72,6 +72,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         if Settings.shared.cloudKitSync {
             NSApp.registerForRemoteNotifications()
             CloudSyncService.shared.start()
+            if ClipboardStore.isSandboxed,
+               !ClipboardStore.shared.legacyLibraryMigrationResolved {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                    self?.offerLegacyLibraryMigration()
+                }
+            }
         }
         #endif
 
@@ -247,14 +253,87 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     #if MAS
     func toggleCloudKitSync() {
-        let enabling = !Settings.shared.cloudKitSync
-        Settings.shared.cloudKitSync = enabling
-        if enabling {
-            NSApp.registerForRemoteNotifications()
-            CloudSyncService.shared.enable()
-        } else {
+        if Settings.shared.cloudKitSync {
+            Settings.shared.cloudKitSync = false
             CloudSyncService.shared.stop()
             NSApp.unregisterForRemoteNotifications()
+            return
+        }
+        if ClipboardStore.isSandboxed,
+           !ClipboardStore.shared.legacyLibraryMigrationResolved {
+            offerLegacyLibraryMigration()
+        } else {
+            enableCloudKitSync()
+        }
+    }
+
+    func importExistingLibraryAndSync() {
+        chooseAndImportLegacyLibrary()
+    }
+
+    private func enableCloudKitSync() {
+        Settings.shared.cloudKitSync = true
+        NSApp.registerForRemoteNotifications()
+        CloudSyncService.shared.enable()
+    }
+
+    private func offerLegacyLibraryMigration() {
+        let alert = NSAlert()
+        alert.messageText = "Include Existing Pesty-Alvie History?"
+        alert.informativeText = "If you used the direct-download Mac app, choose its Pesty-Alvie library folder so that history joins iCloud sync. Nothing in this library is overwritten."
+        alert.addButton(withTitle: "Choose Existing Library…")
+        alert.addButton(withTitle: "Sync This Library Only")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            chooseAndImportLegacyLibrary()
+        case .alertSecondButtonReturn:
+            ClipboardStore.shared.markLegacyLibraryMigrationResolved()
+            if !Settings.shared.cloudKitSync { enableCloudKitSync() }
+        default:
+            break
+        }
+    }
+
+    private func chooseAndImportLegacyLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Existing Pesty-Alvie Library"
+        panel.message = "Select the Pesty-Alvie folder that contains store.json and the images folder."
+        panel.prompt = "Choose Library"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.resolvesAliases = true
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Pesty-Alvie", isDirectory: true)
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+
+        let scoped = directory.startAccessingSecurityScopedResource()
+        defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
+        do {
+            let preview = try ClipboardStore.shared.previewLegacyLibrary(at: directory)
+            let confirmation = NSAlert()
+            confirmation.messageText = "Import Existing Library and Sync?"
+            confirmation.informativeText = "This will merge \(preview.historyClipCount) history clips, \(preview.pinboardCount) pinboard(s), \(preview.pasteStackCount) paste stack(s), and \(preview.imageCount) saved image(s) into this Mac library, then upload the merged library to your private iCloud database. Existing newer items are kept."
+            confirmation.addButton(withTitle: "Import and Sync")
+            confirmation.addButton(withTitle: "Cancel")
+            guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+
+            let imported = try ClipboardStore.shared.importLegacyLibrary(at: directory)
+            if Settings.shared.cloudKitSync {
+                CloudSyncService.shared.refreshNow()
+            } else {
+                enableCloudKitSync()
+            }
+            let complete = NSAlert()
+            complete.messageText = "Existing Library Imported"
+            complete.informativeText = "Merged \(imported.historyClipCount) history clips and \(imported.pinboardCount) pinboard(s). iCloud sync will continue in the background."
+            complete.addButton(withTitle: "OK")
+            complete.runModal()
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.messageText = "Couldn’t Import Existing Library"
+            alert.runModal()
         }
     }
     #endif

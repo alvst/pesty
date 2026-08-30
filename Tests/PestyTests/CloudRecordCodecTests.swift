@@ -65,6 +65,33 @@ final class CloudRecordCodecTests: XCTestCase {
         XCTAssertEqual(decoded.clipIDs, clips.map(\.id))
     }
 
+    func testEmptyStringListsAreOmittedFromNewCloudKitRecords() {
+        let clip = ClipItem(type: .text, text: "No files")
+        let clipRecord = CKRecord(
+            recordType: CKSchema.clipType,
+            recordID: CKSchema.recordID(clip.id.uuidString)
+        )
+        CloudRecordCodec.populate(
+            clipRecord,
+            from: clip,
+            container: CKSchema.historyContainerValue,
+            imageFileURL: nil
+        )
+
+        XCTAssertNil(clipRecord[CKSchema.Field.fileURLs])
+        XCTAssertNil(clipRecord[CKSchema.Field.fileNames])
+
+        let board = Pinboard(name: "Empty")
+        let boardRecord = CKRecord(
+            recordType: CKSchema.pinboardType,
+            recordID: CKSchema.recordID(board.id.uuidString)
+        )
+        CloudRecordCodec.populate(boardRecord, from: board)
+
+        XCTAssertNil(boardRecord[CKSchema.Field.clipIDs])
+        XCTAssertNil(boardRecord[CKSchema.Field.pinnedItemIDs])
+    }
+
     func testPinboardCopyHasFreshIdentityAndRetainsContent() {
         let original = ClipItem(type: .link, text: "https://example.com")
 
@@ -89,5 +116,66 @@ final class CloudRecordCodecTests: XCTestCase {
 
         XCTAssertEqual(decoded.id, id)
         XCTAssertEqual(decoded.updatedAt, date)
+    }
+
+    @MainActor
+    func testLegacyLibraryMergeKeepsCurrentItemsAndAddsUniqueLegacyItems() {
+        let sharedClipID = UUID()
+        let currentClip = ClipItem(id: sharedClipID, type: .text, text: "Current")
+        let currentOnlyClip = ClipItem(type: .text, text: "Current only")
+        let legacyDuplicate = ClipItem(id: sharedClipID, type: .text, text: "Legacy duplicate")
+        let legacyOnlyClip = ClipItem(type: .text, text: "Legacy only")
+
+        let sharedBoardID = UUID()
+        let currentBoard = Pinboard(id: sharedBoardID, name: "Current board")
+        let legacyDuplicateBoard = Pinboard(id: sharedBoardID, name: "Legacy duplicate board")
+        let legacyOnlyBoard = Pinboard(name: "Legacy board")
+
+        let sharedStackID = UUID()
+        let currentStack = SavedPasteStack(
+            id: sharedStackID,
+            entries: [PasteStackEntry(item: currentClip)]
+        )
+        let legacyDuplicateStack = SavedPasteStack(
+            id: sharedStackID,
+            entries: [PasteStackEntry(item: legacyDuplicate)]
+        )
+        let legacyOnlyStack = SavedPasteStack(
+            entries: [PasteStackEntry(item: legacyOnlyClip)]
+        )
+
+        var currentLedger = ClipDeletionLedger()
+        let deletedID = UUID()
+        currentLedger.recordDeletion(
+            id: deletedID,
+            payload: ClipDeletionPayload(history: [], pinboards: [], pasteStackEntries: []),
+            at: Date(timeIntervalSinceReferenceDate: 10)
+        )
+        var legacyLedger = ClipDeletionLedger()
+        legacyLedger.recordDeletion(
+            id: UUID(),
+            payload: ClipDeletionPayload(history: [], pinboards: [], pasteStackEntries: []),
+            at: Date(timeIntervalSinceReferenceDate: 20)
+        )
+
+        let merged = ClipboardStore.mergingSnapshots(
+            current: ClipboardStore.Snapshot(
+                history: [currentClip, currentOnlyClip],
+                pinboards: [currentBoard],
+                pasteStacks: [currentStack],
+                deletionLedger: currentLedger
+            ),
+            legacy: ClipboardStore.Snapshot(
+                history: [legacyDuplicate, legacyOnlyClip],
+                pinboards: [legacyDuplicateBoard, legacyOnlyBoard],
+                pasteStacks: [legacyDuplicateStack, legacyOnlyStack],
+                deletionLedger: legacyLedger
+            )
+        )
+
+        XCTAssertEqual(merged.history.map(\.text), ["Current", "Current only", "Legacy only"])
+        XCTAssertEqual(merged.pinboards.map(\.name), ["Current board", "Legacy board"])
+        XCTAssertEqual(merged.pasteStacks?.map(\.id), [sharedStackID, legacyOnlyStack.id])
+        XCTAssertEqual(merged.deletionLedger?.deletedIDs, [deletedID])
     }
 }

@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.alvst
   deploymentTarget:
     iOS: "17.0"
+    macOS: "14.0"
   xcodeVersion: "26.3"
 settings:
   base:
@@ -19,6 +20,11 @@ targets:
       - path: Pesty-Alvie
         excludes:
           - Tests
+    dependencies:
+      - target: PestyWidget
+        embed: true
+      - target: PestyShareExtension
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion
@@ -26,6 +32,8 @@ targets:
         PRODUCT_MODULE_NAME: Pesty
         INFOPLIST_FILE: Pesty-Alvie/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Pesty-Alvie/Resources/Pesty-Alvie.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: AV8TX99676
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
@@ -36,6 +44,52 @@ targets:
         Release:
           APS_ENVIRONMENT: production
           ICLOUD_CONTAINER_ENVIRONMENT: Production
+  PestyWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PestyWidget
+      - path: Pesty-Alvie/Domain/ClipKind.swift
+      - path: Pesty-Alvie/Domain/PestyClip.swift
+      - path: Pesty-Alvie/Domain/PestyBoard.swift
+      - path: Pesty-Alvie/Domain/PestyLibrary.swift
+      - path: Pesty-Alvie/Store/LocalLibraryPersistence.swift
+      - path: Pesty-Alvie/UI/PestyPalette.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.widget
+        PRODUCT_NAME: PestyWidget
+        PRODUCT_MODULE_NAME: PestyWidget
+        INFOPLIST_FILE: PestyWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PestyWidget/PestyWidget.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: AV8TX99676
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  PestyShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PestyShareExtension
+      - path: Pesty-Alvie/Domain/ClipKind.swift
+      - path: Pesty-Alvie/Domain/PestyClip.swift
+      - path: Pesty-Alvie/Domain/PestyBoard.swift
+      - path: Pesty-Alvie/Domain/PestyLibrary.swift
+      - path: Pesty-Alvie/Store/LocalLibraryPersistence.swift
+      - path: Pesty-Alvie/Store/LocalAssetPersistence.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.share
+        PRODUCT_NAME: PestyShareExtension
+        PRODUCT_MODULE_NAME: PestyShareExtension
+        INFOPLIST_FILE: PestyShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PestyShareExtension/PestyShareExtension.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: AV8TX99676
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
   Pesty-AlvieTests:
     type: bundle.unit-test
     platform: iOS
@@ -49,6 +103,37 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  Pesty-Alvie-Mac:
+    type: application
+    platform: macOS
+    sources:
+      - path: ../Sources/Pesty
+        name: Pesty-Mac
+      - path: Pesty-Alvie-Mac/Resources/container-migration.plist
+        buildPhase: resources
+      # Same icon as the direct-download build; without it Xcode's generic
+      # placeholder shows in the Dock, Mission Control, and Settings.
+      - path: ../packaging/Pesty-Alvie.icns
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie
+        PRODUCT_NAME: Pesty-Alvie
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: Pesty-Alvie-Mac/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Pesty-Alvie-Mac/Resources/Pesty-Alvie-Mac.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: AV8TX99676
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAS"
+    preBuildScripts:
+      # The icon is a build product of the direct-download packaging, not a
+      # tracked file; a fresh clone would otherwise fail the resources phase.
+      - name: Generate app icon if missing
+        script: '[ -f "$SRCROOT/../packaging/Pesty-Alvie.icns" ] || bash "$SRCROOT/../scripts/make_icon.sh"'
+        basedOnDependencyAnalysis: false
 schemes:
   Pesty-Alvie:
     build:
@@ -58,3 +143,19 @@ schemes:
     test:
       targets:
         - Pesty-AlvieTests
+  # Screenshot build: launches with --demo so the library is the fixed seed
+  # from DemoLibrary, never the real one.
+  Pesty-Alvie Demo:
+    build:
+      targets:
+        Pesty-Alvie: all
+    run:
+      config: Debug
+      commandLineArguments:
+        "--demo": true
+  Pesty-Alvie Mac Development:
+    build:
+      targets:
+        Pesty-Alvie-Mac: all
+    run:
+      config: Debug

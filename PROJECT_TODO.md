@@ -799,8 +799,8 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 ### 14A — Toolchain decision
 
-- [ ] Pin Xcode **26.3** as the initial build SDK requirement while retaining the intended macOS 14 deployment target; record an explicitly approved replacement version before changing the pin.
-- [ ] Select that exact Xcode 26.3 toolchain in both CI and release workflows; update CONTRIBUTING. Pin third-party setup actions to immutable SHAs, or use a verified installed developer path.
+- [x] Pin Xcode **26.3** as the initial build SDK requirement while retaining the intended macOS 14 deployment target; record an explicitly approved replacement version before changing the pin.
+- [x] Select that exact Xcode 26.3 toolchain in both CI and release workflows; update CONTRIBUTING. Pin third-party setup actions to immutable SHAs, or use a verified installed developer path.
 - [ ] Keep a macOS 14/15 compile/runtime fallback and record real results on both OS versions before release. Availability checks do not make a new SDK symbol compile under Xcode 16.
 
 ### 14B — Material implementation
@@ -839,20 +839,21 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [x] Product, target, project, scheme, test host, bundle IDs, CloudKit entitlement constant, and visible names are Pesty-Alvie-specific.
 - [x] `PRODUCT_MODULE_NAME=Pesty` is retained so existing `@testable import Pesty` and model names compile.
 - [x] Generic iOS Simulator build-for-testing and the existing three tests pass.
-- [ ] Decide whether the companion merely reports CloudKit readiness or implements live library sync. The current prototype should not imply live sync if it only checks readiness.
-- [ ] If live sync is built, consume the exact macOS CloudKit schema, handle per-container UUIDs, conflicts, deletes, images, migration, offline work, and two-device convergence.
-- [ ] Keep the iOS local support directory Pesty-Alvie-specific and update every “iCloud Drive/Pesty” instruction to the actual fork path/container behavior.
-- [ ] Fix `iOSApp/Pesty-Alvie/Sync/LibrarySyncing.swift` so the CloudKit error string interpolates `error.localizedDescription` instead of displaying the literal `(error.localizedDescription)`; prohibit clipboard content in logs.
+- [x] Implement live library sync rather than a readiness-only companion, and label simulator builds accurately as local-only.
+- [x] Consume the exact macOS CloudKit schema and handle per-container UUIDs, conflicts, deletes, images, migration, and durable offline work.
+- [ ] Verify insert/update/delete/conflict/image/order convergence on two physically signed devices after provisioning.
+- [x] Keep the iOS local support directory Pesty-Alvie-specific and update every “iCloud Drive/Pesty” instruction to the actual fork path/container behavior.
+- [x] Fix `iOSApp/Pesty-Alvie/Sync/LibrarySyncing.swift` so CloudKit errors interpolate `error.localizedDescription`; prohibit clipboard content in logs.
 - [ ] Register/provision `iCloud.com.alvst.pesty-alvie` under Alvie's Apple Developer team before physical-device testing; simulator success is not device entitlement proof.
 
 ### 15B — Signing and packaging
 
 - [ ] Parameterize Developer ID, MAS distribution/installer certificates, Team ID, App Store application identifier, provisioning profile, and notarization API credentials.
-- [ ] Do not retain or silently default to Moamen's Team `H3WXHVTP97`, certificates, profiles, or API-key paths.
+- [x] Do not retain or silently default to Moamen's Team `H3WXHVTP97`, certificates, profiles, or API-key paths.
 - [ ] Direct local ad-hoc builds may use the stable custom designated requirement; document that changing the signature later can require a fresh Accessibility grant.
 - [ ] Produce only `Pesty-Alvie.app`, `Pesty-Alvie.icns`, Pesty-Alvie DMG/ZIP/PKG names, and Pesty-Alvie volume labels.
 - [ ] Remove upstream Homebrew install text from fork release notes because it installs the other app.
-- [ ] Keep signing/notarization workflows manual until valid secrets and App IDs exist. Do not restore a known-failing tag-triggered release.
+- [x] Keep signing/notarization workflows manual until valid secrets and App IDs exist. Do not restore a known-failing tag-triggered release.
 
 ### 15C — Final regression and release documentation
 

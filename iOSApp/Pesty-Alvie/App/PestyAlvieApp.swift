@@ -5,7 +5,7 @@ import UIKit
 @MainActor
 struct PestyAlvieApp: App {
     @Environment(\.scenePhase) private var scenePhase
-    @State private var libraryStore = LibraryStore()
+    @State private var libraryStore = DemoLibrary.isRequested ? LibraryStore.demo() : LibraryStore()
 
     init() {
         UIApplication.shared.registerForRemoteNotifications()
@@ -18,6 +18,7 @@ struct PestyAlvieApp: App {
                 .task { libraryStore.start() }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
+                    libraryStore.reloadSharedLibrary()
                     Task { await libraryStore.refreshSyncStatus() }
                 }
         }

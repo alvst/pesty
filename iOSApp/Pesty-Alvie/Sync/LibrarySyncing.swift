@@ -77,6 +77,17 @@ enum CloudSyncProjection {
         projected.preDeletionUpdatedAt = nil
         return projected
     }
+
+    static func board(_ source: PestyBoard) -> PestyBoard {
+        guard source.deletedAt != nil,
+              source.deletionFinalizedAt == nil,
+              let priorVersion = source.preDeletionUpdatedAt else { return source }
+        var projected = source
+        projected.updatedAt = priorVersion
+        projected.deletedAt = nil
+        projected.preDeletionUpdatedAt = nil
+        return projected
+    }
 }
 
 /// Bidirectional private-database synchronization for the iOS companion.
@@ -88,6 +99,7 @@ final class CloudSyncService: LibrarySyncing {
     private var engine: CKSyncEngine?
     private var shadow: [String: String] = [:]
     private var isApplyingRemote = false
+    private var immediateSyncTask: Task<Void, Never>?
 
     private var stateURL: URL {
         LocalLibraryPersistence.supportDirectory.appendingPathComponent("cksync-state.json")
@@ -146,7 +158,9 @@ final class CloudSyncService: LibrarySyncing {
         }
         refreshAccountStatus()
         diffAndEnqueue()
-        Task { try? await engine.fetchChanges() }
+        // Opening the app should be deterministic even though CKSyncEngine's
+        // normal push/scheduler path is intentionally opportunistic.
+        fetchNow()
         #endif
     }
 
@@ -159,8 +173,11 @@ final class CloudSyncService: LibrarySyncing {
             if let target { start(target: target) }
             return
         }
+        guard immediateSyncTask == nil else { return }
         target?.updateSyncStatus(.syncing)
-        Task {
+        immediateSyncTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.immediateSyncTask = nil }
             do {
                 try await engine.fetchChanges()
                 try await engine.sendChanges()
@@ -176,6 +193,8 @@ final class CloudSyncService: LibrarySyncing {
     /// Clears only local CloudKit bookkeeping, then downloads the account's
     /// records again. It intentionally does not enqueue deletions.
     func rebuildLocalReplica() {
+        immediateSyncTask?.cancel()
+        immediateSyncTask = nil
         engine = nil
         shadow = [:]
         try? FileManager.default.removeItem(at: stateURL)
@@ -195,7 +214,10 @@ final class CloudSyncService: LibrarySyncing {
                     guard self.engine != nil else { return }
                     switch account {
                     case .available:
-                        self.target?.updateSyncStatus(.ready)
+                        // The explicit launch/foreground fetch owns the ready
+                        // state so an account check cannot report success while
+                        // records are still downloading.
+                        break
                     case .noAccount:
                         self.target?.updateSyncStatus(.unavailable("Sign in to iCloud in Settings to sync Pesty-Alvie."))
                     case .restricted:
@@ -241,7 +263,7 @@ final class CloudSyncService: LibrarySyncing {
                 continue
             }
             desired[board.id.uuidString] = DesiredRecord(
-                fingerprint: fingerprint(board)
+                fingerprint: fingerprint(CloudSyncProjection.board(board))
             )
         }
         return desired
@@ -264,7 +286,10 @@ final class CloudSyncService: LibrarySyncing {
         saveShadow()
         engine.state.add(pendingRecordZoneChanges: pending)
         target?.updateSyncStatus(.syncing)
-        Task { try? await engine.sendChanges() }
+        // Adding pending changes schedules an automatic send. Calling
+        // sendChanges() here is unsafe because this method can run while the
+        // engine is delivering a delegate event, and CloudKit forbids awaiting
+        // another engine operation from inside that delegate context.
     }
 
     private func record(for recordID: CKRecord.ID) -> CKRecord? {
@@ -285,7 +310,7 @@ final class CloudSyncService: LibrarySyncing {
         }
         if let board = library.boards.first(where: { $0.id.uuidString == recordID.recordName }) {
             let record = baseRecord(name: recordID.recordName, type: CKSchema.pinboardType)
-            CloudRecordCodec.populate(record, from: board)
+            CloudRecordCodec.populate(record, from: CloudSyncProjection.board(board))
             return record
         }
         engine?.state.remove(pendingRecordZoneChanges: [.saveRecord(recordID)])
@@ -562,9 +587,13 @@ extension CloudSyncService: CKSyncEngineDelegate {
         case .sentDatabaseChanges:
             break
 
-        case .willFetchChanges, .willFetchRecordZoneChanges,
-             .didFetchRecordZoneChanges, .didFetchChanges,
-             .willSendChanges, .didSendChanges:
+        case .willFetchChanges, .willSendChanges:
+            target?.updateSyncStatus(.syncing)
+
+        case .didFetchChanges, .didSendChanges:
+            target?.updateSyncStatus(.ready)
+
+        case .willFetchRecordZoneChanges, .didFetchRecordZoneChanges:
             break
 
         @unknown default:

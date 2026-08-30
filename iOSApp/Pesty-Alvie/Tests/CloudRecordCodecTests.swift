@@ -54,6 +54,28 @@ final class CloudRecordCodecTests: XCTestCase {
         XCTAssertEqual(decoded, board)
     }
 
+    func testEmptyStringListsAreOmittedFromNewCloudKitRecords() {
+        let clip = PestyClip(kind: .text, text: "No files")
+        let clipRecord = CKRecord(
+            recordType: CKSchema.clipType,
+            recordID: CKSchema.recordID(clip.id.uuidString)
+        )
+        CloudRecordCodec.populate(clipRecord, from: clip, imageFileURL: nil)
+
+        XCTAssertNil(clipRecord[CKSchema.Field.fileURLs])
+        XCTAssertNil(clipRecord[CKSchema.Field.fileNames])
+
+        let board = PestyBoard(name: "Empty")
+        let boardRecord = CKRecord(
+            recordType: CKSchema.pinboardType,
+            recordID: CKSchema.recordID(board.id.uuidString)
+        )
+        CloudRecordCodec.populate(boardRecord, from: board)
+
+        XCTAssertNil(boardRecord[CKSchema.Field.clipIDs])
+        XCTAssertNil(boardRecord[CKSchema.Field.pinnedItemIDs])
+    }
+
     func testLegacyHistoryContainerDecodesAsHistory() throws {
         let id = UUID()
         let record = CKRecord(

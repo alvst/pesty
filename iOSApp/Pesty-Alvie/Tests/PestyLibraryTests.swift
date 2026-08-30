@@ -83,10 +83,14 @@ final class PestyLibraryTests: XCTestCase {
         XCTAssertNil(library.clip(id: clip.id))
     }
 
-    func testBoardDeletionIsImmediateAndFinal() throws {
+    func testBoardDeletionIsUndoableForFiveMinutesAndBringsItsCopiesBack() throws {
         let deletedAt = Date(timeIntervalSince1970: 300)
-        let clip = PestyClip(kind: .text, text: "Pinned")
+        let boardID = UUID()
+        let clip = PestyClip(containerID: boardID, kind: .text, text: "Pinned",
+                             capturedAt: deletedAt.addingTimeInterval(-10),
+                             updatedAt: deletedAt.addingTimeInterval(-10))
         let board = PestyBoard(
+            id: boardID,
             name: "Saved",
             clipIDs: [clip.id],
             createdAt: deletedAt.addingTimeInterval(-10),
@@ -96,8 +100,73 @@ final class PestyLibraryTests: XCTestCase {
         library.deleteBoard(id: board.id, at: deletedAt)
 
         XCTAssertNil(library.board(id: board.id))
+        XCTAssertNil(library.boards.first?.deletionFinalizedAt)
+        XCTAssertNil(library.clips.first?.deletionFinalizedAt)
+        // The copy is not offered on its own; the board is what Undo restores.
+        XCTAssertEqual(library.undoableDeletion(at: deletedAt.addingTimeInterval(299)), .board(library.boards[0]))
+        XCTAssertNil(library.undoableDeletion(at: deletedAt.addingTimeInterval(300)))
+
+        XCTAssertTrue(library.undoMostRecentDeletion(at: deletedAt.addingTimeInterval(60)))
+        XCTAssertNotNil(library.board(id: board.id))
+        XCTAssertEqual(library.clips(in: library.board(id: board.id)!).map(\.id), [clip.id])
+        XCTAssertNil(library.undoableDeletion(at: deletedAt.addingTimeInterval(61)))
+    }
+
+    func testBoardDeletionExpiryFinalizesBoardAndCopies() {
+        let deletedAt = Date(timeIntervalSince1970: 300)
+        let boardID = UUID()
+        let clip = PestyClip(containerID: boardID, kind: .text, text: "Pinned",
+                             capturedAt: deletedAt.addingTimeInterval(-10),
+                             updatedAt: deletedAt.addingTimeInterval(-10))
+        let board = PestyBoard(id: boardID, name: "Saved", clipIDs: [clip.id],
+                               createdAt: deletedAt.addingTimeInterval(-10),
+                               updatedAt: deletedAt.addingTimeInterval(-10))
+        var library = PestyLibrary(clips: [clip], boards: [board])
+        library.deleteBoard(id: board.id, at: deletedAt)
+        library.finalizeExpiredDeletions(at: deletedAt.addingTimeInterval(300))
+
         XCTAssertNotNil(library.boards.first?.deletionFinalizedAt)
         XCTAssertNotNil(library.clips.first?.deletionFinalizedAt)
+        XCTAssertFalse(library.undoMostRecentDeletion(at: deletedAt.addingTimeInterval(301)))
+    }
+
+    func testRemovingACopyFromAPinboardIsUndoable() {
+        let removedAt = Date(timeIntervalSince1970: 300)
+        let boardID = UUID()
+        let clip = PestyClip(containerID: boardID, kind: .text, text: "Pinned",
+                             capturedAt: removedAt.addingTimeInterval(-10),
+                             updatedAt: removedAt.addingTimeInterval(-10))
+        let board = PestyBoard(id: boardID, name: "Saved", clipIDs: [clip.id],
+                               createdAt: removedAt.addingTimeInterval(-10),
+                               updatedAt: removedAt.addingTimeInterval(-10))
+        var library = PestyLibrary(clips: [clip], boards: [board])
+        library.remove(clipID: clip.id, from: boardID, at: removedAt)
+
+        XCTAssertTrue(library.clips(in: library.board(id: boardID)!).isEmpty)
+        XCTAssertEqual(library.undoableDeletion(at: removedAt.addingTimeInterval(1)), .clip(library.clips[0]))
+        XCTAssertTrue(library.undoMostRecentDeletion(at: removedAt.addingTimeInterval(1)))
+        XCTAssertEqual(library.clips(in: library.board(id: boardID)!).map(\.id), [clip.id])
+    }
+
+    func testRePinningARemovedCopyRevivesItInsteadOfDuplicating() {
+        let removedAt = Date(timeIntervalSince1970: 300)
+        let boardID = UUID()
+        let source = PestyClip(kind: .text, text: "Pinned",
+                               capturedAt: removedAt.addingTimeInterval(-10),
+                               updatedAt: removedAt.addingTimeInterval(-10))
+        let copy = PestyClip(containerID: boardID, kind: .text, text: "Pinned",
+                             capturedAt: removedAt.addingTimeInterval(-10),
+                             updatedAt: removedAt.addingTimeInterval(-10))
+        let board = PestyBoard(id: boardID, name: "Saved", clipIDs: [copy.id],
+                               createdAt: removedAt.addingTimeInterval(-10),
+                               updatedAt: removedAt.addingTimeInterval(-10))
+        var library = PestyLibrary(clips: [source, copy], boards: [board])
+        library.remove(clipID: copy.id, from: boardID, at: removedAt)
+
+        XCTAssertEqual(library.add(clipID: source.id, to: boardID, at: removedAt.addingTimeInterval(5)), copy.id)
+        XCTAssertEqual(library.clips(in: library.board(id: boardID)!).map(\.id), [copy.id])
+        XCTAssertEqual(library.clips.count, 2)
+        XCTAssertNil(library.undoableDeletion(at: removedAt.addingTimeInterval(6)))
     }
 
     func testUndoRestorationWinsLastWriterMergeAgainstTombstone() throws {

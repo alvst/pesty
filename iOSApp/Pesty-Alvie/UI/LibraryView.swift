@@ -3,7 +3,11 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var pendingRoute: LibraryRoute?
     @State private var searchText = ""
+    @State private var isSearchPresented = false
+    @State private var navigationPath: [UUID] = []
     @State private var selectedKind: ClipKind?
     @State private var isPresentingNewClip = false
     @State private var isImportingStore = false
@@ -17,8 +21,15 @@ struct LibraryView: View {
         }
     }
 
+    private var gridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: 12, alignment: .top)]
+        }
+        return [GridItem(.adaptive(minimum: 164, maximum: 300), spacing: 12, alignment: .top)]
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if store.clips.isEmpty {
                     EmptyLibraryView(
@@ -27,12 +38,7 @@ struct LibraryView: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            SyncStatusBanner(status: store.syncStatus) {
-                                Task { await store.refreshSyncStatus() }
-                            }
-                            .padding(.horizontal)
-
+                        LazyVGrid(columns: gridColumns, alignment: .center, spacing: 12) {
                             if visibleClips.isEmpty {
                                 ContentUnavailableView.search(text: searchText)
                                     .padding(.top, 72)
@@ -51,8 +57,15 @@ struct LibraryView: View {
                                         } label: {
                                             Label("Copy", systemImage: "doc.on.doc")
                                         }
+                                        if FormatConverter.canConvert(clip) {
+                                            ForEach([CopyFormat.plainText, .cleanFormatting, .markdown]) { format in
+                                                Button(format.title, systemImage: format.symbol) {
+                                                    copy(clip, format: format)
+                                                }
+                                            }
+                                        }
                                         if !store.boards.isEmpty {
-                                            Menu("Pinboards") {
+                                            Menu("Pinboards", systemImage: "pin") {
                                                 ForEach(store.boards) { board in
                                                     Button {
                                                         store.toggle(clip, in: board)
@@ -75,13 +88,17 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        .padding(.vertical, 12)
+                        .padding(12)
                     }
                     .background(Color(uiColor: .systemGroupedBackground))
                 }
             }
             .navigationTitle("Pesty-Alvie")
-            .searchable(text: $searchText, prompt: "Search your library")
+            .searchable(
+                text: $searchText,
+                isPresented: $isSearchPresented,
+                prompt: "Search your library"
+            )
             .navigationDestination(for: UUID.self) { clipID in
                 ClipDetailView(clipID: clipID)
             }
@@ -98,17 +115,35 @@ struct LibraryView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: selectedKind?.symbol ?? "line.3.horizontal.decrease.circle")
+                        // Filled while a filter is active, so it reads as
+                        // "on" at a glance instead of changing shape.
+                        Image(systemName: selectedKind == nil
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
                     }
                     .accessibilityLabel("Filter clips")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if store.undoableDeletedClip != nil {
+                    if store.undoableDeletion != nil {
                         Button("Undo", systemImage: "arrow.uturn.backward") {
-                            store.undoClipDeletion()
+                            store.undoDeletion()
                         }
-                        .accessibilityLabel("Undo clip deletion")
+                        .accessibilityLabel("Undo deletion")
                     }
+                    Button {
+                        Task { await store.refreshSyncStatus() }
+                    } label: {
+                        if store.syncStatus == .checking || store.syncStatus == .syncing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: store.syncStatus.isReady
+                                  ? "arrow.clockwise"
+                                  : store.syncStatus.symbol)
+                        }
+                    }
+                    .disabled(store.syncStatus == .checking || store.syncStatus == .syncing)
+                    .accessibilityLabel("\(store.syncStatus.title). Refresh iCloud")
                     Button {
                         isPresentingNewClip = true
                     } label: {
@@ -127,12 +162,23 @@ struct LibraryView: View {
             ) { result in
                 importStore(result)
             }
+            .onChange(of: pendingRoute, initial: true) { _, route in
+                guard let route else { return }
+                switch route {
+                case .clip(let id): navigationPath = [id]
+                case .search:
+                    searchText = ""
+                    isSearchPresented = true
+                case .newClip: isPresentingNewClip = true
+                }
+                pendingRoute = nil
+            }
         }
     }
 
-    private func copy(_ clip: PestyClip) {
+    private func copy(_ clip: PestyClip, format: CopyFormat = .original) {
         do {
-            try ClipboardWriter.copy(clip)
+            try ClipboardWriter.copy(clip, format: format)
             store.markCopied(clip)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } catch {
@@ -162,7 +208,11 @@ private struct EmptyLibraryView: View {
         ContentUnavailableView {
             Label("Your Pesty-Alvie library is empty", systemImage: "doc.on.clipboard")
         } description: {
+#if targetEnvironment(simulator)
+            Text("Add a clip here or import an existing Pesty-Alvie store.")
+#else
             Text("Add a clip here, import an existing Pesty-Alvie store, or let iCloud sync it from your Mac.")
+#endif
         } actions: {
             VStack(spacing: 10) {
                 Button("Add a clip", action: addClip)
@@ -180,97 +230,76 @@ struct ClipCard: View {
     let isRecentlyCopied: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(clip.kind.tint)
-                .frame(width: 7)
-                .padding(.vertical, 10)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: clip.kind.symbol)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(clip.kind.tint)
-                        .frame(width: 20)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(clip.kind.title.uppercased())
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    if isRecentlyCopied {
-                        Label("Copied", systemImage: "checkmark")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                    } else {
-                        Text(clip.capturedAt, format: .relative(presentation: .named))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PestyPalette.headerText)
+                    Text(clip.capturedAt, format: .relative(presentation: .named))
+                        .font(.caption2)
+                        .foregroundStyle(PestyPalette.headerSubtext)
                 }
-
-                if clip.kind == .color, let color = Color(hex: clip.colorHex ?? "") {
-                    HStack(spacing: 10) {
-                        Circle().fill(color).frame(width: 28, height: 28)
-                        Text(clip.displayTitle)
-                            .font(.headline)
-                    }
+                Spacer(minLength: 2)
+                if isRecentlyCopied {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.white)
+                        .accessibilityLabel("Copied")
                 } else {
-                    Text(clip.displayTitle)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    if let preview = clip.previewText,
-                       preview != clip.displayTitle {
-                        Text(preview)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-
-                if let source = clip.sourceAppName ?? clip.sourceDeviceName {
-                    Label(source, systemImage: "laptopcomputer.and.iphone")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    sourceBadge
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 12)
+            .frame(height: 52)
+            .background(PestyPalette.sourceColor(for: clip))
+
+            RichClipPreview(clip: clip)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(PestyPalette.cardBody)
+
+            if let source = clip.sourceAppName ?? clip.sourceDeviceName {
+                HStack(spacing: 5) {
+                    Image(systemName: clip.sourceAppName == nil ? "iphone" : "app.fill")
+                    Text(source).lineLimit(1)
+                }
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(PestyPalette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(PestyPalette.cardBody)
+                .overlay(alignment: .top) { Divider().opacity(0.6) }
+            }
         }
-        .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(PestyPalette.cardBody)
+        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.quaternary, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .strokeBorder(PestyPalette.cardBorder, lineWidth: 1)
         }
-        .padding(.horizontal)
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.13), radius: 5, y: 2)
+        .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
-}
 
-struct SyncStatusBanner: View {
-    let status: SyncStatus
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            if status == .checking {
-                ProgressView().controlSize(.small)
+    private var sourceBadge: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.white.opacity(0.18))
+            if let initial = clip.sourceAppName?.first {
+                Text(String(initial).uppercased())
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(.white)
             } else {
-                Image(systemName: status.symbol)
-                    .foregroundStyle(status.isReady ? .indigo : .secondary)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(status.title)
-                    .font(.subheadline.weight(.semibold))
-                Text(status.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            if status != .checking {
-                Button("Check", action: retry)
-                    .font(.caption.weight(.semibold))
+                Image(systemName: clip.kind.symbol)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
             }
         }
-        .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .frame(width: 30, height: 30)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.white.opacity(0.18))
+        }
     }
 }

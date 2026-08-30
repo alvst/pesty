@@ -13,10 +13,15 @@ enum CloudRecordCodec {
         writePossiblyLargeRichText(clip.richTextData, to: record)
         record[CKSchema.Field.image] = imageFileURL.map(CKAsset.init(fileURL:))
         record[CKSchema.Field.imageHash] = bounded(clip.imageHash, length: 128)
-        record[CKSchema.Field.fileURLs] = clip.sourceFileURLs.map {
+        let fileURLs = clip.sourceFileURLs.map {
             Array($0.prefix(CKSchema.maximumFileNameCount)).map { String($0.prefix(2_048)) }
-        }
-        record[CKSchema.Field.fileNames] = Array(clip.fileNames.prefix(CKSchema.maximumFileNameCount))
+        } ?? []
+        writeStringList(fileURLs, to: record, field: CKSchema.Field.fileURLs)
+        writeStringList(
+            Array(clip.fileNames.prefix(CKSchema.maximumFileNameCount)),
+            to: record,
+            field: CKSchema.Field.fileNames
+        )
         record[CKSchema.Field.colorHex] = bounded(clip.colorHex, length: 9)
         record[CKSchema.Field.sourceBundleID] = bounded(clip.sourceBundleID, length: 512)
         record[CKSchema.Field.sourceAppName] = bounded(clip.sourceAppName, length: 256)
@@ -81,12 +86,18 @@ enum CloudRecordCodec {
         record[CKSchema.Field.createdAt] = board.createdAt
         record[CKSchema.Field.updatedAt] = board.updatedAt
         record[CKSchema.Field.sortIndex] = NSNumber(value: board.sortIndex)
-        record[CKSchema.Field.clipIDs] = board.clipIDs
+        writeStringList(board.clipIDs
             .prefix(CKSchema.maximumBoardClipCount)
-            .map(\.uuidString)
-        record[CKSchema.Field.pinnedItemIDs] = board.pinnedClipIDs
+            .map(\.uuidString),
+            to: record,
+            field: CKSchema.Field.clipIDs
+        )
+        writeStringList(board.pinnedClipIDs
             .prefix(CKSchema.maximumBoardClipCount)
-            .map(\.uuidString)
+            .map(\.uuidString),
+            to: record,
+            field: CKSchema.Field.pinnedItemIDs
+        )
     }
 
     static func decodeBoard(_ record: CKRecord) -> PestyBoard? {
@@ -219,6 +230,10 @@ enum CloudRecordCodec {
     private static func bounded(_ value: String?, length: Int) -> String? {
         guard let value else { return nil }
         return String(value.prefix(length))
+    }
+
+    private static func writeStringList(_ values: [String], to record: CKRecord, field: String) {
+        record[field] = values.isEmpty ? nil : values
     }
 
     private static func fileName(_ value: String) -> String {

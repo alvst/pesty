@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Observation
+import UniformTypeIdentifiers
 
 @Observable
 @MainActor
@@ -127,6 +128,20 @@ final class ClipboardMonitor {
             var item = ClipItem(type: .file,
                                 text: urls.map(\.lastPathComponent).joined(separator: ", "),
                                 fileURLs: urls.map(\.absoluteString))
+            // A screenshot tool's "copy" is a single image *file*. It stays a
+            // file clip so pasting into Finder still produces the file, but
+            // Pesty keeps the pixels too: that is what the card shows if the
+            // file later moves, and what the iPhone gets, since a bare path
+            // means nothing there.
+            //
+            // The pasteboard's own image data comes first: the sandboxed build
+            // cannot read a screenshot tool's private folder, but it can read
+            // what that tool put on the pasteboard next to the file URL.
+            if urls.count == 1, Self.isImageFile(urls[0]),
+               let data = pngData() ?? Self.imageFileData(at: urls[0]) {
+                item.imageHash = Self.sha256Hex(data)
+                item.imageFileName = ClipboardStore.shared.storeImageData(data)
+            }
             decorate(&item)
             return item
         }
@@ -148,6 +163,14 @@ final class ClipboardMonitor {
         let html = pasteboard.data(forType: .html)
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A copied "#F9CB06" is a color, not seven characters of text —
+            // checked before the rich-text branch because a browser copy
+            // often carries RTF alongside the string.
+            if let hex = Self.hexColor(in: trimmed) {
+                var item = ClipItem(type: .color, colorHex: hex)
+                decorate(&item)
+                return item
+            }
             let type: ClipType
             if rtf != nil {
                 type = .richText
@@ -170,6 +193,16 @@ final class ClipboardMonitor {
         return nil
     }
 
+    /// `#RRGGBB` or `#RRGGBBAA`, and nothing else on the clip — the same rule
+    /// the iOS share extension uses. The leading `#` is required: a bare
+    /// six-letter word like "decade" is not a color. Returns the normalized
+    /// `#RRGGBB` form so identical colors dedupe regardless of case.
+    nonisolated static func hexColor(in text: String) -> String? {
+        guard text.range(of: #"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"#,
+                         options: .regularExpression) != nil else { return nil }
+        return NSColor(hex: text)?.hexString
+    }
+
     private func hasColorType(_ types: [NSPasteboard.PasteboardType]) -> Bool {
         types.contains { $0.rawValue.localizedCaseInsensitiveContains("color") }
     }
@@ -180,7 +213,20 @@ final class ClipboardMonitor {
             ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
     }
 
-    private static func sha256Hex(_ data: Data) -> String {
+    static func isImageFile(_ url: URL) -> Bool {
+        guard url.isFileURL, let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .image)
+    }
+
+    /// The bytes of a copied file when it is an image small enough to sync.
+    static func imageFileData(at url: URL) -> Data? {
+        guard isImageFile(url),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= CKSchema.maximumAssetBytes else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 

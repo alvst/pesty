@@ -14,6 +14,9 @@ struct PestyBoard: Identifiable, Codable, Hashable, Sendable {
     var sortIndex: Int
     var deletedAt: Date?
     var deletionFinalizedAt: Date?
+    /// The version that was live before a pending deletion, so sync keeps
+    /// publishing that version instead of the tombstone during the window.
+    var preDeletionUpdatedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -25,7 +28,8 @@ struct PestyBoard: Identifiable, Codable, Hashable, Sendable {
         updatedAt: Date = .now,
         sortIndex: Int = 0,
         deletedAt: Date? = nil,
-        deletionFinalizedAt: Date? = nil
+        deletionFinalizedAt: Date? = nil,
+        preDeletionUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -37,11 +41,12 @@ struct PestyBoard: Identifiable, Codable, Hashable, Sendable {
         self.sortIndex = sortIndex
         self.deletedAt = deletedAt
         self.deletionFinalizedAt = deletionFinalizedAt
+        self.preDeletionUpdatedAt = preDeletionUpdatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, colorHex, clipIDs, pinnedClipIDs
-        case createdAt, updatedAt, sortIndex, deletedAt, deletionFinalizedAt
+        case createdAt, updatedAt, sortIndex, deletedAt, deletionFinalizedAt, preDeletionUpdatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -56,6 +61,7 @@ struct PestyBoard: Identifiable, Codable, Hashable, Sendable {
         sortIndex = try container.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
         deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
         deletionFinalizedAt = try container.decodeIfPresent(Date.self, forKey: .deletionFinalizedAt)
+        preDeletionUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .preDeletionUpdatedAt)
     }
 
     var isDeleted: Bool { deletedAt != nil }

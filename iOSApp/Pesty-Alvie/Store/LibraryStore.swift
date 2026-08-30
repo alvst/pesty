@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UIKit
+import WidgetKit
 
 @MainActor
 @Observable
@@ -8,24 +9,38 @@ final class LibraryStore {
     private(set) var library: PestyLibrary
     private(set) var syncStatus: SyncStatus = .checking
     private(set) var lastCopiedClipID: UUID?
-    private(set) var undoableDeletedClip: PestyClip?
+    private(set) var undoableDeletion: PendingLibraryDeletion?
+    var undoableDeletedClip: PestyClip? {
+        if case .clip(let clip)? = undoableDeletion { return clip }
+        return nil
+    }
     var errorMessage: String?
 
     private let syncService: any LibrarySyncing
     private let currentDate: () -> Date
+    /// False for a demo launch: the seeded library lives only in memory and
+    /// never overwrites the real one on disk.
+    private let persistsToDisk: Bool
     @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
 
     init(
         library: PestyLibrary? = nil,
         syncService: (any LibrarySyncing)? = nil,
-        currentDate: @escaping () -> Date = { .now }
+        currentDate: @escaping () -> Date = { .now },
+        persistsToDisk: Bool = true
     ) {
         let initialLibrary = library ?? LocalLibraryPersistence.load()
         let now = currentDate()
         self.library = initialLibrary
         self.syncService = syncService ?? CloudSyncService()
         self.currentDate = currentDate
-        self.undoableDeletedClip = initialLibrary.undoableDeletedClip(at: now)
+        self.persistsToDisk = persistsToDisk
+        self.undoableDeletion = initialLibrary.undoableDeletion(at: now)
+    }
+
+    /// The `--demo` store: fixed content, no disk writes, no iCloud.
+    static func demo() -> LibraryStore {
+        LibraryStore(library: DemoLibrary.make(), syncService: NoCloudSyncService(), persistsToDisk: false)
     }
 
     deinit {
@@ -36,8 +51,20 @@ final class LibraryStore {
     var boards: [PestyBoard] { library.activeBoards }
 
     func start() {
+        reloadSharedLibrary()
         refreshUndoAvailability()
         syncService.start(target: self)
+    }
+
+    func reloadSharedLibrary() {
+        guard persistsToDisk else { return }
+        let sharedLibrary = LocalLibraryPersistence.load()
+        guard sharedLibrary.updatedAt > library.updatedAt
+                || sharedLibrary.clips.count != library.clips.count
+                || sharedLibrary.boards.count != library.boards.count else { return }
+        library = library.merged(with: sharedLibrary)
+        persist()
+        refreshUndoAvailability()
     }
 
     func refreshSyncStatus() async {
@@ -103,14 +130,16 @@ final class LibraryStore {
         refreshUndoAvailability()
     }
 
-    func undoClipDeletion() {
-        guard library.undoMostRecentClipDeletion(at: currentDate()) else {
+    func undoDeletion() {
+        guard library.undoMostRecentDeletion(at: currentDate()) else {
             refreshUndoAvailability()
             return
         }
         persist()
         refreshUndoAvailability()
     }
+
+    func undoClipDeletion() { undoDeletion() }
 
     func markCopied(_ clip: PestyClip) {
         var updated = clip
@@ -149,19 +178,19 @@ final class LibraryStore {
     }
 
     func remove(_ clip: PestyClip, from board: PestyBoard) {
-        library.remove(clipID: clip.id, from: board.id)
+        library.remove(clipID: clip.id, from: board.id, at: currentDate())
         persist()
-        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
+        refreshUndoAvailability()
     }
 
     func toggle(_ clip: PestyClip, in board: PestyBoard) {
         if let ownedCopy = library.clips(in: board).first(where: { $0.hasSameContent(as: clip) }) {
-            library.remove(clipID: ownedCopy.id, from: board.id)
+            library.remove(clipID: ownedCopy.id, from: board.id, at: currentDate())
         } else {
-            _ = library.add(clipID: clip.id, to: board.id)
+            _ = library.add(clipID: clip.id, to: board.id, at: currentDate())
         }
         persist()
-        LocalAssetPersistence.removeUnreferencedAssets(in: library, at: currentDate())
+        refreshUndoAvailability()
     }
 
     func importMacStore(data: Data) {
@@ -189,8 +218,10 @@ final class LibraryStore {
     }
 
     private func persist(notifySync: Bool = true) {
+        guard persistsToDisk else { return }
         do {
             try LocalLibraryPersistence.save(library)
+            WidgetCenter.shared.reloadAllTimelines()
             if notifySync { syncService.localLibraryDidChange() }
         } catch {
             errorMessage = "Pesty-Alvie could not save this change. \(error.localizedDescription)"
@@ -202,9 +233,12 @@ final class LibraryStore {
         let hadExpiredRecords = library.clips.contains {
             $0.deletedAt.map { $0.addingTimeInterval(PestyLibrary.deletionUndoInterval) <= now }
                 == true && $0.deletionFinalizedAt == nil
+        } || library.boards.contains {
+            $0.deletedAt.map { $0.addingTimeInterval(PestyLibrary.deletionUndoInterval) <= now }
+                == true && $0.deletionFinalizedAt == nil
         }
         library.finalizeExpiredDeletions(at: now)
-        undoableDeletedClip = library.undoableDeletedClip(at: now)
+        undoableDeletion = library.undoableDeletion(at: now)
         if hadExpiredRecords {
             persist()
             LocalAssetPersistence.removeUnreferencedAssets(in: library, at: now)
@@ -217,7 +251,7 @@ final class LibraryStore {
         undoExpiryTask = nil
 
         let expirations = [
-            undoableDeletedClip?.deletedAt?.addingTimeInterval(PestyLibrary.deletionUndoInterval)
+            undoableDeletion?.deletedAt?.addingTimeInterval(PestyLibrary.deletionUndoInterval)
         ].compactMap { $0 }
         guard let expiration = expirations.min() else { return }
 

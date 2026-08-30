@@ -26,10 +26,15 @@ enum CloudRecordCodec {
         writePossiblyLargeRichText(item.rtfData, to: record)
         record[CKSchema.Field.image] = imageFileURL.map(CKAsset.init(fileURL:))
         record[CKSchema.Field.imageHash] = bounded(item.imageHash, length: 128)
-        record[CKSchema.Field.fileURLs] = bounded(item.fileURLs, count: CKSchema.maximumFileNameCount)
-        record[CKSchema.Field.fileNames] = bounded(
-            item.fileURLs.map(fileName),
-            count: CKSchema.maximumFileNameCount
+        writeStringList(
+            bounded(item.fileURLs, count: CKSchema.maximumFileNameCount),
+            to: record,
+            field: CKSchema.Field.fileURLs
+        )
+        writeStringList(
+            bounded(item.fileURLs.map(fileName), count: CKSchema.maximumFileNameCount),
+            to: record,
+            field: CKSchema.Field.fileNames
         )
         record[CKSchema.Field.colorHex] = bounded(item.colorHex, length: 9)
         record[CKSchema.Field.sourceBundleID] = bounded(item.sourceBundleID, length: 512)
@@ -98,12 +103,18 @@ enum CloudRecordCodec {
         record[CKSchema.Field.createdAt] = board.createdAt
         record[CKSchema.Field.updatedAt] = board.updatedAt
         record[CKSchema.Field.sortIndex] = NSNumber(value: board.sortIndex)
-        record[CKSchema.Field.clipIDs] = board.items
+        writeStringList(board.items
             .prefix(CKSchema.maximumBoardClipCount)
-            .map { $0.id.uuidString }
-        record[CKSchema.Field.pinnedItemIDs] = board.pinnedItemIDs
+            .map { $0.id.uuidString },
+            to: record,
+            field: CKSchema.Field.clipIDs
+        )
+        writeStringList(board.pinnedItemIDs
             .prefix(CKSchema.maximumBoardClipCount)
-            .map { $0.uuidString }
+            .map { $0.uuidString },
+            to: record,
+            field: CKSchema.Field.pinnedItemIDs
+        )
     }
 
     static func decodeBoard(_ record: CKRecord) -> DecodedBoard? {
@@ -245,6 +256,10 @@ enum CloudRecordCodec {
 
     private static func bounded(_ values: [String], count: Int) -> [String] {
         values.prefix(count).map { String($0.prefix(2_048)) }
+    }
+
+    private static func writeStringList(_ values: [String], to record: CKRecord, field: String) {
+        record[field] = values.isEmpty ? nil : values
     }
 
     private static func fileName(_ value: String) -> String {

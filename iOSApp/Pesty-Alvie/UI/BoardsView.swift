@@ -36,7 +36,13 @@ struct BoardsView: View {
             }
             .navigationTitle("Pinboards")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if store.undoableDeletion != nil {
+                        Button("Undo", systemImage: "arrow.uturn.backward") {
+                            store.undoDeletion()
+                        }
+                        .accessibilityLabel("Undo deletion")
+                    }
                     Button {
                         isPresentingNewBoard = true
                     } label: {
@@ -62,7 +68,7 @@ struct BoardsView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDeleteBoardID = nil }
             } message: {
-                Text("This deletion is immediate and cannot be undone. History clips are not affected.")
+                Text("You can undo this for five minutes. History clips are not affected.")
             }
         }
     }
@@ -112,7 +118,10 @@ struct BoardDetailView: View {
                         )
                         .padding(.top, 80)
                     } else {
-                        LazyVStack(spacing: 12) {
+                        // Same grid as the Library so a pinned clip's card is
+                        // the size the user already knows, not a full-width slab.
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 164, maximum: 300), spacing: 12, alignment: .top)],
+                                  alignment: .center, spacing: 12) {
                             ForEach(clips) { clip in
                                 NavigationLink {
                                     ClipDetailView(clipID: clip.id)
@@ -130,13 +139,19 @@ struct BoardDetailView: View {
                                 }
                             }
                         }
-                        .padding(.vertical, 12)
+                        .padding(12)
                     }
                 }
                 .background(Color(uiColor: .systemGroupedBackground))
                 .navigationTitle(board.name)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        if store.undoableDeletion != nil {
+                            Button("Undo", systemImage: "arrow.uturn.backward") {
+                                store.undoDeletion()
+                            }
+                            .accessibilityLabel("Undo deletion")
+                        }
                         Button("Delete", role: .destructive) {
                             isConfirmingDelete = true
                         }
@@ -157,7 +172,7 @@ struct BoardDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deletion is immediate and cannot be undone. History clips are not affected.")
+            Text("You can undo this for five minutes from the Pinboards screen. History clips are not affected.")
         }
     }
 }

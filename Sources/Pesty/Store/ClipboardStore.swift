@@ -16,6 +16,27 @@ enum BarInputMode: Equatable {
     case search
 }
 
+struct LegacyLibraryImportSummary: Equatable {
+    var historyClipCount: Int
+    var pinboardCount: Int
+    var pasteStackCount: Int
+    var imageCount: Int
+}
+
+enum LegacyLibraryImportError: LocalizedError {
+    case missingStore
+    case unreadableStore
+
+    var errorDescription: String? {
+        switch self {
+        case .missingStore:
+            return "The selected folder does not contain a Pesty-Alvie store.json file."
+        case .unreadableStore:
+            return "The selected Pesty-Alvie library could not be read."
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class ClipboardStore {
@@ -23,6 +44,8 @@ final class ClipboardStore {
 
     private(set) var history: [ClipItem] = [] { didSet { contentVersion &+= 1 } }
     private(set) var pinboards: [Pinboard] = [] { didSet { contentVersion &+= 1 } }
+    /// Deleted pinboards still inside their five-minute Undo window.
+    private(set) var pendingPinboardDeletions: [PendingPinboardDeletion] = []
 
     /// Bumped by any change to the clips themselves, so the search cache below
     /// can tell "same query, same clips" from "same query, new clips" without
@@ -66,6 +89,7 @@ final class ClipboardStore {
 
     private var fileWatch: DispatchSourceFileSystemObject?
     private var lastSavedData: Data?
+    private(set) var legacyLibraryMigrationResolved = false
 
     /// Demo mode gets its own store. Seeding demo content into the real one
     /// would both bury the user's clipboard history and leave whatever
@@ -100,12 +124,18 @@ final class ClipboardStore {
         baseDir = base
         imagesDir = base.appendingPathComponent("images", isDirectory: true)
         storeURL = base.appendingPathComponent("store.json")
+        let hadStoreAtLaunch = FileManager.default.fileExists(atPath: storeURL.path)
         prepareDirectories()
+        legacyLibraryMigrationResolved = FileManager.default.fileExists(
+            atPath: legacyLibraryMigrationMarkerURL.path
+        )
         cloudRetentionExcludedIDs = loadCloudRetentionExclusions()
         let tombstonesApplied = load()
         let historyChanged = applyHistoryPolicyNow()
         let deletionsChanged = refreshDeletionState(at: .now)
-        if tombstonesApplied || historyChanged || deletionsChanged { saveNow() }
+        let pixelsBackfilled = backfillImageFilePixels(at: .now)
+        if tombstonesApplied || historyChanged || deletionsChanged || pixelsBackfilled { saveNow() }
+        resolveBundledLegacyLibraryMigration(hadStoreAtLaunch: hadStoreAtLaunch)
         if Settings.shared.iCloudSync { startWatching() }
     }
 
@@ -346,6 +376,15 @@ final class ClipboardStore {
     @discardableResult
     func undoLastDelete(at date: Date = .now) -> Bool {
         let finalizedExpiredDeletion = refreshDeletionState(at: date)
+        // Clip and pinboard deletions share one Undo: whichever happened
+        // last comes back first.
+        if let pending = newestUndoablePinboardDeletion(at: date),
+           pending.deletedAt >= (deletionLedger.latestUndoableDeletionDate(at: date) ?? .distantPast) {
+            restorePinboard(pending, at: date)
+            _ = refreshDeletionState(at: date)
+            scheduleSave()
+            return true
+        }
         guard let deletion = deletionLedger.undoMostRecent(at: date) else {
             if finalizedExpiredDeletion { saveNow() }
             return false
@@ -473,25 +512,64 @@ final class ClipboardStore {
         scheduleSave()
     }
 
-    func deletePinboard(_ id: UUID) {
+    /// Deleting a pinboard is undoable for the same five minutes as deleting
+    /// a clip: the board leaves the tabs immediately but is kept whole in
+    /// `pendingPinboardDeletions` until the window closes. `permanently` (or
+    /// the global setting) skips the window, as it does for clips.
+    func deletePinboard(_ id: UUID, at date: Date = .now, permanently: Bool = false) {
+        let permanently = permanently || Settings.shared.deletePermanently
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
-        let finalizedPayloads = deletionLedger.finalizePendingDeletions(inPinboard: id, at: .now)
         if case .pinboard(let cur) = source, cur == id { source = .history }
-        let removedItems = pinboards[i].items
-        for item in removedItems {
+        let board = pinboards.remove(at: i)
+        _ = normalizePinboardOrder(touchChanges: true)
+        if permanently {
+            finalizeRemovedPinboard(board, at: date)
+        } else {
+            pendingPinboardDeletions.removeAll { $0.board.id == id }
+            pendingPinboardDeletions.append(PendingPinboardDeletion(board: board, deletedAt: date))
+        }
+        _ = refreshDeletionState(at: date)
+        scheduleSave()
+    }
+
+    /// The irreversible half of a pinboard deletion: sync tombstones for its
+    /// clips and image cleanup. Runs at once for a permanent delete, and when
+    /// a pending deletion's Undo window closes. The board must already be out
+    /// of both `pinboards` and `pendingPinboardDeletions`, or its images
+    /// still count as referenced.
+    private func finalizeRemovedPinboard(_ board: Pinboard, at date: Date) {
+        let finalizedPayloads = deletionLedger.finalizePendingDeletions(inPinboard: board.id, at: date)
+        for item in board.items {
             deletionLedger.recordRemoteDeletion(
                 id: item.id,
                 removesFromPasteStacks: false,
-                at: .now
+                at: date
             )
         }
-        pinboards.remove(at: i)
-        _ = normalizePinboardOrder(touchChanges: true)
-        for item in removedItems { deleteImageFile(item) }
+        for item in board.items { deleteImageFile(item) }
         for payload in finalizedPayloads {
             for item in payload.allItems { deleteImageFile(item) }
         }
-        scheduleSave()
+    }
+
+    private func newestUndoablePinboardDeletion(at date: Date) -> PendingPinboardDeletion? {
+        pendingPinboardDeletions
+            .filter { $0.isUndoable(at: date) }
+            .max { $0.deletedAt < $1.deletedAt }
+    }
+
+    private func restorePinboard(_ pending: PendingPinboardDeletion, at date: Date) {
+        pendingPinboardDeletions.removeAll { $0.board.id == pending.board.id }
+        guard !pinboards.contains(where: { $0.id == pending.board.id }) else { return }
+        var board = pending.board
+        // Clips deleted from history while the board was gone stay gone;
+        // their tombstones would remove them again on the next launch anyway.
+        let tombstoned = deletionLedger.deletedIDs
+        board.items.removeAll { tombstoned.contains($0.id) }
+        board.prunePins()
+        board.touch(at: date)
+        pinboards.insert(board, at: min(max(0, board.sortIndex), pinboards.count))
+        _ = normalizePinboardOrder(touchChanges: true)
     }
 
     /// Moves a Pinboard relative to the tab currently under the drag. The
@@ -788,9 +866,16 @@ final class ClipboardStore {
     /// Pending five-minute deletions remain visible to the sync engine until
     /// their payload expires. At that boundary they disappear from this
     /// projection and CKSyncEngine queues the hard record deletion.
+    /// Every pinboard the cloud should still know about: the live ones plus
+    /// those whose deletion can still be undone. A board is only removed
+    /// from the cloud once its Undo window has closed.
+    var cloudSyncPinboards: [Pinboard] {
+        pinboards + pendingPinboardDeletions.map(\.board)
+    }
+
     var cloudSyncClips: [CloudSyncClip] {
         var byID: [UUID: CloudSyncClip] = [:]
-        for board in pinboards {
+        for board in cloudSyncPinboards {
             for item in board.items {
                 byID[item.id] = CloudSyncClip(item: item, container: board.id.uuidString)
             }
@@ -877,6 +962,9 @@ final class ClipboardStore {
 
         for decoded in boards {
             let remote = decoded.board
+            // A board deleted here and still undoable keeps its local state;
+            // the cloud record it came from is ours until the window closes.
+            if pendingPinboardDeletions.contains(where: { $0.board.id == remote.id }) { continue }
             if let index = pinboards.firstIndex(where: { $0.id == remote.id }) {
                 guard remote.updatedAt >= pinboards[index].updatedAt else { continue }
                 let existingByID = Dictionary(
@@ -905,6 +993,8 @@ final class ClipboardStore {
         if !deletedIDs.isEmpty {
             let deleted = Set(deletedIDs)
             let removedBoards = pinboards.filter { deleted.contains($0.id) }
+                + pendingPinboardDeletions.filter { deleted.contains($0.board.id) }.map(\.board)
+            pendingPinboardDeletions.removeAll { deleted.contains($0.board.id) }
             removedAssets += removedBoards.flatMap(\.items)
             for item in removedBoards.flatMap(\.items) {
                 deletionLedger.recordRemoteDeletion(
@@ -1004,6 +1094,33 @@ final class ClipboardStore {
     /// History and one or more Pinboards. Repair only collisions: already
     /// distinct Pinboard entities retain their stable IDs.
     @discardableResult
+    /// Screenshots captured before Pesty kept a copy of a copied image file
+    /// have only a path. Where that file is still readable, take the pixels
+    /// now so the card survives the file moving and the iPhone gets a
+    /// picture. `updatedAt` moves so the other devices accept the new
+    /// version. Bounded per launch: this reads files on the main thread.
+    private func backfillImageFilePixels(at date: Date, limit: Int = 50) -> Bool {
+        var remaining = limit
+        var changed = false
+        func fill(_ item: inout ClipItem) {
+            guard remaining > 0,
+                  item.type == .file, item.imageFileName == nil, item.fileURLs.count == 1,
+                  let url = URL(string: item.fileURLs[0]),
+                  let data = ClipboardMonitor.imageFileData(at: url),
+                  let name = storeImageData(data) else { return }
+            remaining -= 1
+            item.imageFileName = name
+            item.imageHash = ClipboardMonitor.sha256Hex(data)
+            item.updatedAt = max(date, item.updatedAt.addingTimeInterval(0.000_001))
+            changed = true
+        }
+        for index in history.indices { fill(&history[index]) }
+        for boardIndex in pinboards.indices {
+            for index in pinboards[boardIndex].items.indices { fill(&pinboards[boardIndex].items[index]) }
+        }
+        return changed
+    }
+
     private func migrateLegacySharedClipIDs() -> Bool {
         var seen = Set(history.map(\.id))
         var changed = false
@@ -1082,6 +1199,7 @@ final class ClipboardStore {
         guard let name = item.imageFileName else { return }
         let stillUsed = history.contains { $0.imageFileName == name }
             || pinboards.contains { $0.items.contains { $0.imageFileName == name } }
+            || pendingPinboardDeletions.contains { $0.board.items.contains { $0.imageFileName == name } }
             || PasteSequence.shared.savedStacks.contains { stack in
                 stack.entries.contains { $0.item.imageFileName == name }
             }
@@ -1090,11 +1208,239 @@ final class ClipboardStore {
         if let url = imageURL(for: item) { try? FileManager.default.removeItem(at: url) }
     }
 
-    private struct Snapshot: Codable {
+    struct Snapshot: Codable {
         var history: [ClipItem]
         var pinboards: [Pinboard]
         var pasteStacks: [SavedPasteStack]?
         var deletionLedger: ClipDeletionLedger?
+        var pendingPinboardDeletions: [PendingPinboardDeletion]?
+    }
+
+    private var legacyLibraryMigrationMarkerURL: URL {
+        ClipboardStore.localBase.appendingPathComponent("legacy-library-migration-v1")
+    }
+
+    private var bundledLegacyLibraryURL: URL {
+        ClipboardStore.localBase
+            .deletingLastPathComponent()
+            .appendingPathComponent("Pesty-Alvie Legacy Import", isDirectory: true)
+    }
+
+    private func resolveBundledLegacyLibraryMigration(hadStoreAtLaunch: Bool) {
+        guard ClipboardStore.isSandboxed, !legacyLibraryMigrationResolved else { return }
+        let legacyStore = bundledLegacyLibraryURL.appendingPathComponent("store.json")
+        if FileManager.default.fileExists(atPath: legacyStore.path) {
+            _ = try? importLegacyLibrary(at: bundledLegacyLibraryURL)
+        } else if !hadStoreAtLaunch {
+            // A brand-new sandbox has no pre-sandbox library to migrate. Mark
+            // it resolved so first-time users are not shown an irrelevant picker.
+            markLegacyLibraryMigrationResolved()
+        }
+    }
+
+    func markLegacyLibraryMigrationResolved() {
+        try? Data().write(to: legacyLibraryMigrationMarkerURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: legacyLibraryMigrationMarkerURL.path
+        )
+        legacyLibraryMigrationResolved = true
+    }
+
+    func previewLegacyLibrary(at directory: URL) throws -> LegacyLibraryImportSummary {
+        let snapshot = try Self.loadLegacySnapshot(from: directory)
+        let images = Self.referencedImageNames(in: snapshot).filter { name in
+            guard Self.isSafeImageFileName(name) else { return false }
+            let url = directory
+                .appendingPathComponent("images", isDirectory: true)
+                .appendingPathComponent(name)
+            guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+                return false
+            }
+            return size >= 0 && size <= CKSchema.maximumAssetBytes
+        }
+        return LegacyLibraryImportSummary(
+            historyClipCount: snapshot.history.count,
+            pinboardCount: snapshot.pinboards.count,
+            pasteStackCount: snapshot.pasteStacks?.count ?? 0,
+            imageCount: images.count
+        )
+    }
+
+    @discardableResult
+    func importLegacyLibrary(at directory: URL) throws -> LegacyLibraryImportSummary {
+        var legacy = try Self.loadLegacySnapshot(from: directory)
+        let deletedIDs = Set(deletionLedger.records.filter(\.isDeleted).map(\.id))
+        legacy.history.removeAll { deletedIDs.contains($0.id) }
+        for index in legacy.pinboards.indices {
+            legacy.pinboards[index].items.removeAll { deletedIDs.contains($0.id) }
+            legacy.pinboards[index].prunePins()
+        }
+        if var stacks = legacy.pasteStacks {
+            for stackIndex in stacks.indices {
+                stacks[stackIndex].entries.removeAll { deletedIDs.contains($0.item.id) }
+            }
+            legacy.pasteStacks = stacks
+        }
+
+        let availableImages = copyLegacyImages(in: legacy, from: directory)
+        legacy = Self.removingUnavailableImages(from: legacy, available: availableImages)
+        let summary = LegacyLibraryImportSummary(
+            historyClipCount: legacy.history.count,
+            pinboardCount: legacy.pinboards.count,
+            pasteStackCount: legacy.pasteStacks?.count ?? 0,
+            imageCount: availableImages.count
+        )
+        let current = Snapshot(
+            history: history,
+            pinboards: pinboards,
+            pasteStacks: PasteSequence.shared.savedStacks,
+            deletionLedger: deletionLedger
+        )
+        let merged = Self.mergingSnapshots(current: current, legacy: legacy)
+        history = merged.history.sorted {
+            ($0.lastUsedAt ?? $0.createdAt) > ($1.lastUsedAt ?? $1.createdAt)
+        }
+        let importedHistoryIDs = Set(legacy.history.map(\.id))
+        let previousExclusionCount = cloudRetentionExcludedIDs.count
+        cloudRetentionExcludedIDs.subtract(importedHistoryIDs)
+        if cloudRetentionExcludedIDs.count != previousExclusionCount {
+            saveCloudRetentionExclusions()
+        }
+        expandHistoryPolicyToPreserveMigration()
+        pinboards = merged.pinboards
+        PasteSequence.shared.restoreSavedStacks(merged.pasteStacks ?? [])
+        _ = migrateLegacySharedClipIDs()
+        _ = normalizePinboardOrder(touchChanges: false)
+        _ = applyHistoryPolicyNow()
+        for index in pinboards.indices { pinboards[index].prunePins() }
+        selectFirst()
+        saveNow()
+        markLegacyLibraryMigrationResolved()
+        return summary
+    }
+
+    private func expandHistoryPolicyToPreserveMigration() {
+        switch Settings.shared.historyRetentionMode {
+        case .itemCount:
+            if history.count > Settings.shared.historyLimit {
+                Settings.shared.historyLimit = min(5_000, history.count)
+            }
+        case .timePeriod:
+            guard let oldestCreationDate = history.map(\.createdAt).min(),
+                  let currentCutoff = Settings.shared.historyRetention.cutoffDate,
+                  oldestCreationDate < currentCutoff else { return }
+            let preservingRetention = HistoryRetention.allCases.first { retention in
+                guard let cutoff = retention.cutoffDate else { return true }
+                return oldestCreationDate >= cutoff
+            } ?? .forever
+            Settings.shared.historyRetention = preservingRetention
+        }
+    }
+
+    static func mergingSnapshots(current: Snapshot, legacy: Snapshot) -> Snapshot {
+        var history = current.history
+        var historyIDs = Set(history.map(\.id))
+        history.append(contentsOf: legacy.history.filter { historyIDs.insert($0.id).inserted })
+
+        var pinboards = current.pinboards
+        var boardIDs = Set(pinboards.map(\.id))
+        pinboards.append(contentsOf: legacy.pinboards.filter { boardIDs.insert($0.id).inserted })
+
+        var pasteStacks = current.pasteStacks ?? []
+        var stackIDs = Set(pasteStacks.map(\.id))
+        pasteStacks.append(contentsOf: (legacy.pasteStacks ?? []).filter {
+            stackIDs.insert($0.id).inserted
+        })
+
+        return Snapshot(
+            history: history,
+            pinboards: pinboards,
+            pasteStacks: pasteStacks,
+            deletionLedger: current.deletionLedger
+        )
+    }
+
+    private static func loadLegacySnapshot(from directory: URL) throws -> Snapshot {
+        let store = directory.appendingPathComponent("store.json", isDirectory: false)
+        guard FileManager.default.fileExists(atPath: store.path) else {
+            throw LegacyLibraryImportError.missingStore
+        }
+        guard let data = try? Data(contentsOf: store),
+              let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else {
+            throw LegacyLibraryImportError.unreadableStore
+        }
+        return snapshot
+    }
+
+    private static func referencedImageNames(in snapshot: Snapshot) -> Set<String> {
+        var items = snapshot.history + snapshot.pinboards.flatMap(\.items)
+        items += (snapshot.pasteStacks ?? []).flatMap(\.entries).map(\.item)
+        return Set(items.compactMap(\.imageFileName))
+    }
+
+    private static func isSafeImageFileName(_ name: String) -> Bool {
+        !name.isEmpty && URL(fileURLWithPath: name).lastPathComponent == name
+    }
+
+    private func copyLegacyImages(in snapshot: Snapshot, from directory: URL) -> Set<String> {
+        let sourceDirectory = directory.appendingPathComponent("images", isDirectory: true)
+        var available: Set<String> = []
+        for name in Self.referencedImageNames(in: snapshot) where Self.isSafeImageFileName(name) {
+            let source = sourceDirectory.appendingPathComponent(name)
+            let destination = imagesDir.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                available.insert(name)
+                continue
+            }
+            guard let size = try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                  size >= 0,
+                  size <= CKSchema.maximumAssetBytes else { continue }
+            do {
+                try FileManager.default.copyItem(at: source, to: destination)
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600],
+                    ofItemAtPath: destination.path
+                )
+                available.insert(name)
+            } catch {
+                continue
+            }
+        }
+        return available
+    }
+
+    private static func removingUnavailableImages(
+        from snapshot: Snapshot,
+        available: Set<String>
+    ) -> Snapshot {
+        func sanitized(_ item: ClipItem) -> ClipItem {
+            var item = item
+            if let name = item.imageFileName, !available.contains(name) {
+                item.imageFileName = nil
+            }
+            return item
+        }
+
+        var snapshot = snapshot
+        snapshot.history = snapshot.history.map(sanitized)
+        for index in snapshot.pinboards.indices {
+            snapshot.pinboards[index].items = snapshot.pinboards[index].items.map(sanitized)
+        }
+        if var stacks = snapshot.pasteStacks {
+            for stackIndex in stacks.indices {
+                stacks[stackIndex].entries = stacks[stackIndex].entries.map { entry in
+                    PasteStackEntry(
+                        id: entry.id,
+                        item: sanitized(entry.item),
+                        imagePreview: nil,
+                        isPasted: entry.isPasted
+                    )
+                }
+            }
+            snapshot.pasteStacks = stacks
+        }
+        return snapshot
     }
 
     @discardableResult
@@ -1104,6 +1450,7 @@ final class ClipboardStore {
         history = snap.history
         pinboards = snap.pinboards
         deletionLedger = snap.deletionLedger ?? ClipDeletionLedger()
+        pendingPinboardDeletions = snap.pendingPinboardDeletions ?? []
         PasteSequence.shared.restoreSavedStacks(snap.pasteStacks ?? [])
         var removed = applyDeletionTombstones()
         let retentionExcluded = history.filter { cloudRetentionExcludedIDs.contains($0.id) }
@@ -1131,16 +1478,24 @@ final class ClipboardStore {
         for payload in expiredPayloads {
             for item in payload.allItems { deleteImageFile(item) }
         }
+        let expiredBoards = pendingPinboardDeletions.filter { !$0.isUndoable(at: date) }
+        if !expiredBoards.isEmpty {
+            pendingPinboardDeletions.removeAll { !$0.isUndoable(at: date) }
+            for pending in expiredBoards { finalizeRemovedPinboard(pending.board, at: date) }
+        }
 
         hasUndoableDeletion = deletionLedger.hasUndoableDeletion(at: date)
+            || newestUndoablePinboardDeletion(at: date) != nil
         scheduleNextUndoExpiration(after: date)
-        return !expiredPayloads.isEmpty
+        return !expiredPayloads.isEmpty || !expiredBoards.isEmpty
     }
 
     private func scheduleNextUndoExpiration(after date: Date) {
         undoExpirationWorkItem?.cancel()
         undoExpirationWorkItem = nil
-        guard let expiration = deletionLedger.nextExpirationDate(after: date) else { return }
+        let expirations = [deletionLedger.nextExpirationDate(after: date)].compactMap { $0 }
+            + pendingPinboardDeletions.map(\.expiresAt).filter { $0 > date }
+        guard let expiration = expirations.min() else { return }
 
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -1158,7 +1513,8 @@ final class ClipboardStore {
         let snap = Snapshot(history: history,
                             pinboards: pinboards,
                             pasteStacks: PasteSequence.shared.savedStacks,
-                            deletionLedger: deletionLedger)
+                            deletionLedger: deletionLedger,
+                            pendingPinboardDeletions: pendingPinboardDeletions)
         guard let data = try? JSONEncoder().encode(snap) else { return }
         do {
             try data.write(to: storeURL, options: .atomic)
@@ -1261,8 +1617,26 @@ final class ClipboardStore {
         history = merged
         applyHistoryPolicyNow()
 
+        // A pinboard deleted on another Mac disappears here too, and stays
+        // undoable here for the rest of its window.
+        for remotePending in snap.pendingPinboardDeletions ?? []
+        where !pendingPinboardDeletions.contains(where: { $0.board.id == remotePending.board.id }) {
+            if let index = pinboards.firstIndex(where: { $0.id == remotePending.board.id }) {
+                guard pinboards[index].updatedAt < remotePending.deletedAt else { continue }
+                pinboards.remove(at: index)
+                if case .pinboard(let cur) = source, cur == remotePending.board.id { source = .history }
+            }
+            pendingPinboardDeletions.append(remotePending)
+        }
+
         var byID: [UUID: Pinboard] = Dictionary(uniqueKeysWithValues: pinboards.map { ($0.id, $0) })
         for b in snap.pinboards {
+            if let pending = pendingPinboardDeletions.first(where: { $0.board.id == b.id }) {
+                // Edited elsewhere after we deleted it (an undo there, say):
+                // the newer board wins. Otherwise our deletion stands.
+                guard b.updatedAt > pending.deletedAt else { continue }
+                pendingPinboardDeletions.removeAll { $0.board.id == b.id }
+            }
             if var existing = byID[b.id] {
                 for it in b.items
                 where !isDeleted(it)

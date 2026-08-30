@@ -1,5 +1,19 @@
 import Foundation
 
+/// The newest deletion Undo would reverse: a clip (from the library or a
+/// pinboard) or a whole pinboard with its copies.
+enum PendingLibraryDeletion: Equatable, Sendable {
+    case clip(PestyClip)
+    case board(PestyBoard)
+
+    var deletedAt: Date? {
+        switch self {
+        case .clip(let clip): clip.deletedAt
+        case .board(let board): board.deletedAt
+        }
+    }
+}
+
 struct PestyLibrary: Codable, Sendable {
     static let currentSchemaVersion = 2
     static let deletionUndoInterval: TimeInterval = 5 * 60
@@ -61,18 +75,47 @@ struct PestyLibrary: Codable, Sendable {
         clips(in: board).contains { $0.hasSameContent(as: clip) }
     }
 
+    /// The most recent deletion still inside its Undo window. A copy that
+    /// belongs to a deleted pinboard is never offered on its own — undoing
+    /// the pinboard brings its copies back with it.
+    func undoableDeletion(
+        at date: Date = .now,
+        within undoInterval: TimeInterval = PestyLibrary.deletionUndoInterval
+    ) -> PendingLibraryDeletion? {
+        let deletedBoardIDs = Set(boards.filter(\.isDeleted).map(\.id))
+        let clip = clips
+            .filter { clip in
+                guard let deletedAt = clip.deletedAt else { return false }
+                if let containerID = clip.containerID, deletedBoardIDs.contains(containerID) { return false }
+                return clip.deletionFinalizedAt == nil
+                    && deletedAt.addingTimeInterval(undoInterval) > date
+            }
+            .max { ($0.deletedAt ?? .distantPast) < ($1.deletedAt ?? .distantPast) }
+        let board = boards
+            .filter { board in
+                guard let deletedAt = board.deletedAt else { return false }
+                return board.deletionFinalizedAt == nil
+                    && deletedAt.addingTimeInterval(undoInterval) > date
+            }
+            .max { ($0.deletedAt ?? .distantPast) < ($1.deletedAt ?? .distantPast) }
+        switch (clip, board) {
+        case (nil, nil): return nil
+        case (let clip?, nil): return .clip(clip)
+        case (nil, let board?): return .board(board)
+        case (let clip?, let board?):
+            // A board's copies share its timestamp; at a tie the board is
+            // what the user deleted.
+            return (clip.deletedAt ?? .distantPast) > (board.deletedAt ?? .distantPast)
+                ? .clip(clip) : .board(board)
+        }
+    }
+
     func undoableDeletedClip(
         at date: Date = .now,
         within undoInterval: TimeInterval = PestyLibrary.deletionUndoInterval
     ) -> PestyClip? {
-        clips
-            .filter { clip in
-                guard let deletedAt = clip.deletedAt else { return false }
-                return clip.containerID == nil
-                    && clip.deletionFinalizedAt == nil
-                    && deletedAt.addingTimeInterval(undoInterval) > date
-            }
-            .max { ($0.deletedAt ?? .distantPast) < ($1.deletedAt ?? .distantPast) }
+        if case .clip(let clip)? = undoableDeletion(at: date, within: undoInterval) { return clip }
+        return nil
     }
 
     mutating func upsert(_ clip: PestyClip) {
@@ -105,23 +148,57 @@ struct PestyLibrary: Codable, Sendable {
         updatedAt = max(updatedAt, deletionDate)
     }
 
+    /// Soft-deletes a pinboard and its copies for the Undo window. Copies are
+    /// stamped no earlier than the board, which is how undo later tells
+    /// "deleted with the board" from "removed before that".
     mutating func deleteBoard(id: UUID, at date: Date = .now) {
         guard let index = boards.firstIndex(where: { $0.id == id && !$0.isDeleted }) else { return }
         let deletionDate = Self.timestampStrictlyAfter(boards[index].updatedAt, preferred: date)
+        boards[index].preDeletionUpdatedAt = boards[index].updatedAt
         boards[index].deletedAt = deletionDate
-        boards[index].deletionFinalizedAt = deletionDate
+        boards[index].deletionFinalizedAt = nil
         boards[index].updatedAt = deletionDate
         for clipIndex in clips.indices where clips[clipIndex].containerID == id && !clips[clipIndex].isDeleted {
-            let clipDeletionDate = Self.timestampStrictlyAfter(
-                clips[clipIndex].updatedAt,
-                preferred: deletionDate
-            )
+            let clipDeletionDate = Self.timestampStrictlyAfter(clips[clipIndex].updatedAt, preferred: deletionDate)
+            clips[clipIndex].preDeletionUpdatedAt = clips[clipIndex].updatedAt
             clips[clipIndex].deletedAt = clipDeletionDate
-            clips[clipIndex].preDeletionUpdatedAt = nil
-            clips[clipIndex].deletionFinalizedAt = clipDeletionDate
+            clips[clipIndex].deletionFinalizedAt = nil
             clips[clipIndex].updatedAt = clipDeletionDate
         }
         updatedAt = max(updatedAt, deletionDate)
+    }
+
+    @discardableResult
+    mutating func undoMostRecentDeletion(
+        at date: Date = .now,
+        within undoInterval: TimeInterval = PestyLibrary.deletionUndoInterval
+    ) -> Bool {
+        switch undoableDeletion(at: date, within: undoInterval) {
+        case nil:
+            return false
+        case .clip(let deleted)?:
+            guard let index = clips.firstIndex(where: { $0.id == deleted.id }) else { return false }
+            restoreClip(at: index, on: date)
+            return true
+        case .board(let deleted)?:
+            guard let index = boards.firstIndex(where: { $0.id == deleted.id }),
+                  let deletedAt = boards[index].deletedAt else { return false }
+            let undoDate = Self.timestampStrictlyAfter(boards[index].updatedAt, preferred: date)
+            boards[index].deletedAt = nil
+            boards[index].preDeletionUpdatedAt = nil
+            boards[index].deletionFinalizedAt = nil
+            boards[index].updatedAt = undoDate
+            // Only the copies that went down with the board come back; a copy
+            // removed before that stays removed (and stays undoable itself).
+            for clipIndex in clips.indices
+            where clips[clipIndex].containerID == deleted.id
+                && (clips[clipIndex].deletedAt ?? .distantPast) >= deletedAt
+                && clips[clipIndex].deletionFinalizedAt == nil {
+                restoreClip(at: clipIndex, on: date)
+            }
+            updatedAt = max(updatedAt, undoDate)
+            return true
+        }
     }
 
     @discardableResult
@@ -129,15 +206,16 @@ struct PestyLibrary: Codable, Sendable {
         at date: Date = .now,
         within undoInterval: TimeInterval = PestyLibrary.deletionUndoInterval
     ) -> Bool {
-        guard let deleted = undoableDeletedClip(at: date, within: undoInterval),
-              let index = clips.firstIndex(where: { $0.id == deleted.id }) else { return false }
+        undoMostRecentDeletion(at: date, within: undoInterval)
+    }
+
+    private mutating func restoreClip(at index: Int, on date: Date) {
         let undoDate = Self.timestampStrictlyAfter(clips[index].updatedAt, preferred: date)
         clips[index].deletedAt = nil
         clips[index].preDeletionUpdatedAt = nil
         clips[index].deletionFinalizedAt = nil
         clips[index].updatedAt = undoDate
         updatedAt = max(updatedAt, undoDate)
-        return true
     }
 
     @discardableResult
@@ -147,6 +225,23 @@ struct PestyLibrary: Codable, Sendable {
               !clips(in: boards[boardIndex]).contains(where: { $0.hasSameContent(as: source) }) else {
             return nil
         }
+        // Re-pinning something removed moments ago revives that copy rather
+        // than creating a twin that an Undo of the removal would duplicate.
+        if let pendingIndex = clips.indices.first(where: {
+            clips[$0].containerID == boardID
+                && clips[$0].isDeleted
+                && clips[$0].deletionFinalizedAt == nil
+                && clips[$0].hasSameContent(as: source)
+        }) {
+            restoreClip(at: pendingIndex, on: date)
+            let copyID = clips[pendingIndex].id
+            if !boards[boardIndex].clipIDs.contains(copyID) {
+                boards[boardIndex].clipIDs.insert(copyID, at: 0)
+            }
+            boards[boardIndex].updatedAt = date
+            updatedAt = date
+            return copyID
+        }
         let copy = source.copied(to: boardID, at: date)
         clips.append(copy)
         boards[boardIndex].clipIDs.insert(copy.id, at: 0)
@@ -155,19 +250,19 @@ struct PestyLibrary: Codable, Sendable {
         return copy.id
     }
 
+    /// Removing a copy from a pinboard is a soft delete like any other: the
+    /// membership stays in place under the tombstone so Undo is lossless.
     mutating func remove(clipID: UUID, from boardID: UUID, at date: Date = .now) {
-        guard let index = boards.firstIndex(where: { $0.id == boardID && !$0.isDeleted }) else { return }
-        boards[index].clipIDs.removeAll { $0 == clipID }
-        boards[index].pinnedClipIDs.removeAll { $0 == clipID }
-        if let clipIndex = clips.firstIndex(where: { $0.id == clipID && $0.containerID == boardID }) {
-            clips[clipIndex].preDeletionUpdatedAt = clips[clipIndex].updatedAt
-            let deletionDate = Self.timestampStrictlyAfter(clips[clipIndex].updatedAt, preferred: date)
-            clips[clipIndex].deletedAt = deletionDate
-            clips[clipIndex].deletionFinalizedAt = deletionDate
-            clips[clipIndex].updatedAt = deletionDate
+        guard boards.contains(where: { $0.id == boardID && !$0.isDeleted }) else { return }
+        guard let clipIndex = clips.firstIndex(where: { $0.id == clipID && $0.containerID == boardID }) else {
+            return
         }
-        boards[index].updatedAt = date
-        updatedAt = date
+        clips[clipIndex].preDeletionUpdatedAt = clips[clipIndex].updatedAt
+        let deletionDate = Self.timestampStrictlyAfter(clips[clipIndex].updatedAt, preferred: date)
+        clips[clipIndex].deletedAt = deletionDate
+        clips[clipIndex].deletionFinalizedAt = nil
+        clips[clipIndex].updatedAt = deletionDate
+        updatedAt = max(updatedAt, deletionDate)
     }
 
     mutating func applyRemoteDeletion(id: UUID, at date: Date = .now) {
@@ -215,6 +310,7 @@ struct PestyLibrary: Codable, Sendable {
                   boards[index].deletionFinalizedAt == nil,
                   deletedAt.addingTimeInterval(Self.deletionUndoInterval) <= date else { continue }
             boards[index].deletionFinalizedAt = date
+            boards[index].preDeletionUpdatedAt = nil
         }
     }
 

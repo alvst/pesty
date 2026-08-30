@@ -138,10 +138,8 @@ struct PestyClip: Identifiable, Codable, Hashable, Sendable {
         case .color:
             return colorHex ?? "Color"
         case .text, .richText:
-            let firstLine = text?
-                .split(whereSeparator: \.isNewline)
-                .first
-                .map(String.init) ?? ""
+            let head = (text ?? "").prefix(4_096)
+            let firstLine = String(head.drop(while: \.isNewline).prefix { !$0.isNewline })
             return firstLine.isEmpty ? kind.title : String(firstLine.prefix(70))
         }
     }

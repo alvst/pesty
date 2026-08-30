@@ -238,6 +238,7 @@ private struct GeneralSettings: View {
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
                             Divider()
                             settingToggle("Paste-style clip cards", isOn: $settings.pasteStyleCards)
+                            Divider()
                             settingToggle("Show resize handle on the Pesty-Alvie bar", isOn: $settings.showBarResizeHandle)
                             Divider()
                             settingToggle("Show Pesty-Alvie in the menu bar", isOn: $settings.showMenuBarIcon)
@@ -755,6 +756,20 @@ private struct SyncSettings: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 8)
+                        Divider()
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Existing Mac Library")
+                                Text("Merge history from the direct-download Mac app without replacing newer items.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Import…") {
+                                AppController.shared.importExistingLibraryAndSync()
+                            }
+                        }
+                        .padding(.vertical, 10)
                         if cloudSync.requiresAccountConfirmation {
                             Divider()
                             Button("Use Current iCloud Account…") {

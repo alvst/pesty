@@ -175,7 +175,7 @@ final class CloudSyncService {
 
     private func desiredRecords() -> [String: DesiredRecord] {
         var desired: [String: DesiredRecord] = [:]
-        for board in store.pinboards {
+        for board in store.cloudSyncPinboards {
             desired[board.id.uuidString] = DesiredRecord(fingerprint: fingerprint(board))
         }
         for projection in store.cloudSyncClips {
@@ -206,12 +206,15 @@ final class CloudSyncService {
         save(protectedRemoteRecordNames, to: protectedURL)
         engine.state.add(pendingRecordZoneChanges: changes)
         status = "Syncing…"
-        Task { try? await engine.sendChanges() }
+        // Adding pending changes schedules an automatic send. Calling
+        // sendChanges() here is unsafe because this method can run while the
+        // engine is delivering a delegate event, and CloudKit forbids awaiting
+        // another engine operation from inside that delegate context.
     }
 
     private func record(for recordID: CKRecord.ID) -> CKRecord? {
         let name = recordID.recordName
-        if let board = store.pinboards.first(where: { $0.id.uuidString == name }) {
+        if let board = store.cloudSyncPinboards.first(where: { $0.id.uuidString == name }) {
             let record = baseRecord(name: name, type: CKSchema.pinboardType)
             CloudRecordCodec.populate(record, from: board)
             return record
@@ -222,7 +225,8 @@ final class CloudSyncService {
                 record,
                 from: projection.item,
                 container: projection.container,
-                imageFileURL: projection.item.type == .image
+                // Image clips and image *files* (screenshots) both carry pixels.
+                imageFileURL: projection.item.imageFileName != nil
                     ? store.imageURL(for: projection.item)
                     : nil
             )
