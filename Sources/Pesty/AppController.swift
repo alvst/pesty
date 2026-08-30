@@ -1019,9 +1019,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         resetBarSelectionForSearch()
     }
 
-    /// Return leaves the query intact and hands arrows/shortcuts back to the
-    /// result cards. With no result there is nowhere to move, so search keeps
-    /// focus instead.
+    /// The first Return leaves the query intact and hands keyboard focus to
+    /// the highlighted result. A second Return activates that card. With no
+    /// result there is nowhere to move, so search keeps focus instead.
     func submitBarSearch() {
         guard store.barInputMode == .search, hasVisibleSearchResult else { return }
         barController?.resignSearch()
@@ -1429,14 +1429,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             cancelBarSearchOrHide()
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
-            // Holding Return after submitting a search must not immediately
-            // paste when the key begins repeating in card mode.
+            // Holding the first Return after submitting a search must not
+            // turn its key-repeat events into an accidental paste.
             guard !event.isARepeat else { return nil }
-            if store.source == .pasteStack {
-                pasteSelectedStackEntry()
-                return nil
-            }
-            pasteSelected(); return nil
+            pasteCurrentBarSelection()
+            return nil
         case kVK_ANSI_C:
             if cmd {
                 commandCopy()
@@ -1540,6 +1537,16 @@ final class AppController: NSObject, NSApplicationDelegate {
             return !pasteSequence.visibleEntries(matching: store.searchText).isEmpty
         }
         return !store.visibleItems.isEmpty
+    }
+
+    /// The single activation rule shared by native search submission and the
+    /// bar's card-focused Return shortcut.
+    private func pasteCurrentBarSelection() {
+        if store.source == .pasteStack {
+            pasteSelectedStackEntry()
+        } else {
+            pasteSelected()
+        }
     }
 
     /// Space's preview action, shared by the early Space rule and the card

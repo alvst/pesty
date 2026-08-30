@@ -67,7 +67,9 @@ struct NativeBarSearchField: NSViewRepresentable {
         field.lineBreakMode = .byTruncatingTail
         field.placeholderString = "Search"
         field.font = .systemFont(ofSize: 13, weight: .medium)
-        field.textColor = NSColor.black.withAlphaComponent(0.82)
+        // The bar follows the system appearance. A fixed dark ink is readable
+        // on its light glass but disappears when the same field turns dark.
+        field.textColor = .labelColor
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         bridge.install(field)
         return field
@@ -76,6 +78,10 @@ struct NativeBarSearchField: NSViewRepresentable {
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         bridge.install(field)
+        // Keep an already-active field editor in sync when macOS changes the
+        // appearance while the bar is open.
+        field.textColor = .labelColor
+        (field.currentEditor() as? NSTextView)?.textColor = .labelColor
         // Reassigning an equal value resets the native caret and selection.
         if field.stringValue != text { field.stringValue = text }
     }
@@ -94,6 +100,9 @@ struct NativeBarSearchField: NSViewRepresentable {
         }
 
         func controlTextDidBeginEditing(_ notification: Notification) {
+            if let field = notification.object as? NSTextField {
+                (field.currentEditor() as? NSTextView)?.textColor = .labelColor
+            }
             parent.onBegin()
         }
 
