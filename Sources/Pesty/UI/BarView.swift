@@ -296,8 +296,11 @@ struct BarView: View {
         // Once a query exists, it must win space from the horizontally
         // scrollable tab strip so the user can see what they typed.
         .layoutPriority(searchIsActive ? 2 : 0)
-        .animation(.easeOut(duration: 0.15), value: searchIsActive)
-        .animation(.easeOut(duration: 0.12), value: searchHasKeyboardFocus)
+        // The native editor already owns the triggering key event. Animating
+        // this expansion lets it claim width before it becomes visible,
+        // leaving a blank gap and displaced tabs for the first few frames.
+        // Make activation and its focus treatment atomic instead.
+        .transaction { $0.disablesAnimations = true }
     }
 
     private var moreMenu: some View {
