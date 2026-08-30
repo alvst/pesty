@@ -68,6 +68,11 @@
 		8D045D68502C6B19A673D709 /* ClipDeletionLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864A35049FBB361612B5A0DC /* ClipDeletionLedger.swift */; };
 		956C57D8D1B28BCE14A759B4 /* InlinePreviewExternalOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AEE0779AA154B7EEF0B17DB /* InlinePreviewExternalOpener.swift */; };
 		969F2DFBE077AAED3797F4D6 /* ClipboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8628C1ED94EC25E07D64EAB0 /* ClipboardStore.swift */; };
+		AB10000000000000000000C1 /* BundledExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B1 /* BundledExtensions.swift */; };
+		AB10000000000000000000C2 /* ExtensionCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B2 /* ExtensionCatalog.swift */; };
+		AB10000000000000000000C3 /* ExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B3 /* ExtensionHost.swift */; };
+		AB10000000000000000000C4 /* ExtensionManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B4 /* ExtensionManifest.swift */; };
+		AB10000000000000000000C5 /* ExtensionResultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B5 /* ExtensionResultStore.swift */; };
 		9808BB1A9A73038036E81DBB /* LinkPreviewStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0EC8CC911DC3BA3B6B35D0 /* LinkPreviewStore.swift */; };
 		9FF661F7A8B876684C808ABA /* ClipTextMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1D1D4BDEE972ECBE9638BB /* ClipTextMetrics.swift */; };
 		A059C330B1FE50F383D4B8C1 /* DemoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A09D9FDB6CD4E42A3FD6798 /* DemoLibrary.swift */; };
@@ -193,6 +198,11 @@
 		7F0EC8CC911DC3BA3B6B35D0 /* LinkPreviewStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPreviewStore.swift; sourceTree = "<group>"; };
 		851B34ADC9B0F23ECC379B4C /* PestyShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PestyShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8628C1ED94EC25E07D64EAB0 /* ClipboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardStore.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B1 /* BundledExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledExtensions.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B2 /* ExtensionCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCatalog.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B3 /* ExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionHost.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B4 /* ExtensionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifest.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B5 /* ExtensionResultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionResultStore.swift; sourceTree = "<group>"; };
 		864A35049FBB361612B5A0DC /* ClipDeletionLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDeletionLedger.swift; sourceTree = "<group>"; };
 		86C8E1BAB1888A61AD30AA3E /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		89FAC6B477E246B4103A4BC2 /* PestyAlvieApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyAlvieApp.swift; sourceTree = "<group>"; };
@@ -474,6 +484,7 @@
 				D19B006E806BE4D43C7A6FDD /* AppController.swift */,
 				115BB3D5E2F066A1F3E0D04E /* AppIdentity.swift */,
 				8B93B672FDBE922F008CBC8D /* Main.swift */,
+				AB10000000000000000000D1 /* Extensions */,
 				D2B41869B43CF8C03975E7C5 /* Hotkey */,
 				76BEAA2CE06E45C0E46484CE /* Models */,
 				AC71C4FDC615AB3BA0D9CA18 /* Monitor */,
@@ -485,6 +496,18 @@
 			);
 			name = "Pesty-Mac";
 			path = ../Sources/Pesty;
+			sourceTree = "<group>";
+		};
+		AB10000000000000000000D1 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				AB10000000000000000000B1 /* BundledExtensions.swift */,
+				AB10000000000000000000B2 /* ExtensionCatalog.swift */,
+				AB10000000000000000000B3 /* ExtensionHost.swift */,
+				AB10000000000000000000B4 /* ExtensionManifest.swift */,
+				AB10000000000000000000B5 /* ExtensionResultStore.swift */,
+			);
+			path = Extensions;
 			sourceTree = "<group>";
 		};
 		D2B41869B43CF8C03975E7C5 /* Hotkey */ = {
@@ -718,6 +741,11 @@
 				4BA745B8FA900F4CC1834DD0 /* ClipType.swift in Sources */,
 				D97D7992704570B4564378E0 /* ClipboardMonitor.swift in Sources */,
 				969F2DFBE077AAED3797F4D6 /* ClipboardStore.swift in Sources */,
+				AB10000000000000000000C1 /* BundledExtensions.swift in Sources */,
+				AB10000000000000000000C2 /* ExtensionCatalog.swift in Sources */,
+				AB10000000000000000000C3 /* ExtensionHost.swift in Sources */,
+				AB10000000000000000000C4 /* ExtensionManifest.swift in Sources */,
+				AB10000000000000000000C5 /* ExtensionResultStore.swift in Sources */,
 				D214CE646DF58FAD6FCCD8FF /* CloudKitSchema.swift in Sources */,
 				B75C0F1462C6DCF029C8C2AA /* CloudRecordCodec.swift in Sources */,
 				095FC08DAE0A4645AA669413 /* CloudSyncService.swift in Sources */,
