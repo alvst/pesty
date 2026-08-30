@@ -207,8 +207,8 @@
 		A580A55CDABFC5803836A241 /* MacPestyStoreImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPestyStoreImporter.swift; sourceTree = "<group>"; };
 		A5F771120141E22ECC51B228 /* PasteStackDeckCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteStackDeckCard.swift; sourceTree = "<group>"; };
 		AA65F034BD491F88EF5857D1 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
-		ABD7189F1830FFFB6777F752 /* Pesty-Alvie-Mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pesty-Alvie-Mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B5E29E410854C183F4E75731 /* PestyShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PestyShareExtension.entitlements; sourceTree = "<group>"; };
+		B5FA1C1D9C184379E4AEDADD /* Pesty-Alvie.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pesty-Alvie.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B7C1FBABC42CC9F760791FDD /* PestyPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyPalette.swift; sourceTree = "<group>"; };
 		B8FD7A6BD853BB09AEA3F471 /* container-migration.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "container-migration.plist"; sourceTree = "<group>"; };
 		B91F43115B3721059C2EB6C6 /* ClipEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipEditor.swift; sourceTree = "<group>"; };
@@ -395,8 +395,8 @@
 		8EBA94996C71803AD5A620CA /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				ABD7189F1830FFFB6777F752 /* Pesty-Alvie-Mac.app */,
 				7DFABE8F13CB8A382671FC74 /* Pesty-Alvie.app */,
+				B5FA1C1D9C184379E4AEDADD /* Pesty-Alvie.app */,
 				C8DA3F166C54640BABB54762 /* Pesty-AlvieTests.xctest */,
 				851B34ADC9B0F23ECC379B4C /* PestyShareExtension.appex */,
 				341D2CCACB6EEF160B5B9789 /* PestyWidget.appex */,
@@ -547,7 +547,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 96AA9D90FAD8905A275DFAD0 /* Build configuration list for PBXNativeTarget "Pesty-Alvie-Mac" */;
 			buildPhases = (
-				A14F766BA3342CB091E9C751 /* Generate app icon if missing */,
 				4133EED7380284B2B806DE19 /* Sources */,
 				2FA077FC8FC7B5E282856687 /* Resources */,
 			);
@@ -559,7 +558,7 @@
 			packageProductDependencies = (
 			);
 			productName = "Pesty-Alvie-Mac";
-			productReference = ABD7189F1830FFFB6777F752 /* Pesty-Alvie-Mac.app */;
+			productReference = B5FA1C1D9C184379E4AEDADD /* Pesty-Alvie.app */;
 			productType = "com.apple.product-type.application";
 		};
 		8160736EF5C38BB87B9D1904 /* Pesty-Alvie */ = {
@@ -683,28 +682,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		A14F766BA3342CB091E9C751 /* Generate app icon if missing */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Generate app icon if missing";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "[ -f \"$SRCROOT/../packaging/Pesty-Alvie.icns\" ] || bash \"$SRCROOT/../scripts/make_icon.sh\"";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4133EED7380284B2B806DE19 /* Sources */ = {

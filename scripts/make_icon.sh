@@ -2,6 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+ICON_OUTPUT="packaging/Pesty-Alvie.icns"
+if [[ -f "$ICON_OUTPUT" && "${FORCE_ICON_REBUILD:-0}" != "1" ]]; then
+  echo "using tracked $ICON_OUTPUT"
+  exit 0
+fi
+
 mkdir -p packaging
 swift scripts/IconGen.swift packaging/icon_1024.png
 
@@ -21,5 +27,5 @@ gen 512  icon_256x256@2x.png
 gen 512  icon_512x512.png
 gen 1024 icon_512x512@2x.png
 
-iconutil -c icns "$ICONSET" -o packaging/Pesty-Alvie.icns
-echo "wrote packaging/Pesty-Alvie.icns"
+iconutil -c icns "$ICONSET" -o "$ICON_OUTPUT"
+echo "wrote $ICON_OUTPUT"

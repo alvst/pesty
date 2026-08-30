@@ -106,13 +106,14 @@ targets:
   Pesty-Alvie-Mac:
     type: application
     platform: macOS
+    productName: Pesty-Alvie
     sources:
       - path: ../Sources/Pesty
         name: Pesty-Mac
       - path: Pesty-Alvie-Mac/Resources/container-migration.plist
         buildPhase: resources
-      # Same icon as the direct-download build; without it Xcode's generic
-      # placeholder shows in the Dock, Mission Control, and Settings.
+      # Track the compiled icon: current iconutil releases cannot reliably
+      # rebuild an iconset produced by older toolchains.
       - path: ../packaging/Pesty-Alvie.icns
         buildPhase: resources
     settings:
@@ -128,12 +129,6 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAS"
-    preBuildScripts:
-      # The icon is a build product of the direct-download packaging, not a
-      # tracked file; a fresh clone would otherwise fail the resources phase.
-      - name: Generate app icon if missing
-        script: '[ -f "$SRCROOT/../packaging/Pesty-Alvie.icns" ] || bash "$SRCROOT/../scripts/make_icon.sh"'
-        basedOnDependencyAnalysis: false
 schemes:
   Pesty-Alvie:
     build:

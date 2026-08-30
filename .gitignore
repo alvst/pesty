@@ -9,6 +9,7 @@ packaging/Pesty-Alvie.app/
 packaging/*.dmg
 packaging/*.zip
 packaging/*.icns
+!packaging/Pesty-Alvie.icns
 packaging/icon_1024.png
 packaging/Pesty-Alvie.iconset/
 
