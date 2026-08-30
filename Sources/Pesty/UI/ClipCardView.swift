@@ -89,6 +89,7 @@ struct ClipCardView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu { menu }
         .task(id: item.id) { await loadFileThumbnail() }
+        .task(id: item.id) { ExtensionResultStore.shared.requestBadges(for: item) }
         .overlay {
             // A native dragging session instead of .onDrag: multi-file clips
             // drag out as real separate file items, and the session reports
@@ -405,7 +406,8 @@ struct ClipCardView: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let badges = ExtensionResultStore.shared.badges(for: item.id)
+        return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .bottom, spacing: 6) {
                 // A path is worth reading in full, so it wraps rather than
                 // collapsing to an ellipsis; everything else stays one line.
@@ -439,6 +441,13 @@ struct ClipCardView: View {
                     }
                     .foregroundStyle(Theme.textTertiary)
                 }
+            }
+            if !badges.isEmpty {
+                Text(badges.joined(separator: " · "))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
         .padding(.top, 8)

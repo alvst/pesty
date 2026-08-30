@@ -76,6 +76,7 @@ struct SettingsView: View {
         case .general: GeneralSettings()
         case .privacy: PrivacySettings()
         case .shortcuts: ShortcutsSettings()
+        case .extensions: ExtensionsSettings()
         case .sync: SyncSettings()
         case .about: AboutView()
         }
@@ -83,22 +84,23 @@ struct SettingsView: View {
 }
 
 private enum SettingsSection: CaseIterable, Identifiable {
-    case general, privacy, shortcuts, sync, about
+    case general, privacy, shortcuts, extensions, sync, about
     var id: Self { self }
     var title: String {
-        switch self { case .general: "General"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .sync: "Sync"; case .about: "About" }
+        switch self { case .general: "General"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .extensions: "Extensions"; case .sync: "Sync"; case .about: "About" }
     }
     var subtitle: String {
         switch self {
         case .general: "History, behavior, and app preferences"
         case .privacy: "Keep clips from selected apps out of Pesty-Alvie"
         case .shortcuts: "Keyboard controls for Pesty-Alvie and Paste Stack"
+        case .extensions: "Manage scripts that add badges to clip cards"
         case .sync: "Keep your clipboard library available across your devices"
         case .about: "Pesty-Alvie for macOS"
         }
     }
     var symbol: String {
-        switch self { case .general: "gearshape"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .sync: "icloud"; case .about: "info.circle" }
+        switch self { case .general: "gearshape"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .extensions: "puzzlepiece.extension"; case .sync: "icloud"; case .about: "info.circle" }
     }
 }
 
@@ -721,6 +723,185 @@ private struct ShortcutsSettings: View {
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+}
+
+private struct ExtensionsSettings: View {
+    @Bindable private var catalog = ExtensionCatalog.shared
+    @State private var source = ""
+    @State private var installError: String?
+    @State private var uninstallCandidate: InstalledExtension?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                SettingsFormGroup("About Extensions") {
+                    SettingsSurface {
+                        Text("Extensions are JavaScript snippets that compute badges shown on clip cards. While enabled, they run inside Pesty-Alvie and receive only the text of clips.")
+                            .font(.system(size: 13))
+                            .padding(.vertical, 10)
+                        Divider()
+                        Label("No network or file access", systemImage: "lock.shield")
+                            .font(.caption.weight(.medium))
+                            .padding(.top, 9)
+                        Text("Extensions are off by default. Install scripts only from sources you trust.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 5)
+                            .padding(.bottom, 9)
+                    }
+                }
+
+                SettingsFormGroup("Installed") {
+                    SettingsSurface {
+                        if catalog.extensions.isEmpty {
+                            ContentUnavailableView(
+                                "No extensions installed",
+                                systemImage: "puzzlepiece.extension",
+                                description: Text("Paste an extension script below to install it.")
+                            )
+                            .font(.system(size: 12))
+                            .padding(.vertical, 18)
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            ForEach(catalog.extensions) { installedExtension in
+                                if installedExtension.id != catalog.extensions.first?.id {
+                                    Divider()
+                                }
+                                extensionRow(installedExtension)
+                            }
+                        }
+                    }
+                }
+
+                SettingsFormGroup("Install Extension") {
+                    SettingsSurface {
+                        TextEditor(text: $source)
+                            .font(.system(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 120)
+                            .padding(8)
+                            .background(
+                                Color(nsColor: .textBackgroundColor),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(.primary.opacity(0.12))
+                            }
+                            .padding(.top, 12)
+                            .accessibilityLabel("Extension JavaScript")
+                            .onChange(of: source) { _, _ in installError = nil }
+
+                        Text("Installation runs the script once to validate it, with a strict time limit.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+
+                        if let installError {
+                            Label(installError, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.top, 7)
+                        }
+
+                        HStack {
+                            Spacer()
+                            Button("Install Extension") { install() }
+                                .disabled(source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        .padding(.vertical, 10)
+                    }
+                }
+            }
+            .frame(maxWidth: 548, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .confirmationDialog(
+            "Uninstall \(uninstallCandidate?.manifest.name ?? "extension")?",
+            isPresented: Binding(
+                get: { uninstallCandidate != nil },
+                set: { if !$0 { uninstallCandidate = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let uninstallCandidate {
+                Button("Uninstall", role: .destructive) {
+                    catalog.uninstall(id: uninstallCandidate.id)
+                    self.uninstallCandidate = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { uninstallCandidate = nil }
+        } message: {
+            Text("The extension and its script will be removed. The script text is lost unless you kept a copy.")
+        }
+    }
+
+    private func extensionRow(_ installedExtension: InstalledExtension) -> some View {
+        let isQuarantined = catalog.isQuarantined(installedExtension.id)
+
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(installedExtension.manifest.name)
+                        .font(.system(size: 13, weight: .medium))
+                    Text("Version \(installedExtension.manifest.version)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if installedExtension.isBundled {
+                        Text("Bundled")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.primary.opacity(0.06), in: Capsule())
+                    }
+                }
+                Text(installedExtension.id)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                if isQuarantined {
+                    Label(
+                        "Turned off after repeated failures or a timeout",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                Toggle(
+                    "Enable \(installedExtension.manifest.name)",
+                    isOn: Binding(
+                        get: { installedExtension.enabled && !isQuarantined },
+                        set: { catalog.setEnabled($0, id: installedExtension.id) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(isQuarantined)
+                .accessibilityLabel("Enable \(installedExtension.manifest.name)")
+
+                Button("Uninstall", role: .destructive) {
+                    uninstallCandidate = installedExtension
+                }
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func install() {
+        switch catalog.install(source: source) {
+        case .success:
+            source = ""
+            installError = nil
+        case .failure(let error):
+            installError = error.userDescription
         }
     }
 }

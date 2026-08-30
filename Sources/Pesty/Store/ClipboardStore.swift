@@ -322,7 +322,10 @@ final class ClipboardStore {
             PasteSequence.shared.removeHistoryItems(Set(removed.map(\.id)))
         }
         recordCloudRetentionExclusions(removed.map(\.id))
-        for item in removed { deleteImageFile(item) }
+        for item in removed {
+            ExtensionResultStore.shared.forget(item.id)
+            deleteImageFile(item)
+        }
         return true
     }
 
@@ -369,6 +372,7 @@ final class ClipboardStore {
             pinboards[i].prunePins()
         }
         if permanently {
+            ExtensionResultStore.shared.forget(item.id)
             deletionLedger.recordRemoteDeletion(
                 id: item.id,
                 removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
@@ -493,6 +497,7 @@ final class ClipboardStore {
             PasteSequence.shared.removeHistoryItems(Set(old.map(\.id)))
         }
         for item in old {
+            ExtensionResultStore.shared.forget(item.id)
             deletionLedger.recordRemoteDeletion(
                 id: item.id,
                 removesFromPasteStacks: Settings.shared.pasteStacksFollowHistory,
@@ -500,7 +505,10 @@ final class ClipboardStore {
             )
         }
         for payload in finalizedPayloads {
-            for item in payload.allItems { deleteImageFile(item) }
+            for item in payload.allItems {
+                ExtensionResultStore.shared.forget(item.id)
+                deleteImageFile(item)
+            }
         }
         for item in old { deleteImageFile(item) }
         scheduleSave()
@@ -565,6 +573,7 @@ final class ClipboardStore {
     private func finalizeRemovedPinboard(_ board: Pinboard, at date: Date) {
         let finalizedPayloads = deletionLedger.finalizePendingDeletions(inPinboard: board.id, at: date)
         for item in board.items {
+            ExtensionResultStore.shared.forget(item.id)
             deletionLedger.recordRemoteDeletion(
                 id: item.id,
                 removesFromPasteStacks: false,
@@ -573,7 +582,10 @@ final class ClipboardStore {
         }
         for item in board.items { deleteImageFile(item) }
         for payload in finalizedPayloads {
-            for item in payload.allItems { deleteImageFile(item) }
+            for item in payload.allItems {
+                ExtensionResultStore.shared.forget(item.id)
+                deleteImageFile(item)
+            }
         }
     }
 
@@ -1531,7 +1543,10 @@ final class ClipboardStore {
     private func refreshDeletionState(at date: Date) -> Bool {
         let expiredPayloads = deletionLedger.finalizeExpired(at: date)
         for payload in expiredPayloads {
-            for item in payload.allItems { deleteImageFile(item) }
+            for item in payload.allItems {
+                ExtensionResultStore.shared.forget(item.id)
+                deleteImageFile(item)
+            }
         }
         let expiredBoards = pendingPinboardDeletions.filter { !$0.isUndoable(at: date) }
         if !expiredBoards.isEmpty {
