@@ -94,7 +94,7 @@ private enum SettingsSection: CaseIterable, Identifiable {
         case .general: "History, behavior, and app preferences"
         case .privacy: "Keep clips from selected apps out of Pesty-Alvie"
         case .shortcuts: "Keyboard controls for Pesty-Alvie and Paste Stack"
-        case .extensions: "Manage scripts that add badges to clip cards"
+        case .extensions: "Manage scripts that decorate clips and transform paste"
         case .sync: "Keep your clipboard library available across your devices"
         case .about: "Pesty-Alvie for macOS"
         }
@@ -738,7 +738,7 @@ private struct ExtensionsSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("About Extensions") {
                     SettingsSurface {
-                        Text("Extensions are JavaScript snippets that compute badges shown on clip cards. While enabled, they run inside Pesty-Alvie and receive only the text of clips.")
+                        Text("Extensions are JavaScript snippets that decorate clip cards and can add explicit transformed-paste actions. While enabled, they run inside Pesty-Alvie and receive only the type and text of clips.")
                             .font(.system(size: 13))
                             .padding(.vertical, 10)
                         Divider()
@@ -863,6 +863,18 @@ private struct ExtensionsSettings: View {
                 Text(installedExtension.id)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    ForEach(installedExtension.manifest.effectiveHooks, id: \.self) { hook in
+                        Text(hook.capitalized)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.primary.opacity(0.06), in: Capsule())
+                            .accessibilityLabel("\(hook) hook")
+                    }
+                }
+                .padding(.top, 2)
                 if showsQuarantineWarning {
                     Label(
                         "Turned off after repeated failures or a timeout",
