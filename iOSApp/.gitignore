@@ -2,3 +2,6 @@
 # excludes Xcode projects, so keep this one visible to Git.
 !Pesty-Alvie.xcodeproj/
 !Pesty-Alvie.xcodeproj/**
+
+# Keep the generated shared project, but never commit per-user Xcode state.
+Pesty-Alvie.xcodeproj/**/xcuserdata/

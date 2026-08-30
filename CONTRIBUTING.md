@@ -22,7 +22,7 @@ swift build -Xswiftc -DMAS     # sandboxed/CloudKit compile check
 To build a distributable bundle:
 
 ```bash
-VERSION=1.0.0 BUILD=1 ./scripts/build_app.sh
+VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
 open packaging/Pesty-Alvie.app
 ```
 
@@ -39,14 +39,18 @@ open packaging/Pesty-Alvie.app
 - Keep it dependency-free. Prefer system frameworks (AppKit, SwiftUI, Carbon, ServiceManagement).
 - Match the existing style. Small, focused changes; no unrelated refactors in the same PR.
 - Test on both Apple Silicon and Intel where it matters (the release is universal).
-- UI changes: include a before/after screenshot of the strip.
+- UI changes: include before/after screenshots of the full strip. A change with
+  no visual delta may omit screenshots only when the PR explicitly says that
+  it has no visual delta.
 
 ## Pull requests
 
 1. Fork and branch from `main`.
 2. Make your change; run `swift test`, `swift build -Xswiftc -DMAS`, the iOS
    simulator tests when relevant, and `git diff --check`.
-3. Open a PR with a clear description and screenshots for UI changes.
+3. Open a PR with a clear description and before/after screenshots for visual
+   changes, or an explicit no-visual-delta statement when screenshots do not
+   apply.
 
 ## Good first issues
 

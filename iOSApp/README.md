@@ -1,10 +1,19 @@
-# Pesty-Alvie Companion for iPhone and iPad
+# Pesty-Alvie 2.5 Companion for iPhone and iPad
 
-This is an iOS 17+ SwiftUI companion with the same private CloudKit record
-contract as the sandboxed macOS build. The targets share no source dependency;
-their two copies of `CloudKitSchema.swift` must remain byte-identical.
+This is the in-development iOS 17+ SwiftUI companion for the planned 2.5.0
+release. It has the same private CloudKit record contract as the sandboxed
+macOS build. The targets share no source dependency; their two copies of
+`CloudKitSchema.swift` must remain byte-identical.
 
-## What works now
+## Release boundary
+
+The companion app, its widget and share extension, and all Mac↔iOS CloudKit
+synchronization ship on the 2.5.0 train. They are not part of the macOS 2.0.0
+release or the upstream-aligned 2.1.0 Paste Stacks release. Until the 2.5.0
+release gates below pass, this directory is development source rather than a
+released companion.
+
+## What is implemented for 2.5.0
 
 - Bidirectional private-database sync for text, rich text, links, colors,
   images, file metadata, Pinboard membership/order, edits, and hard deletes.
@@ -19,16 +28,17 @@ their two copies of `CloudKitSchema.swift` must remain byte-identical.
 
 ## Sync boundary
 
-The Mac App Store (`MAS`) build uses CloudKit and can sync with this companion.
-The direct-download Mac build continues to offer iCloud Drive sync between
-Macs and does not talk to the companion. The iOS simulator intentionally runs
-as a local-only library; entitlement and push behavior must be tested with a
-signed physical-device build.
+The Mac App Store (`MAS`) build uses CloudKit for its Mac records.
+Interoperability with this companion begins with 2.5.0. The direct-download Mac
+build continues to offer iCloud Drive sync between Macs and does not talk to
+the companion. The iOS simulator intentionally runs as a local-only library;
+entitlement and push behavior must be tested with a signed physical-device
+build.
 
 ## Open and test
 
-Open `Pesty-Alvie.xcodeproj` in Xcode 26.3, select Alvie's development team,
-and use automatic signing. In the Apple Developer portal, register the
+Open `Pesty-Alvie.xcodeproj` in Xcode 26.3, select your development team, and
+use automatic signing. In the Apple Developer portal, register the
 `com.alvst.pesty-alvie.companion` App ID, enable iCloud/CloudKit and push
 notifications, and assign `iCloud.com.alvst.pesty-alvie`. The sandboxed Mac App
 ID must be assigned the same container. After validating the Development
@@ -46,7 +56,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-The unsigned simulator suite verifies local behavior and record encoding. A
-release gate still requires a real iPhone/iPad and a provisioned Mac to prove
-account status, push delivery, offline convergence, conflict handling, images,
-and deletes against the actual container.
+The unsigned simulator suite verifies local behavior and record encoding. The
+2.5.0 release gate still requires a real iPhone/iPad and a provisioned Mac to
+prove account status, push delivery, offline convergence, conflict handling,
+images, and deletes against the actual container.

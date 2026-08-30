@@ -16,6 +16,8 @@ Your clipboard history as a beautiful, color-coded strip that slides up from the
 
 <sub>Pesty-Alvie uses its own bundle ID, storage folders, preview directories, signing requirement, and default global shortcuts so it can coexist with upstream Pesty.</sub>
 
+<sub>Release plan: macOS 2.0.0 first, Paste Stacks on the upstream-aligned 2.1.0 train, and the iPhone/iPad companion plus Mac↔iOS sync, widget, and share extension in 2.5.0.</sub>
+
 <img src="docs/assets/demo.gif" width="820" alt="Pesty-Alvie clipboard manager demo - color-coded clipboard strip with keyboard navigation on macOS" />
 
 ### ⭐ If Pesty helped you, consider starring the [upstream project](https://github.com/momenbasel/pesty).
@@ -34,7 +36,9 @@ It is a native reimplementation of the Paste experience, built in **Swift + Swif
 - **Color-coded cards** - each clip has a header band tinted per source app (consistent per app), with the app icon, type label, when it was copied, a preview, and a footer showing character count and a quick-paste number.
 - **All content types** - plain text, rich text, links, images, files, and colors.
 - **Pinboards** - save clips you reuse into named, color-tagged collections that never expire.
-- **iCloud sync** - direct builds can sync Macs through iCloud Drive; the sandboxed build uses private CloudKit records with the iPhone/iPad companion.
+- **Mac sync** - direct builds can sync Macs through iCloud Drive; sandboxed
+  builds use private CloudKit records. Interoperability with the iPhone/iPad
+  companion arrives with 2.5.0.
 - **Instant search** - start typing to filter your whole history.
 - **Keyboard-first** - arrow keys to move, `return` to paste, `⌘1`–`⌘9` to quick-paste, `⌘⌫` to delete, `esc` to close.
 - **Paste directly** - drops the clip into the app you were using, no manual `⌘V` needed.
@@ -67,15 +71,15 @@ Build this personal edition from source below. The result is
 
 ## Build from source
 
-Requires macOS 14+ and a Swift 6 toolchain. The full Mac/iOS release matrix is
-pinned to Xcode 26.3.
+Requires macOS 14+ and a Swift 6 toolchain. The macOS 2.0.0 build and the
+separate iOS 2.5.0 development project are pinned to Xcode 26.3.
 
 ```bash
 git clone https://github.com/alvst/pesty.git
 cd pesty
 swift run Pesty-Alvie # run in place
 # or build a distributable .app:
-VERSION=1.0.0 BUILD=1 ./scripts/build_app.sh
+VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
 open packaging/Pesty-Alvie.app
 ```
 
@@ -104,7 +108,7 @@ Sources/Pesty/
   Util/                 icons, color hex, visual-effect view, launch-at-login
 scripts/                build, icon, sign + notarize
 packaging/              Info.plist, entitlements, generated artifacts
-iOSApp/                 iPhone/iPad companion, XcodeGen spec, and tests
+iOSApp/                 planned 2.5.0 companion, widget/share targets, and tests
 ```
 
 ## Pesty-Alvie vs other Mac clipboard managers
@@ -127,7 +131,7 @@ Pesty-Alvie retains Pesty's native slide-up strip, color-coded cards, pinboards,
 
 **Can Pesty-Alvie coexist with Pesty?** Yes. It uses a distinct bundle ID, app name, local and iCloud storage folders, temporary directories, signing requirement, and default global shortcuts.
 
-**Does it keep my clipboard private?** Direct builds store clips locally or in your selected iCloud Drive folder. When explicitly enabled in the sandboxed Mac build, companion sync uses your private CloudKit database. Clipboard contents are not logged; password-manager clips and locally excluded source apps are ignored. Link metadata previews can make network requests.
+**Does it keep my clipboard private?** Direct builds store clips locally or in your selected iCloud Drive folder. Sandboxed Mac builds use your private CloudKit database; synchronization with the companion is part of the planned 2.5.0 release. Clipboard contents are not logged; password-manager clips and locally excluded source apps are ignored. Link metadata previews can make network requests.
 
 **What macOS does it need?** macOS 14 (Sonoma) or later, on Apple Silicon or Intel.
 

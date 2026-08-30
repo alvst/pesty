@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-1.1.0}"
+VERSION="${VERSION:-2.0.0}"
 BUILD="${BUILD:-5}"
 APP="packaging/Pesty-Alvie.app"
 PKG="packaging/Pesty-Alvie-MAS-$VERSION.pkg"

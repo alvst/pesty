@@ -6,19 +6,46 @@ All notable changes to Pesty-Alvie are documented here. The format is based on
 
 ## [Unreleased]
 
-### Changed
+Pesty-Alvie uses separate release trains for the Mac app and its later
+companions:
+
+- **2.0.0** is the next macOS release. It does not include Paste Stacks or any
+  iPhone/iPad target.
+- **2.1.0** is the planned macOS Paste Stacks release, following the upstream
+  tracker for that feature.
+- **2.5.0** is the planned iPhone/iPad companion release. The iOS app, widget,
+  share extension, and private-CloudKit synchronization between Mac and iOS all
+  belong to 2.5.0, not 2.0.0 or 2.1.0.
+
+### Planned for 2.0.0 (macOS)
+
+#### Changed
 - Renamed the personal fork's app, executable, bundle, icon, packaging, and
   documentation identity to Pesty-Alvie.
 - Separated preferences, local and iCloud Drive storage, preview temp folders,
   pasteboard source attribution, login-item identity, Accessibility identity,
   and default global shortcuts from upstream Pesty.
+
+### Planned for 2.1.0 (macOS)
+
+#### Added
+- Paste Stacks, delivered as a separate feature release in line with the
+  upstream tracker rather than folded into the 2.0.0 release.
+
+### Planned for 2.5.0 (iPhone and iPad)
+
+#### Changed
 - Renamed the iOS companion product and project to Pesty-Alvie with separate
   app, test, and CloudKit identifiers.
+
+#### Added
 - Added live private-CloudKit sync between the sandboxed Mac build and the
   iPhone/iPad companion, including offline work, images/RTF assets, Pinboard
   order, conflicts, per-container IDs, and delayed hard deletes for Undo.
 - Added local image creation/copying on iOS, owner-protected asset storage,
   CloudKit status UI, device provisioning guidance, and Mac/iOS sync tests.
+- Added the iOS widget and share extension; both ship on the 2.5.0 train with
+  the companion rather than with macOS 2.0.0.
 
 The entries below describe the inherited upstream Pesty release history.
 

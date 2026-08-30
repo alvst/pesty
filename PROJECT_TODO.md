@@ -8,6 +8,23 @@ Local product name: **Pesty-Alvie**
 
 Purpose: implementation contract and handoff for the next coding agent.
 
+## Release boundary
+
+The roadmap has three distinct release trains. Stage numbers describe technical
+dependencies; they do not make later-platform work a prerequisite for an
+earlier release.
+
+| Release | Scope | Explicitly excluded |
+|---|---|---|
+| **2.0.0** | macOS app | Paste Stacks; every iOS target; Mac↔iOS sync |
+| **2.1.0** | macOS Paste Stacks, following the upstream tracker | iOS companion, widget, share extension, and Mac↔iOS sync |
+| **2.5.0** | iPhone/iPad companion, widget, share extension, and the matching Mac↔iOS private-CloudKit sync | None of this work is back-labelled as 2.0.0 or 2.1.0 |
+
+Run the relevant regression, privacy, signing, and Undo gates separately for
+each train. The 2.5.0 companion work may remain in development without blocking
+the macOS 2.0.0 release; likewise, Paste Stacks must not be folded into 2.0.0
+merely because prototype code exists in the fork.
+
 This is not a request to reopen closed pull requests or merge any current open head as-is. Closed PRs are design/code references. **Every currently open PR remains open and is still required work**; amend/rebase it in place only after its named fixes and foundations are ready. Preserve the Pesty-Alvie identity isolation throughout.
 
 ## How to use this roadmap
@@ -189,11 +206,11 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 | 9 | Safe drag-out | Stages 2, 5–6 |
 | 10 | Local Quick Look, detached preview, external open | Stages 2, 5–7 |
 | 11 | Default-off link enrichment | Stage 10 plus privacy review |
-| 12 | Paste Stack identity/persistence/privacy engine | Stages 1–2, 5–6 |
-| 13 | Paste Stack capture/paste/UI | Stage 12, plus Stages 7–10 as used |
+| 12 | Paste Stack identity/persistence/privacy engine (2.1.0) | Stages 1–2, 5–6 |
+| 13 | Paste Stack capture/paste/UI (2.1.0) | Stage 12, plus Stages 7–10 as used |
 | 14 | Liquid Glass and final visual polish | #41 spacing in Stage 3 → #15 palette/card update → #14 last after pinned Xcode 26.3; preserve #63/#64; Stack-specific polish waits for Stage 13 |
-| 15 | iOS/sync, packaging, regression, release readiness | All shipped feature stages |
-| 16 | Five-minute deletion Undo and final release | Stages 5–8, 12–15 |
+| 15 | 2.5.0 iOS companion, extensions, Mac↔iOS sync, and packaging | Mac sync/schema behavior included in 2.5.0; earlier trains do not depend on this stage |
+| 16 | Five-minute deletion Undo and per-train release gates | Stages 5–8 plus only the feature stages included in that release |
 
 ## Stage 0 — Preserve the fork and restore a trustworthy baseline
 
@@ -688,15 +705,15 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Security review confirms no local-network probing, arbitrary file access, credential forwarding, unbounded decode, or sensitive URL logging.
 - [ ] Privacy disclosures accurately describe the shipped request behavior.
 
-## Stage 12 — Paste Stack identity, persistence, and privacy redesign
+## Stage 12 — Paste Stack identity, persistence, and privacy redesign (2.1.0)
 
 **Goal:** build a tested state engine with correct identity and erase semantics before exposing the feature.
 
-**PR lineage:** Paste Stacks are a separate feature release. Closed [#9](https://github.com/momenbasel/pesty/pull/9), [#29](https://github.com/momenbasel/pesty/pull/29), [#30](https://github.com/momenbasel/pesty/pull/30), [#31](https://github.com/momenbasel/pesty/pull/31), [#33](https://github.com/momenbasel/pesty/pull/33), [#43](https://github.com/momenbasel/pesty/pull/43), [#44](https://github.com/momenbasel/pesty/pull/44), [#48](https://github.com/momenbasel/pesty/pull/48), [#53](https://github.com/momenbasel/pesty/pull/53), and [#55](https://github.com/momenbasel/pesty/pull/55) are a cumulative stale stack, not reopen candidates. The decisive maintainer plan is in [#55's close comment](https://github.com/momenbasel/pesty/pull/55#issuecomment-5247469612).
+**PR lineage:** Paste Stacks are the separate 2.1.0 feature release, following the upstream tracker. Closed [#9](https://github.com/momenbasel/pesty/pull/9), [#29](https://github.com/momenbasel/pesty/pull/29), [#30](https://github.com/momenbasel/pesty/pull/30), [#31](https://github.com/momenbasel/pesty/pull/31), [#33](https://github.com/momenbasel/pesty/pull/33), [#43](https://github.com/momenbasel/pesty/pull/43), [#44](https://github.com/momenbasel/pesty/pull/44), [#48](https://github.com/momenbasel/pesty/pull/48), [#53](https://github.com/momenbasel/pesty/pull/53), and [#55](https://github.com/momenbasel/pesty/pull/55) are a cumulative stale stack, not reopen candidates. The decisive maintainer plan is in [#55's close comment](https://github.com/momenbasel/pesty/pull/55#issuecomment-5247469612).
 
 ### 12A — Product and sync contract
 
-- [ ] Decide and document whether v1 Paste Stacks are device-local or synced. **Recommended first release: device-local**, behind a default-off feature toggle, until the state engine and erase behavior are proven.
+- [ ] Decide and document whether 2.1.0 Paste Stacks are device-local or synced. **Recommended first release: device-local**, behind a default-off feature toggle, until the state engine and erase behavior are proven.
 - [ ] Do not leave sync behavior implicit or different without explanation between direct/iCloud Drive and MAS/CloudKit builds.
 - [ ] `pasteStacksEnabled` defaults to false. Disabling stops capture, unregisters only the stack shortcut, dismisses stack surfaces, and leaves the primary Pesty hotkey intact.
 - [ ] Settings must say that disabling is **not deletion**: saved local stacks and payloads remain until **Delete All Paste Stacks** or a documented follow-history cascade removes them.
@@ -710,8 +727,8 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] If history-following cleanup needs provenance, store an explicit optional relationship such as `originHistoryID`. Do not infer a relationship from equal UUIDs or equal content.
 - [ ] Current CloudKit indexes `Clip` records globally by `ClipItem.id`; `container` currently means History or a Pinboard UUID. Do not overload it with a stack UUID without an explicit Mac+iOS schema/apply-path design.
 - [ ] If stack sync is later approved, add explicit `PasteStack`/`PasteStackEntry` records with ordering, conflict, tombstone/delete, migration, and two-device convergence tests.
-- [ ] Keep stacks entirely out of `CloudSyncService` if v1 is local-only. Do not partially upload entries as ordinary clips.
-- [ ] A device-local v1 must use a separate store under local `Application Support/Pesty-Alvie`, or explicitly omit all Stack fields/assets from the main iCloud Drive snapshot. “Not in CloudKit” alone is insufficient because direct builds may place the main `store.json` in iCloud Drive.
+- [ ] Keep stacks entirely out of `CloudSyncService` for the device-local 2.1.0 release. Do not partially upload entries as ordinary clips.
+- [ ] A device-local 2.1.0 release must use a separate store under local `Application Support/Pesty-Alvie`, or explicitly omit all Stack fields/assets from the main iCloud Drive snapshot. “Not in CloudKit” alone is insufficient because direct builds may place the main `store.json` in iCloud Drive.
 - [ ] Remove old helper logic that updates/deletes across collections by equal UUID (`containsHistoryItemID`-style assumptions).
 
 ### 12C — Persistence and asset ownership
@@ -741,9 +758,9 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] No Paste Stack UI is enabled until all state-engine, identity, persistence, and Clear History tests pass.
 - [ ] No main `store.json`, Stack store/database, or asset directory contains a followed Stack payload after the relevant History-removal transaction.
 - [ ] A History edit/delete cannot mutate or delete an independently saved Stack/Pinboard copy.
-- [ ] Local-only builds perform **zero Paste Stack CloudKit writes and zero Paste Stack iCloud Drive writes**; synced builds, if explicitly designed, converge on two Macs and iOS without changing existing record meanings.
+- [ ] A device-local 2.1.0 build performs **zero Paste Stack CloudKit writes and zero Paste Stack iCloud Drive writes**. If Mac-only Stack sync is explicitly approved for 2.1.0, prove convergence between Macs; any Mac↔iOS Stack sync design belongs to the 2.5.0 train and must converge without changing existing record meanings.
 
-## Stage 13 — Paste Stack capture, paste, and user experience
+## Stage 13 — Paste Stack capture, paste, and user experience (2.1.0)
 
 **Goal:** expose one coherent workflow on top of Stage 12, then add reorder/search/save as small follow-ups.
 
@@ -830,9 +847,9 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Dark Mode search/menu/Pinboard chrome meets contrast targets while text on light card bodies remains readable; Stage 3's `16/26 pt` padding at `300 pt` clears the ring without shadow bleed into the top bar.
 - [ ] Ten interrupted show/hide/resize cycles produce no cross-display animation or stale completion.
 
-## Stage 15 — iOS companion, sync verification, packaging, and release readiness
+## Stage 15 — 2.5.0 iOS companion, extensions, Mac↔iOS sync, and release readiness
 
-**Goal:** prepare Pesty-Alvie as a self-contained fork that can be installed, erased, tested, and released without upstream credentials or identity collisions; final tagging waits for Stage 16.
+**Goal:** prepare the 2.5.0 companion train as a self-contained release that can be installed, erased, tested, and paired with the Mac without upstream credentials or identity collisions. This stage does not block macOS 2.0.0 or the 2.1.0 Paste Stacks release; 2.5.0 tagging waits for its applicable Stage 16 gates.
 
 ### 15A — iOS companion contract
 
@@ -864,7 +881,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Update README, CONTRIBUTING, changelog, website, privacy, support, About, Settings help, and release notes with actual behavior and Pesty-Alvie screenshots.
 - [ ] Document that Pesty-Alvie starts with separate storage. If Alvie wants an upstream-data snapshot, provide a manual one-time copy procedure that requires both apps to be quit.
 - [ ] Document network preview default, Paste Stack persistence/sync, Clear History behavior, and the shared system pasteboard accurately.
-- [ ] Do not tag yet. Carry the clean release candidate into Stage 16, then repeat the affected deletion/sync/release gates.
+- [ ] Do not tag 2.5.0 yet. Carry its clean release candidate into Stage 16, then repeat the affected deletion/sync/release gates.
 
 **Stage 15 exit gate**
 
@@ -873,9 +890,9 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Pesty and Pesty-Alvie can coexist without sharing defaults/history/storage/login identity; their intentionally shared system pasteboard behavior is documented.
 - [ ] Every shipped feature has tests, user-facing help, accurate privacy behavior, and a recoverable data-erasure path.
 
-## Stage 16 — Five-minute Undo for deleted items and final release
+## Stage 16 — Five-minute Undo for deleted items and per-train release gates
 
-**Goal:** make user-initiated item deletion recoverable for exactly five minutes while preserving exact CloudKit deletion semantics after the grace period.
+**Goal:** make user-initiated item deletion recoverable for exactly five minutes while preserving exact CloudKit deletion semantics after the grace period, then run the relevant subset for each release train: History/Pinboards in 2.0.0, Paste Stacks in 2.1.0, and companion/sync behavior in 2.5.0.
 
 **Origin:** new Pesty-Alvie requirement; no audited upstream PR implements this contract.
 
@@ -1073,7 +1090,7 @@ Status is live-audited through 2026-08-10 PDT / 2026-08-11 UTC. **Keep/Revise** 
 - **Best early focused work:** independent #36 wording; #50 test target; #42 key-monitor and `pasteTarget` foundations; minimal native main menu; revised #38 launch/reopen behavior; revised #18, #20, #37, #22, and #41; revised #17; then #40 scoped-delete foundation, #24's tiny race, #5, #6, #34+#56, #54, and #58 Pinboard-only.
 - **Medium/high-risk work after foundations:** update open #16 using #59 tests/reference; finish revised #21 retention; finish Stage 7 editor/context in #42; finish Stage 8 multi-select in #40; #14 last among visual/open feature work after toolchain approval; final Stage 16 Undo and #19 integration remain the release-ending step by Pesty-Alvie policy.
 - **Previews last and split:** #8, #28, #45+#46, #47, #51; link networking remains separate/default-off.
-- **Paste Stack as its own feature release:** #9, #29–#31, #33, #43–#44, #48, #53, #55.
+- **Paste Stack as the 2.1.0 feature release:** #9, #29–#31, #33, #43–#44, #48, #53, #55.
 - **Conditional/ask before investing:** #32, #35, #62 and optional duplicated pause/visual residue.
 
 ## Optional maintainer-coordination comment for Alvie to post

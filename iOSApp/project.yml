@@ -10,7 +10,6 @@ settings:
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
-    MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   Pesty-Alvie:
@@ -33,7 +32,7 @@ targets:
         INFOPLIST_FILE: Pesty-Alvie/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Pesty-Alvie/Resources/Pesty-Alvie.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: AV8TX99676
+        MARKETING_VERSION: "2.5.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
@@ -63,7 +62,7 @@ targets:
         INFOPLIST_FILE: PestyWidget/Info.plist
         CODE_SIGN_ENTITLEMENTS: PestyWidget/PestyWidget.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: AV8TX99676
+        MARKETING_VERSION: "2.5.0"
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -86,7 +85,7 @@ targets:
         INFOPLIST_FILE: PestyShareExtension/Info.plist
         CODE_SIGN_ENTITLEMENTS: PestyShareExtension/PestyShareExtension.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: AV8TX99676
+        MARKETING_VERSION: "2.5.0"
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -100,6 +99,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.tests
+        MARKETING_VERSION: "2.5.0"
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie"
         BUNDLE_LOADER: "$(TEST_HOST)"
@@ -123,7 +123,7 @@ targets:
         INFOPLIST_FILE: Pesty-Alvie-Mac/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Pesty-Alvie-Mac/Resources/Pesty-Alvie-Mac.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: AV8TX99676
+        MARKETING_VERSION: "2.0.0"
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
         MACOSX_DEPLOYMENT_TARGET: "14.0"
