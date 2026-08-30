@@ -922,6 +922,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private var warnedAccessibilityThisLaunch = false
+    private var warnedSandboxPasteThisLaunch = false
 
     /// Direct paste silently degrading to copy-only reads as "paste is
     /// broken". Explain once per launch, with a shortcut to the grant.
@@ -940,6 +941,27 @@ final class AppController: NSObject, NSApplicationDelegate {
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    /// Sandboxed builds cannot synthesize the destination app's Cmd-V. The
+    /// clip is already on the pasteboard, but without an explanation that
+    /// successful copy looks exactly like a failed Return shortcut.
+    func reportSandboxPasteRequiresManualPaste() {
+        guard !warnedSandboxPasteThisLaunch else { return }
+        warnedSandboxPasteThisLaunch = true
+        suppressAutoHide = true
+        defer { suppressAutoHide = false }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Clip copied — manual paste required"
+        #if DEBUG
+        alert.informativeText = "The Xcode ⌘R build runs in the App Sandbox, so macOS does not allow it to send ⌘V to another app. Pesty-Alvie copied the highlighted clip successfully; press ⌘V in the destination to paste it. The normal direct build pastes automatically."
+        #else
+        alert.informativeText = "This sandboxed build cannot send ⌘V to another app. Pesty-Alvie copied the highlighted clip successfully; press ⌘V in the destination to paste it."
+        #endif
+        alert.addButton(withTitle: "Continue")
+        alert.runModal()
     }
 
     func addToPasteStack(_ item: ClipItem, toTop: Bool) {

@@ -136,6 +136,7 @@ enum PasteService {
         // Mac App Store (sandboxed) build: copy the clip and return focus to the
         // app the user came from so they can paste with ⌘V. No Accessibility
         // APIs and no synthetic keystrokes are used.
+        AppController.shared.reportSandboxPasteRequiresManualPaste()
         target.activate()
         #else
         // Direct-download build: optionally paste straight into the active app by
