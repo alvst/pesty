@@ -4,6 +4,8 @@ import ImageIO
 import UniformTypeIdentifiers
 
 struct ClipCardView: View {
+    private static let linkFooterMetaMaxWidth: CGFloat = 145
+
     let item: ClipItem
     let index: Int
     let selected: Bool
@@ -143,7 +145,7 @@ struct ClipCardView: View {
                     appIconTile
                 }
             }
-            .padding(.horizontal, 13)
+            .padding(.horizontal, Theme.cardContentInset)
             .padding(.vertical, settings.pasteStyleCards ? 5 : 7)
         }
         .frame(height: settings.pasteStyleCards ? Theme.enlargedHeaderHeight : Theme.headerHeight)
@@ -174,7 +176,7 @@ struct ClipCardView: View {
     }
 
     private var enlargedIconReservedWidth: CGFloat {
-        Theme.enlargedIconSize - Theme.enlargedIconOverhang - 13
+        Theme.enlargedIconSize - Theme.enlargedIconOverhang - Theme.cardContentInset
     }
 
     private var appIconTile: some View {
@@ -200,11 +202,14 @@ struct ClipCardView: View {
             } else {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.horizontal, 13)
+                    .padding(.horizontal, Theme.cardContentInset)
                     .padding(.top, 11)
             }
             footer
-                .padding(.horizontal, 13)
+                .frame(width: Theme.cardWidth - Theme.cardContentInset * 2,
+                       alignment: .leading)
+                .clipped()
+                .padding(.horizontal, Theme.cardContentInset)
                 .padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -366,7 +371,8 @@ struct ClipCardView: View {
         }
         fileThumbnail = await FileThumbnailProvider.shared.thumbnail(
             for: url,
-            size: CGSize(width: Theme.cardWidth - 26, height: 190),
+            size: CGSize(width: Theme.cardWidth - Theme.cardContentInset * 2,
+                         height: 190),
             scale: NSScreen.main?.backingScaleFactor ?? 2)
     }
 
@@ -407,9 +413,19 @@ struct ClipCardView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(item.type == .file ? 3 : 1)
+                    .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 4)
+                    // A long URL is one unbroken word. Give its label an
+                    // explicit share of the footer width so it truncates
+                    // inside the common 13 pt inset instead of widening the
+                    // row and being clipped at the card edge.
+                    .frame(maxWidth: item.type == .link
+                               ? Self.linkFooterMetaMaxWidth
+                               : .infinity,
+                           alignment: .leading)
+                    .clipped()
+                    .layoutPriority(-1)
                 if let entry = pasteStackEntry {
                     Text(entry.isPasted ? "Pasted" : "Ready")
                         .font(.system(size: 11, weight: .semibold))
