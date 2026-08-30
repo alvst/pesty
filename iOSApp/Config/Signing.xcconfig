@@ -1,0 +1,3 @@
+// Shared by every target. Each checkout may provide its own ignored team ID
+// without writing contributor-specific signing metadata into the project.
+#include? "Signing.local.xcconfig"

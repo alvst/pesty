@@ -37,8 +37,14 @@ build.
 
 ## Open and test
 
-Open `Pesty-Alvie.xcodeproj` in Xcode 26.3, select your development team, and
-use automatic signing. In the Apple Developer portal, register the
+Signing is configured per checkout so contributor team IDs never enter the
+shared project. Copy `Config/Signing.local.xcconfig.example` to
+`Config/Signing.local.xcconfig`, replace `YOUR_TEAM_ID`, and regenerate the
+project. The local file is ignored by Git and applies to every app and
+extension target.
+
+Open `Pesty-Alvie.xcodeproj` in Xcode 26.3 and use automatic signing. In the
+Apple Developer portal, register the
 `com.alvst.pesty-alvie.companion` App ID, enable iCloud/CloudKit and push
 notifications, and assign `iCloud.com.alvst.pesty-alvie`. The sandboxed Mac App
 ID must be assigned the same container. After validating the Development

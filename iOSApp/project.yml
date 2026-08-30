@@ -11,6 +11,9 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
     CURRENT_PROJECT_VERSION: "1"
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
 targets:
   Pesty-Alvie:
     type: application
