@@ -128,18 +128,19 @@ final class ExtensionCatalog {
     }
 
     private func seedBundledExtensions() {
-        guard case .success(let manifest) = host.validate(source: BundledExtensions.tokenCount) else {
-            return
-        }
-        extensions = [
-            InstalledExtension(
-                manifest: manifest,
-                source: BundledExtensions.tokenCount,
-                enabled: false,
-                isBundled: true,
-                installedAt: .now
-            )
-        ]
+        extensions = [BundledExtensions.tokenCount, BundledExtensions.jsonDetector]
+            .compactMap { source in
+                guard case .success(let manifest) = host.validate(source: source) else {
+                    return nil
+                }
+                return InstalledExtension(
+                    manifest: manifest,
+                    source: source,
+                    enabled: false,
+                    isBundled: true,
+                    installedAt: .now
+                )
+            }
     }
 
     private func sortExtensions() {

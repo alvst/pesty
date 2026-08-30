@@ -19,14 +19,16 @@ final class ExtensionCatalogTests: XCTestCase {
         super.tearDown()
     }
 
-    func testFreshCatalogSeedsBundledExtensionDisabled() throws {
+    func testFreshCatalogSeedsBundledExtensionsDisabled() throws {
         let catalog = ExtensionCatalog(directory: directory)
-        let bundled = try XCTUnwrap(catalog.extensions.first)
+        let expectedIDs: Set<String> = [
+            "com.alvst.pesty-alvie.token-count",
+            "com.alvst.pesty-alvie.json-detector"
+        ]
 
-        XCTAssertEqual(catalog.extensions.count, 1)
-        XCTAssertEqual(bundled.id, "com.alvst.pesty-alvie.token-count")
-        XCTAssertTrue(bundled.isBundled)
-        XCTAssertFalse(bundled.enabled)
+        XCTAssertEqual(Set(catalog.extensions.map(\.id)), expectedIDs)
+        XCTAssertTrue(catalog.extensions.allSatisfy(\.isBundled))
+        XCTAssertTrue(catalog.extensions.allSatisfy { !$0.enabled })
         XCTAssertTrue(catalog.enabledExtensions.isEmpty)
     }
 
@@ -137,13 +139,40 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertFalse(reloaded.extensions.contains { $0.id == "com.example.remove" })
     }
 
-    func testUninstalledBundledExtensionIsNotReseeded() {
+    func testUninstalledBundledExtensionsAreNotReseeded() {
         let catalog = ExtensionCatalog(directory: directory)
         catalog.uninstall(id: "com.alvst.pesty-alvie.token-count")
+        catalog.uninstall(id: "com.alvst.pesty-alvie.json-detector")
 
         let reloaded = ExtensionCatalog(directory: directory)
 
         XCTAssertTrue(reloaded.extensions.isEmpty)
+    }
+
+    func testExistingCatalogDoesNotReceiveJSONDetector() throws {
+        let host = ExtensionHost()
+        let manifest = try host.validate(source: BundledExtensions.tokenCount).get()
+        let existing = InstalledExtension(
+            manifest: manifest,
+            source: BundledExtensions.tokenCount,
+            enabled: false,
+            isBundled: true,
+            installedAt: Date(timeIntervalSince1970: 1)
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode([existing]).write(
+            to: directory.appendingPathComponent("extensions.json")
+        )
+
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+
+        XCTAssertEqual(catalog.extensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
+        XCTAssertFalse(catalog.extensions.contains {
+            $0.id == "com.alvst.pesty-alvie.json-detector"
+        })
     }
 
     func testSetEnabledPersistsAcrossReload() {
@@ -152,7 +181,11 @@ final class ExtensionCatalogTests: XCTestCase {
 
         let reloaded = ExtensionCatalog(directory: directory)
 
-        XCTAssertTrue(reloaded.extensions.first?.enabled == true)
+        XCTAssertTrue(
+            reloaded.extensions.first {
+                $0.id == "com.alvst.pesty-alvie.token-count"
+            }?.enabled == true
+        )
         XCTAssertEqual(reloaded.enabledExtensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
     }
 

@@ -29,7 +29,7 @@ final class ExtensionResultStoreTests: XCTestCase {
         )
         let item = ClipItem(type: .text, text: "hello")
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
 
         XCTAssertEqual(store.badges(for: item.id), ["cached"])
@@ -43,11 +43,11 @@ final class ExtensionResultStoreTests: XCTestCase {
         _ = try install(id: extensionID, badgeBody: "return null;", in: catalog)
         let item = ClipItem(type: .image)
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
         XCTAssertTrue(store.badges(for: item.id).isEmpty)
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         // A new request would remain in flight until this MainActor turn ends.
         XCTAssertEqual(store.pendingEvaluationCount, 0)
     }
@@ -58,8 +58,8 @@ final class ExtensionResultStoreTests: XCTestCase {
         _ = try install(id: extensionID, badgeBody: #"return "one";"#, in: catalog)
         let item = ClipItem(type: .text, text: "hello")
 
-        store.requestBadges(for: item)
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
+        store.requestDecorations(for: item)
 
         XCTAssertEqual(store.pendingEvaluationCount, 1)
         await waitUntil { store.pendingEvaluationCount == 0 }
@@ -73,9 +73,9 @@ final class ExtensionResultStoreTests: XCTestCase {
         let forgotten = ClipItem(type: .text, text: "forgotten")
         let retained = ClipItem(type: .text, text: "retained")
 
-        store.requestBadges(for: forgotten)
+        store.requestDecorations(for: forgotten)
         store.forget(forgotten.id)
-        store.requestBadges(for: retained)
+        store.requestDecorations(for: retained)
         await waitUntil { store.hasCachedOutcome(for: retained.id, extensionID: extensionID) }
 
         XCTAssertFalse(store.hasCachedOutcome(for: forgotten.id, extensionID: extensionID))
@@ -91,8 +91,8 @@ final class ExtensionResultStoreTests: XCTestCase {
         let first = ClipItem(type: .text, text: "first")
         let second = ClipItem(type: .text, text: "second")
 
-        store.requestBadges(for: first)
-        store.requestBadges(for: second)
+        store.requestDecorations(for: first)
+        store.requestDecorations(for: second)
         await waitUntil { store.pendingEvaluationCount == 0 }
         XCTAssertEqual(store.cachedClipCount, 2)
 
@@ -116,12 +116,12 @@ final class ExtensionResultStoreTests: XCTestCase {
         let items = (0...512).map { ClipItem(type: .text, text: "item \($0)") }
 
         for item in items.prefix(512) {
-            store.requestBadges(for: item)
+            store.requestDecorations(for: item)
         }
         await waitUntil(timeout: 15) { store.pendingEvaluationCount == 0 }
         XCTAssertEqual(store.cachedClipCount, 512)
 
-        store.requestBadges(for: items[512])
+        store.requestDecorations(for: items[512])
         await waitUntil { store.pendingEvaluationCount == 0 }
 
         XCTAssertEqual(store.cachedClipCount, 1)
@@ -139,7 +139,7 @@ final class ExtensionResultStoreTests: XCTestCase {
             in: catalog
         )
 
-        store.requestBadges(for: ClipItem(type: .text, text: "hello"))
+        store.requestDecorations(for: ClipItem(type: .text, text: "hello"))
 
         XCTAssertEqual(store.pendingEvaluationCount, 0)
         XCTAssertEqual(store.cachedClipCount, 0)
@@ -150,7 +150,7 @@ final class ExtensionResultStoreTests: XCTestCase {
         let extensionID = "com.example.replace"
         _ = try install(id: extensionID, badgeBody: #"return "old";"#, in: catalog)
         let item = ClipItem(type: .text, text: "hello")
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
         XCTAssertEqual(store.badges(for: item.id), ["old"])
 
@@ -174,7 +174,7 @@ final class ExtensionResultStoreTests: XCTestCase {
         )
         XCTAssertFalse(store.hasCachedOutcome(for: item.id, extensionID: extensionID))
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
         XCTAssertEqual(store.badges(for: item.id), ["new"])
 
@@ -188,7 +188,7 @@ final class ExtensionResultStoreTests: XCTestCase {
         let extensionID = "com.example.disable"
         _ = try install(id: extensionID, badgeBody: #"return "visible";"#, in: catalog)
         let item = ClipItem(type: .text, text: "hello")
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
 
         catalog.setEnabled(false, id: extensionID)
@@ -216,10 +216,101 @@ final class ExtensionResultStoreTests: XCTestCase {
         )
         let item = ClipItem(type: .text, text: "hello")
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.pendingEvaluationCount == 0 }
 
         XCTAssertEqual(store.badges(for: item.id), ["first", "last"])
+    }
+
+    func testDecorationsUseWeightOrderAndAggregateAllReaders() async throws {
+        let (_, catalog, store) = makeSystem()
+        _ = try install(
+            source: """
+            pesty.register({
+              id: "com.example.high-weight",
+              name: "High",
+              version: "1.0",
+              api: 1,
+              weight: 10,
+              badge: function (clip) { return "high"; },
+              subtitle: function (clip) { return "high subtitle"; },
+              icon: function (clip) { return "this.symbol.does.not.exist"; },
+              color: function (clip) { return "#123456"; },
+              title: function (clip) { return "High title"; },
+              label: function (clip) { return "High label"; }
+            });
+            """,
+            in: catalog
+        )
+        _ = try install(
+            source: """
+            pesty.register({
+              id: "com.example.low-weight",
+              name: "Low",
+              version: "1.0",
+              api: 1,
+              weight: 0,
+              badge: function (clip) { return "low"; },
+              subtitle: function (clip) { return "low subtitle"; },
+              icon: function (clip) { return "star.fill"; },
+              color: function (clip) { return "#ABCDEF"; },
+              title: function (clip) { return "Low title"; },
+              label: function (clip) { return "Low label"; }
+            });
+            """,
+            in: catalog
+        )
+        let item = ClipItem(type: .text, text: "hello")
+
+        store.requestDecorations(for: item)
+        await waitUntil { store.pendingEvaluationCount == 0 }
+
+        XCTAssertEqual(store.badges(for: item.id), ["high", "low"])
+        XCTAssertEqual(store.subtitle(for: item.id), "high subtitle · low subtitle")
+        XCTAssertEqual(store.icon(for: item.id), "star.fill")
+        XCTAssertEqual(store.cachedIconValidationCount, 2)
+        XCTAssertEqual(store.icon(for: item.id), "star.fill")
+        XCTAssertEqual(store.cachedIconValidationCount, 2)
+        XCTAssertEqual(store.headerColorHex(for: item.id), "#123456")
+        XCTAssertEqual(store.titleOverride(for: item.id), "High title")
+        XCTAssertEqual(store.labelOverride(for: item.id), "High label")
+    }
+
+    func testTypeFilterSkipsEvaluationBeforeThrowingSourceLoads() async throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let extensionID = "com.example.filtered-load"
+        let installedExtension = InstalledExtension(
+            manifest: ExtensionManifest(
+                id: extensionID,
+                name: "Filtered",
+                version: "1.0",
+                api: 1,
+                types: ["link"],
+                hooks: ["badge"]
+            ),
+            source: #"throw new Error("should not load");"#,
+            enabled: true,
+            isBundled: false,
+            installedAt: Date(timeIntervalSince1970: 1)
+        )
+        let data = try JSONEncoder().encode([installedExtension])
+        try data.write(to: directory.appendingPathComponent("extensions.json"))
+
+        let host = ExtensionHost()
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let store = ExtensionResultStore(catalog: catalog, host: host)
+        let item = ClipItem(type: .text, text: "hello")
+
+        store.requestDecorations(for: item)
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(store.pendingEvaluationCount, 0)
+        XCTAssertEqual(store.cachedClipCount, 0)
+        XCTAssertFalse(store.hasCachedOutcome(for: item.id, extensionID: extensionID))
+        XCTAssertFalse(host.isQuarantined(extensionID))
     }
 
     func testClipTypeRawValuesMatchExtensionAPIAndReachScript() async throws {
@@ -232,7 +323,7 @@ final class ExtensionResultStoreTests: XCTestCase {
         _ = try install(id: extensionID, badgeBody: "return clip.type;", in: catalog)
         let item = ClipItem(type: .richText, text: "hello")
 
-        store.requestBadges(for: item)
+        store.requestDecorations(for: item)
         await waitUntil { store.pendingEvaluationCount == 0 }
 
         XCTAssertEqual(store.badges(for: item.id), ["richText"])
@@ -254,11 +345,20 @@ final class ExtensionResultStoreTests: XCTestCase {
         in catalog: ExtensionCatalog
     ) throws -> InstalledExtension {
         let source = script(id: id, version: version, badgeBody: badgeBody)
-        guard case .success = catalog.install(source: source) else {
+        return try install(source: source, enabled: enabled, in: catalog)
+    }
+
+    @discardableResult
+    private func install(
+        source: String,
+        enabled: Bool = true,
+        in catalog: ExtensionCatalog
+    ) throws -> InstalledExtension {
+        guard case .success(let manifest) = catalog.install(source: source) else {
             throw TestError.installFailed
         }
-        if enabled { catalog.setEnabled(true, id: id) }
-        return try XCTUnwrap(catalog.extensions.first(where: { $0.id == id }))
+        if enabled { catalog.setEnabled(true, id: manifest.id) }
+        return try XCTUnwrap(catalog.extensions.first(where: { $0.id == manifest.id }))
     }
 
     private func script(id: String, version: String = "1.0", badgeBody: String) -> String {

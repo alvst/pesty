@@ -39,7 +39,13 @@ struct ClipCardView: View {
     }
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
-    private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var extensionResults: ExtensionResultStore { ExtensionResultStore.shared }
+    private var headerColor: Color {
+        let color = extensionResults.headerColorHex(for: item.id)
+            .flatMap(Color.init(hex:))
+            ?? SourceColor.color(for: item.sourceBundleID)
+        return SourceColor.readableHeaderColor(color)
+    }
 
     /// Promotion is per board, so it only means anything while that board is
     /// the one on screen.
@@ -88,8 +94,10 @@ struct ClipCardView: View {
         }
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu { menu }
-        .task(id: item.id) { await loadFileThumbnail() }
-        .task(id: item.id) { ExtensionResultStore.shared.requestBadges(for: item) }
+        .task(id: item.id) {
+            extensionResults.requestDecorations(for: item)
+            await loadFileThumbnail()
+        }
         .overlay {
             // A native dragging session instead of .onDrag: multi-file clips
             // drag out as real separate file items, and the session reports
@@ -172,8 +180,18 @@ struct ClipCardView: View {
     /// A multi-file clip is one clip of many files, so the count is the
     /// headline - naming only the first file hid the other four.
     private var cardTypeLabel: String {
+        if let label = extensionResults.labelOverride(for: item.id) { return label }
         guard item.type == .file, item.fileURLs.count > 1 else { return item.type.label }
         return "\(item.fileURLs.count) files"
+    }
+
+    private var titleOverride: String? {
+        if let customTitle = item.customTitle, !customTitle.isEmpty { return customTitle }
+        return extensionResults.titleOverride(for: item.id)
+    }
+
+    private var displayTitle: String {
+        titleOverride ?? item.displayTitle
     }
 
     private var enlargedIconReservedWidth: CGFloat {
@@ -279,8 +297,8 @@ struct ClipCardView: View {
         case .file:
             fileContent
         case .link:
-            LinkCardPreview(text: item.text ?? item.displayTitle,
-                            titleOverride: item.customTitle)
+            LinkCardPreview(text: item.text ?? displayTitle,
+                            titleOverride: titleOverride)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         case .richText:
             RichTextContent(rtfData: item.rtfData, fallback: item.cardPreviewText, lineLimit: 10)
@@ -310,7 +328,7 @@ struct ClipCardView: View {
             VStack(spacing: 8) {
                 Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text(item.displayTitle).font(.system(size: 11))
+                Text(displayTitle).font(.system(size: 11))
                     .foregroundStyle(Theme.textSecondary).lineLimit(1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -406,7 +424,9 @@ struct ClipCardView: View {
     }
 
     private var footer: some View {
-        let badges = ExtensionResultStore.shared.badges(for: item.id)
+        let badges = extensionResults.badges(for: item.id)
+        let icon = extensionResults.icon(for: item.id)
+        let subtitle = extensionResults.subtitle(for: item.id)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .bottom, spacing: 6) {
                 // A path is worth reading in full, so it wraps rather than
@@ -442,10 +462,24 @@ struct ClipCardView: View {
                     .foregroundStyle(Theme.textTertiary)
                 }
             }
-            if !badges.isEmpty {
-                Text(badges.joined(separator: " · "))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textSecondary)
+            if icon != nil || !badges.isEmpty {
+                HStack(spacing: 4) {
+                    if let icon {
+                        Image(systemName: icon)
+                    }
+                    if !badges.isEmpty {
+                        Text(badges.joined(separator: " · "))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
+            }
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }

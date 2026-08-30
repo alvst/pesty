@@ -38,6 +38,13 @@ enum SourceColor {
         }
     }
 
+    /// Header ink is fixed white by design. Normalize every header surface at
+    /// this one boundary so source-derived and extension-provided colors get
+    /// identical measured contrast treatment.
+    static func readableHeaderColor(_ color: Color) -> Color {
+        Contrast.adjustSurface(color, for: Theme.headerText, target: Contrast.aaText)
+    }
+
     static func accentShades(for accentHex: String) -> [Color] {
         accentVariants.map { accentShade(variant: $0, accentHex: accentHex) }
     }

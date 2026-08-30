@@ -104,6 +104,44 @@ enum Contrast {
         return best
     }
 
+    /// `surface` if a fixed foreground already reads on it, otherwise the
+    /// same surface pushed toward whichever extreme gives that foreground
+    /// more contrast. Card headers use this when their ink is intentionally
+    /// always white, including colors supplied by extensions.
+    static func adjustSurface(
+        _ surface: Color,
+        for foreground: Color,
+        over backdrop: Color = .white,
+        target: Double = aaText
+    ) -> Color {
+        let flat = composite(surface, over: backdrop)
+        let originalRatio = ratio(composite(foreground, over: flat), flat)
+        guard originalRatio < target else { return surface }
+
+        let darkSurface = Color.black
+        let lightSurface = Color.white
+        let darkRatio = ratio(composite(foreground, over: darkSurface), darkSurface)
+        let lightRatio = ratio(composite(foreground, over: lightSurface), lightSurface)
+        let extreme = darkRatio >= lightRatio ? darkSurface : lightSurface
+
+        var best = surface
+        var bestRatio = originalRatio
+        for step in 1...20 {
+            let candidate = blend(surface, toward: extreme, amount: Double(step) / 20)
+            let flatCandidate = composite(candidate, over: backdrop)
+            let candidateRatio = ratio(
+                composite(foreground, over: flatCandidate),
+                flatCandidate
+            )
+            if candidateRatio > bestRatio {
+                best = candidate
+                bestRatio = candidateRatio
+            }
+            if candidateRatio >= target { return candidate }
+        }
+        return best
+    }
+
     /// A de-emphasized version of `ink` that is still legible: the requested
     /// opacity if it clears `target`, otherwise the least amount of extra
     /// opacity that does. This is what keeps a "muted" label from quietly

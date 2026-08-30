@@ -38,6 +38,15 @@ final class ContrastTests: XCTestCase {
         )
     }
 
+    func testAdjustSurfaceMakesFixedWhiteHeaderInkReadable() {
+        let adjusted = Contrast.adjustSurface(
+            Color(.sRGB, red: 1, green: 0.85, blue: 0.1, opacity: 1),
+            for: .white
+        )
+
+        XCTAssertGreaterThanOrEqual(Contrast.ratio(.white, adjusted), Contrast.aaText)
+    }
+
     // MARK: - The palettes this app actually ships
 
     /// Every fill in both chrome palettes has to be able to carry text.

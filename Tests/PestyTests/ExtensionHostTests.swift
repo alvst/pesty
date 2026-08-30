@@ -683,6 +683,72 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
+    func testBundledJSONDetectorExtension() {
+        let host = ExtensionHost()
+        let manifest = ExtensionManifest(
+            id: "com.alvst.pesty-alvie.json-detector",
+            name: "JSON",
+            version: "1.0",
+            api: 1,
+            weight: 10,
+            types: ["text"],
+            hooks: ["icon", "label", "subtitle"]
+        )
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: BundledExtensions.jsonDetector,
+            enabled: false,
+            isBundled: true,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(host.validate(source: BundledExtensions.jsonDetector), .success(manifest))
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: #"{"one":1,"two":2}"#,
+                extension: extensionValue
+            ),
+            .success(
+                CardDecorations(
+                    subtitle: "Valid JSON · 2 keys",
+                    icon: "curlybraces",
+                    label: "JSON"
+                )
+            )
+        )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: #"[1,2,3]"#,
+                extension: extensionValue
+            ),
+            .success(
+                CardDecorations(
+                    subtitle: "Valid JSON · 3 items",
+                    icon: "curlybraces",
+                    label: "JSON"
+                )
+            )
+        )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "not JSON",
+                extension: extensionValue
+            ),
+            .success(CardDecorations())
+        )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "file",
+                text: #"{"valid":true}"#,
+                extension: extensionValue
+            ),
+            .success(CardDecorations())
+        )
+    }
+
     private func script(
         id: String,
         name: String = "Example",
