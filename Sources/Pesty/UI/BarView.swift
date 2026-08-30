@@ -223,6 +223,10 @@ struct BarView: View {
         store.barInputMode == .search || !store.searchText.isEmpty
     }
 
+    private var searchHasKeyboardFocus: Bool {
+        store.barInputMode == .search
+    }
+
     private var searchTextBinding: Binding<String> {
         Binding(
             get: { store.searchText },
@@ -234,7 +238,9 @@ struct BarView: View {
         HStack(spacing: searchIsActive ? 6 : 0) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(searchIsActive ? Theme.chromeText : Theme.chromeTextMuted)
+                .foregroundStyle(searchHasKeyboardFocus
+                    ? Theme.searchFocusRing
+                    : (searchIsActive ? Theme.chromeText : Theme.chromeTextMuted))
                 .accessibilityHidden(true)
 
             // Keep this native field mounted even in the compact state. The
@@ -268,11 +274,30 @@ struct BarView: View {
         }
         .padding(.horizontal, searchIsActive ? 10 : 0)
         .frame(height: 30)
-        .background(searchIsActive ? Theme.fieldBG : Color.clear, in: Capsule())
+        .background(
+            searchHasKeyboardFocus
+                ? Theme.searchFocusFill
+                : (searchIsActive ? Theme.fieldBG : Color.clear),
+            in: Capsule()
+        )
+        .overlay {
+            Capsule()
+                .strokeBorder(
+                    searchHasKeyboardFocus ? Theme.searchFocusRing : Theme.pillStroke,
+                    lineWidth: searchHasKeyboardFocus ? 2 : 1
+                )
+                .opacity(searchIsActive ? 1 : 0)
+        }
+        .shadow(
+            color: searchHasKeyboardFocus ? Theme.searchFocusRing.opacity(0.32) : .clear,
+            radius: searchHasKeyboardFocus ? 4 : 0,
+            y: 1
+        )
         // Once a query exists, it must win space from the horizontally
         // scrollable tab strip so the user can see what they typed.
         .layoutPriority(searchIsActive ? 2 : 0)
         .animation(.easeOut(duration: 0.15), value: searchIsActive)
+        .animation(.easeOut(duration: 0.12), value: searchHasKeyboardFocus)
     }
 
     private var moreMenu: some View {

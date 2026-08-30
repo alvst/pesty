@@ -78,6 +78,22 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    func testSearchFocusRingClearsNonTextAAInBothAppearances() {
+        for (name, palette) in [("dark", Theme.darkChrome), ("light", Theme.lightChrome)] {
+            let ring = Theme.searchFocusRing(for: palette)
+            let ratio = Contrast.ratio(
+                ring,
+                on: Theme.searchFocusFill,
+                over: palette.surface
+            )
+            XCTAssertGreaterThanOrEqual(
+                ratio,
+                Contrast.aaLarge,
+                "\(name) palette: search focus ring is \(ratio):1"
+            )
+        }
+    }
+
     /// Regression guard for what shipped before: one hard-coded white-on-glass
     /// palette, which collapsed over a light backdrop. If someone reintroduces
     /// a fixed light ink, this is the measurement that catches it.

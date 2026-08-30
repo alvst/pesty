@@ -134,6 +134,19 @@ enum Theme {
     static let pillBG = chrome { $0.pillBG }
     static let pillSelected = chrome { $0.pillSelected }
     static let pillStroke = chrome { $0.pillStroke }
+    static let searchFocusFill = selection.opacity(0.14)
+    static let searchFocusRing = chrome { searchFocusRing(for: $0) }
+
+    /// Keep the search focus cue blue while adjusting its brightness enough
+    /// to remain a discernible control boundary in either appearance.
+    static func searchFocusRing(for palette: ChromePalette) -> Color {
+        Contrast.adjust(
+            selection,
+            on: searchFocusFill,
+            over: palette.surface,
+            target: Contrast.aaLarge
+        )
+    }
 
     /// Bar chrome that isn't a pill — the search field, the toolbar glyphs,
     /// the empty state. Muted and faint step down in weight only as far as
