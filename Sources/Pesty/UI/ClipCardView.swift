@@ -603,6 +603,17 @@ struct ClipCardView: View {
             }
             .disabled(!FormatConverter.canConvert(item))
 
+            ForEach(
+                ExtensionCatalog.shared.transformExtensions(for: item.type.rawValue)
+            ) { installedExtension in
+                Button("Paste via \(installedExtension.manifest.name)") {
+                    AppController.shared.pasteItemTransformed(
+                        item,
+                        using: installedExtension
+                    )
+                }
+            }
+
             Button { AppController.shared.copyItem(item) } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }

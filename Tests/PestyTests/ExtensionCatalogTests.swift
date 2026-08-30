@@ -189,6 +189,85 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertEqual(reloaded.enabledExtensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
     }
 
+    func testTransformExtensionsFilterByEnabledHookAndClipType() throws {
+        let host = ExtensionHost()
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let transformID = "com.example.transform-menu"
+        let badgeID = "com.example.badge-only"
+        let transformSource = """
+        pesty.register({
+          id: "\(transformID)",
+          name: "Transform",
+          version: "1.0",
+          api: 1,
+          types: ["text"],
+          transform: function (clip) { return clip.text.toUpperCase(); }
+        });
+        """
+
+        XCTAssertNoThrow(try catalog.install(source: transformSource).get())
+        XCTAssertNoThrow(try catalog.install(source: script(id: badgeID)).get())
+        XCTAssertTrue(catalog.transformExtensions(for: "text").isEmpty)
+
+        catalog.setEnabled(true, id: badgeID)
+        XCTAssertTrue(catalog.transformExtensions(for: "text").isEmpty)
+
+        catalog.setEnabled(true, id: transformID)
+        XCTAssertEqual(
+            catalog.transformExtensions(for: "text").map(\.id),
+            [transformID]
+        )
+        XCTAssertTrue(catalog.transformExtensions(for: "link").isEmpty)
+
+        catalog.setEnabled(false, id: transformID)
+        XCTAssertTrue(catalog.transformExtensions(for: "text").isEmpty)
+    }
+
+    func testTransformExtensionsExcludeQuarantinedExtension() throws {
+        let host = ExtensionHost()
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let extensionID = "com.example.transform-quarantine"
+        let source = """
+        pesty.register({
+          id: "\(extensionID)",
+          name: "Slow Transform",
+          version: "1.0",
+          api: 1,
+          transform: function (clip) {
+            var deadline = Date.now() + 400;
+            while (Date.now() < deadline) {}
+            return clip.text;
+          }
+        });
+        """
+        _ = try catalog.install(source: source).get()
+        catalog.setEnabled(true, id: extensionID)
+        let installedExtension = try XCTUnwrap(
+            catalog.extensions.first { $0.id == extensionID }
+        )
+        let invalidated = expectation(description: "transform quarantine invalidated")
+        catalog.onExtensionInvalidated = { id in
+            if id == extensionID { invalidated.fulfill() }
+        }
+
+        XCTAssertEqual(
+            catalog.transformExtensions(for: "text").map(\.id),
+            [extensionID]
+        )
+        XCTAssertEqual(
+            host.transformSync(
+                clipType: "text",
+                text: "hello",
+                extension: installedExtension
+            ),
+            .failure(.timedOut)
+        )
+        wait(for: [invalidated], timeout: 1)
+
+        XCTAssertTrue(catalog.isQuarantined(extensionID))
+        XCTAssertTrue(catalog.transformExtensions(for: "text").isEmpty)
+    }
+
     func testQuarantineAutoDisablesAndPersistsAcrossReload() throws {
         let host = ExtensionHost()
         let catalog = ExtensionCatalog(directory: directory, host: host)

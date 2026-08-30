@@ -557,6 +557,32 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    func pasteItemTransformed(
+        _ item: ClipItem,
+        using installedExtension: InstalledExtension
+    ) {
+        let target = pasteTargetApp()
+        hideBar(immediately: true)
+
+        // Transforms are never automatic: they run only after the user picks
+        // this extension's explicit Paste via action from a clip-card menu.
+        ExtensionCatalog.sharedHost.transform(
+            clipType: item.type.rawValue,
+            text: item.text ?? "",
+            extension: installedExtension
+        ) { [monitor] transformed in
+            // A failed or empty transform is a no-op. In particular, do not
+            // call PasteService, because that would replace the pasteboard.
+            guard let transformed, !transformed.isEmpty else { return }
+            PasteService.paste(
+                ClipItem(type: .text, text: transformed),
+                into: target,
+                monitor: monitor,
+                format: .plainText
+            )
+        }
+    }
+
     func copyItem(_ item: ClipItem) {
         let previousChange = NSPasteboard.general.changeCount
         let change = PasteService.copy(item)

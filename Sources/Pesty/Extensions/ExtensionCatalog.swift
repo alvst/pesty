@@ -39,6 +39,13 @@ final class ExtensionCatalog {
         extensions.filter { $0.enabled && !host.isQuarantined($0.id) }
     }
 
+    func transformExtensions(for clipType: String) -> [InstalledExtension] {
+        enabledExtensions.filter { installedExtension in
+            installedExtension.manifest.effectiveHooks.contains("transform")
+                && installedExtension.manifest.supports(clipType: clipType)
+        }
+    }
+
     func isQuarantined(_ id: String) -> Bool {
         host.isQuarantined(id)
     }
