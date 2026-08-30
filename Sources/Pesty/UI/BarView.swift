@@ -84,7 +84,7 @@ struct BarView: View {
 
     private var topBar: some View {
         HStack(spacing: 14) {
-            if settings.iCloudSync {
+            if syncIsEnabled {
                 syncButton
             }
             searchIndicator
@@ -209,14 +209,30 @@ struct BarView: View {
 
     private var syncButton: some View {
         Button {
-            AppController.shared.toggleICloudSync()
+            toggleSync()
         } label: {
-            Image(systemName: settings.iCloudSync ? "checkmark.icloud.fill" : "arrow.triangle.2.circlepath")
+            Image(systemName: syncIsEnabled ? "checkmark.icloud.fill" : "arrow.triangle.2.circlepath")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.chromeTextMuted)
+                .foregroundStyle(syncIsEnabled ? Theme.selection : Theme.chromeTextMuted)
         }
         .buttonStyle(.plain)
-        .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
+        .help(syncIsEnabled ? "iCloud sync on" : "Turn on iCloud sync")
+    }
+
+    private var syncIsEnabled: Bool {
+        #if MAS
+        settings.cloudKitSync
+        #else
+        settings.iCloudSync
+        #endif
+    }
+
+    private func toggleSync() {
+        #if MAS
+        AppController.shared.toggleCloudKitSync()
+        #else
+        AppController.shared.toggleICloudSync()
+        #endif
     }
 
     private var searchIsActive: Bool {
