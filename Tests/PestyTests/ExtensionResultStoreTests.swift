@@ -167,7 +167,8 @@ final class ExtensionResultStoreTests: XCTestCase {
                     id: extensionID,
                     name: "Example",
                     version: "2.0",
-                    api: 1
+                    api: 1,
+                    hooks: ["badge"]
                 )
             )
         )

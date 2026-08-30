@@ -4,10 +4,23 @@ import JavaScriptCore
 final class ExtensionHost {
     private static let maximumTextUTF16Units = 65_536
     private static let maximumBadgeCharacters = 24
+    private static let maximumLabelCharacters = 16
+    private static let maximumTitleCharacters = 60
+    private static let maximumSubtitleCharacters = 80
+    private static let maximumIconCharacters = 64
+    private static let maximumTransformUTF16Units = 1_048_576
     private static let maximumExceptionCharacters = 200
     private static let loadBudget: TimeInterval = 0.5
-    private static let badgeBudget: TimeInterval = 0.1
+    private static let cardHookBudget: TimeInterval = 0.1
+    private static let transformBudget: TimeInterval = 0.25
     private static let quarantineThreshold = 5
+    private static let cardHookNames = ["badge", "subtitle", "icon", "color", "title", "label"]
+    private static let allHookNames = [
+        "badge", "color", "icon", "label", "subtitle", "title", "transform"
+    ]
+    private static let supportedClipTypes: Set<String> = [
+        "text", "richText", "link", "image", "file", "color"
+    ]
 
     private let queue = DispatchQueue(
         label: "com.alvst.pesty-alvie.extension-host",
@@ -40,18 +53,54 @@ final class ExtensionHost {
         runValidation(source: source, timeout: Self.loadBudget)
     }
 
-    func badgeSync(
+    func decorationsSync(
         clipType: String,
         text: String,
         extension installedExtension: InstalledExtension
-    ) -> Result<String?, ExtensionError> {
+    ) -> Result<CardDecorations, ExtensionError> {
         syncOnQueue {
-            badgeOnQueue(
+            decorationsOnQueue(
                 clipType: clipType,
                 text: text,
                 extension: installedExtension
             )
         }
+    }
+
+    func decorations(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension,
+        completion: @escaping @MainActor @Sendable (CardDecorations) -> Void
+    ) {
+        queue.async { [self] in
+            let value: CardDecorations
+            switch decorationsOnQueue(
+                clipType: clipType,
+                text: text,
+                extension: installedExtension
+            ) {
+            case .success(let decorations):
+                value = decorations
+            case .failure:
+                value = CardDecorations()
+            }
+            DispatchQueue.main.async {
+                completion(value)
+            }
+        }
+    }
+
+    func badgeSync(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension
+    ) -> Result<String?, ExtensionError> {
+        decorationsSync(
+            clipType: clipType,
+            text: text,
+            extension: installedExtension
+        ).map(\.badge)
     }
 
     func badge(
@@ -60,15 +109,44 @@ final class ExtensionHost {
         extension installedExtension: InstalledExtension,
         completion: @escaping @MainActor @Sendable (String?) -> Void
     ) {
+        decorations(
+            clipType: clipType,
+            text: text,
+            extension: installedExtension
+        ) { decorations in
+            completion(decorations.badge)
+        }
+    }
+
+    func transformSync(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension
+    ) -> Result<String?, ExtensionError> {
+        syncOnQueue {
+            transformOnQueue(
+                clipType: clipType,
+                text: text,
+                extension: installedExtension
+            )
+        }
+    }
+
+    func transform(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension,
+        completion: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
         queue.async { [self] in
             let value: String?
-            switch badgeOnQueue(
+            switch transformOnQueue(
                 clipType: clipType,
                 text: text,
                 extension: installedExtension
             ) {
-            case .success(let badge):
-                value = badge
+            case .success(let transformed):
+                value = transformed
             case .failure:
                 value = nil
             }
@@ -91,7 +169,34 @@ final class ExtensionHost {
         failureStateLock.unlock()
     }
 
-    private func badgeOnQueue(
+    private func decorationsOnQueue(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension
+    ) -> Result<CardDecorations, ExtensionError> {
+        let id = installedExtension.id
+        guard !isQuarantined(id) else {
+            return .success(CardDecorations())
+        }
+        guard installedExtension.manifest.supports(clipType: clipType) else {
+            return .success(CardDecorations())
+        }
+        let cardHooks = Set(Self.cardHookNames)
+        guard installedExtension.manifest.effectiveHooks.contains(where: cardHooks.contains) else {
+            return .success(CardDecorations())
+        }
+
+        let evaluation = runDecorations(
+            source: installedExtension.source,
+            clipType: clipType,
+            text: Self.boundedText(text)
+        )
+
+        record(evaluation, for: id)
+        return evaluation.result
+    }
+
+    private func transformOnQueue(
         clipType: String,
         text: String,
         extension installedExtension: InstalledExtension
@@ -100,33 +205,37 @@ final class ExtensionHost {
         guard !isQuarantined(id) else {
             return .success(nil)
         }
+        guard installedExtension.manifest.supports(clipType: clipType),
+              installedExtension.manifest.effectiveHooks.contains("transform") else {
+            return .success(nil)
+        }
 
-        let result = runBadge(
+        let evaluation = runTransform(
             source: installedExtension.source,
             clipType: clipType,
             text: Self.boundedText(text)
         )
 
-        record(result, for: id)
-        return result
+        record(evaluation, for: id)
+        return evaluation.result
     }
 
-    private func record(
-        _ result: Result<String?, ExtensionError>,
+    private func record<Value>(
+        _ evaluation: HostEvaluation<Value>,
         for id: String
     ) {
         var callback: (@MainActor @Sendable (String) -> Void)?
         failureStateLock.lock()
 
-        switch result {
-        case .success:
+        switch evaluation.result {
+        case .success where !evaluation.hadFailure:
             consecutiveFailures.removeValue(forKey: id)
         case .failure(.timedOut):
             consecutiveFailures[id] = Self.quarantineThreshold
             if quarantinedIDs.insert(id).inserted {
                 callback = quarantineHandler
             }
-        case .failure:
+        case .success, .failure:
             let failures = (consecutiveFailures[id] ?? 0) + 1
             consecutiveFailures[id] = failures
             if failures >= Self.quarantineThreshold,
@@ -165,34 +274,54 @@ final class ExtensionHost {
         return result.get() ?? .failure(.scriptException("Extension worker returned no result"))
     }
 
-    private func runBadge(
+    private func runDecorations(
         source: String,
         clipType: String,
         text: String
-    ) -> Result<String?, ExtensionError> {
-        let state = BadgeWorkerState()
+    ) -> HostEvaluation<CardDecorations> {
+        let state = CardWorkerState()
         let loadFinished = DispatchSemaphore(value: 0)
-        let startBadge = DispatchSemaphore(value: 0)
-        let badgeFinished = DispatchSemaphore(value: 0)
+        let startHook = DispatchSemaphore(value: 0)
+        let hookFinished = DispatchSemaphore(value: 0)
 
-        startWorker(named: "extension-badge") {
+        startWorker(named: "extension-decorations") {
             autoreleasepool {
                 switch Self.load(source: source) {
                 case .failure(let error):
                     state.setLoad(.failure(error))
                     loadFinished.signal()
                 case .success(let loaded):
-                    state.setLoad(.success(loaded.manifest))
+                    let hookNames = Self.cardHookNames.filter { loaded.hooks[$0] != nil }
+                    state.setLoad(.success(hookNames))
                     loadFinished.signal()
-                    startBadge.wait()
 
-                    let result = Self.callBadge(
-                        loaded,
-                        clipType: clipType,
-                        text: text
-                    )
-                    state.setBadge(result)
-                    badgeFinished.signal()
+                    for name in hookNames {
+                        startHook.wait()
+                        guard let hook = loaded.hooks[name] else {
+                            state.setHook(
+                                HookWorkerResult(
+                                    name: name,
+                                    result: .failure(
+                                        .scriptException("Extension hook was not loaded")
+                                    )
+                                )
+                            )
+                            hookFinished.signal()
+                            continue
+                        }
+                        state.setHook(
+                            HookWorkerResult(
+                                name: name,
+                                result: Self.callHook(
+                                    hook,
+                                    in: loaded,
+                                    clipType: clipType,
+                                    text: text
+                                )
+                            )
+                        )
+                        hookFinished.signal()
+                    }
                 }
             }
         }
@@ -200,23 +329,138 @@ final class ExtensionHost {
         guard loadFinished.wait(timeout: .now() + Self.loadBudget) == .success else {
             // Timeout termination abandons the tracking thread; the script
             // itself cannot be killed with public JSC API.
-            return .failure(.timedOut)
+            return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
         }
         guard let loadResult = state.loadResult() else {
-            return .failure(.scriptException("Extension load returned no result"))
+            return HostEvaluation(
+                result: .failure(.scriptException("Extension load returned no result")),
+                hadFailure: false
+            )
         }
-        if case .failure(let error) = loadResult {
-            return .failure(error)
+        let hookNames: [String]
+        switch loadResult {
+        case .failure(let error):
+            return HostEvaluation(result: .failure(error), hadFailure: false)
+        case .success(let loadedHookNames):
+            hookNames = loadedHookNames
         }
 
-        startBadge.signal()
-        guard badgeFinished.wait(timeout: .now() + Self.badgeBudget) == .success else {
+        var decorations = CardDecorations()
+        var hadFailure = false
+        for name in hookNames {
+            startHook.signal()
+            guard hookFinished.wait(timeout: .now() + Self.cardHookBudget) == .success else {
+                // Timeout termination abandons the tracking thread; the script
+                // itself cannot be killed with public JSC API.
+                return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
+            }
+            guard let hookResult = state.hookResult(), hookResult.name == name else {
+                return HostEvaluation(
+                    result: .failure(
+                        .scriptException("Extension hook returned no result")
+                    ),
+                    hadFailure: false
+                )
+            }
+
+            switch hookResult.result {
+            case .success(let rawValue):
+                Self.setDecoration(
+                    Self.sanitize(rawValue, for: name),
+                    for: name,
+                    in: &decorations
+                )
+            case .failure(.scriptException):
+                hadFailure = true
+                Self.setDecoration(nil, for: name, in: &decorations)
+            case .failure(let error):
+                return HostEvaluation(result: .failure(error), hadFailure: false)
+            }
+        }
+
+        return HostEvaluation(result: .success(decorations), hadFailure: hadFailure)
+    }
+
+    private func runTransform(
+        source: String,
+        clipType: String,
+        text: String
+    ) -> HostEvaluation<String?> {
+        let state = TransformWorkerState()
+        let loadFinished = DispatchSemaphore(value: 0)
+        let startTransform = DispatchSemaphore(value: 0)
+        let transformFinished = DispatchSemaphore(value: 0)
+
+        startWorker(named: "extension-transform") {
+            autoreleasepool {
+                switch Self.load(source: source) {
+                case .failure(let error):
+                    state.setLoad(.failure(error))
+                    loadFinished.signal()
+                case .success(let loaded):
+                    let transform = loaded.hooks["transform"]
+                    state.setLoad(.success(transform != nil))
+                    loadFinished.signal()
+                    guard let transform else { return }
+                    startTransform.wait()
+                    state.setTransform(
+                        Self.callHook(
+                            transform,
+                            in: loaded,
+                            clipType: clipType,
+                            text: text
+                        )
+                    )
+                    transformFinished.signal()
+                }
+            }
+        }
+
+        guard loadFinished.wait(timeout: .now() + Self.loadBudget) == .success else {
             // Timeout termination abandons the tracking thread; the script
             // itself cannot be killed with public JSC API.
-            return .failure(.timedOut)
+            return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
         }
-        return state.badgeResult()
-            ?? .failure(.scriptException("Extension badge returned no result"))
+        guard let loadResult = state.loadResult() else {
+            return HostEvaluation(
+                result: .failure(.scriptException("Extension load returned no result")),
+                hadFailure: false
+            )
+        }
+        switch loadResult {
+        case .failure(let error):
+            return HostEvaluation(result: .failure(error), hadFailure: false)
+        case .success(false):
+            return HostEvaluation(result: .success(nil), hadFailure: false)
+        case .success(true):
+            break
+        }
+
+        startTransform.signal()
+        guard transformFinished.wait(timeout: .now() + Self.transformBudget) == .success else {
+            // Timeout termination abandons the tracking thread; the script
+            // itself cannot be killed with public JSC API.
+            return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
+        }
+        guard let result = state.transformResult() else {
+            return HostEvaluation(
+                result: .failure(.scriptException("Extension transform returned no result")),
+                hadFailure: false
+            )
+        }
+        switch result {
+        case .failure(let error):
+            return HostEvaluation(result: .failure(error), hadFailure: false)
+        case .success(nil):
+            return HostEvaluation(result: .success(nil), hadFailure: false)
+        case .success(let value?):
+            // Transform output is pasted text, so preserve its content exactly.
+            // Only its UTF-16 size is bounded here.
+            guard value.utf16.count <= Self.maximumTransformUTF16Units else {
+                return HostEvaluation(result: .success(nil), hadFailure: true)
+            }
+            return HostEvaluation(result: .success(value), hadFailure: false)
+        }
     }
 
     private func startWorker(named suffix: String, operation: @escaping () -> Void) {
@@ -271,29 +515,44 @@ final class ExtensionHost {
         }
         capture.value = nil
 
-        switch manifest(from: registration) {
+        switch manifest(from: registration, hooks: []) {
         case .failure(let error):
             return .failure(error)
-        case .success(let manifest):
-            guard let badge = registration.forProperty("badge"),
-                  badge.isObject,
-                  JSObjectIsFunction(context.jsGlobalContextRef, badge.jsValueRef) else {
-                return .failure(.badgeNotAFunction)
+        case .success(let baseManifest):
+            let hooks: [String: JSValue]
+            switch hookFunctions(from: registration, context: context) {
+            case .failure(let error):
+                return .failure(error)
+            case .success(let loadedHooks):
+                hooks = loadedHooks
             }
+            guard !hooks.isEmpty else {
+                return .failure(.invalidManifest("at least one hook function is required"))
+            }
+            let manifest = ExtensionManifest(
+                id: baseManifest.id,
+                name: baseManifest.name,
+                version: baseManifest.version,
+                api: baseManifest.api,
+                weight: baseManifest.weight,
+                types: baseManifest.types,
+                hooks: hooks.keys.sorted()
+            )
             context.exceptionHandler = nil
             return .success(
                 LoadedScript(
                     virtualMachine: virtualMachine,
                     context: context,
                     manifest: manifest,
-                    badge: badge
+                    hooks: hooks
                 )
             )
         }
     }
 
     private static func manifest(
-        from registration: JSValue
+        from registration: JSValue,
+        hooks: [String]
     ) -> Result<ExtensionManifest, ExtensionError> {
         guard let id = stringProperty("id", in: registration) else {
             return .failure(.invalidManifest("id must be a string"))
@@ -313,16 +572,74 @@ final class ExtensionHost {
             return .failure(.invalidManifest("api must be an integer"))
         }
 
+        let weight: Double
+        if let weightValue = registration.forProperty("weight"), !weightValue.isUndefined {
+            guard weightValue.isNumber else {
+                return .failure(.invalidManifest("weight must be a finite number"))
+            }
+            let rawWeight = weightValue.toDouble()
+            guard rawWeight.isFinite else {
+                return .failure(.invalidManifest("weight must be a finite number"))
+            }
+            weight = min(1000, max(-1000, rawWeight))
+        } else {
+            weight = 0
+        }
+
+        let types: [String]?
+        if let typesValue = registration.forProperty("types"), !typesValue.isUndefined {
+            guard typesValue.isArray, let rawTypes = typesValue.toArray(), !rawTypes.isEmpty else {
+                return .failure(.invalidManifest("types must be a non-empty array"))
+            }
+            var parsedTypes: [String] = []
+            for rawType in rawTypes {
+                guard let type = rawType as? String else {
+                    return .failure(.invalidManifest("types entries must be strings"))
+                }
+                guard supportedClipTypes.contains(type) else {
+                    return .failure(.invalidManifest("unknown clip type \(type)"))
+                }
+                if !parsedTypes.contains(type) {
+                    parsedTypes.append(type)
+                }
+            }
+            types = parsedTypes
+        } else {
+            types = nil
+        }
+
         let manifest = ExtensionManifest(
             id: id,
             name: name,
             version: version,
-            api: Int(apiDouble)
+            api: Int(apiDouble),
+            weight: weight,
+            types: types,
+            hooks: hooks
         )
         if let error = manifest.validationError() {
             return .failure(error)
         }
         return .success(manifest)
+    }
+
+    private static func hookFunctions(
+        from registration: JSValue,
+        context: JSContext
+    ) -> Result<[String: JSValue], ExtensionError> {
+        var hooks: [String: JSValue] = [:]
+        for name in allHookNames {
+            guard let value = registration.forProperty(name), !value.isUndefined else {
+                continue
+            }
+            // JSObjectIsFunction has undefined behavior for primitive values.
+            guard value.isObject,
+                  JSObjectIsFunction(context.jsGlobalContextRef, value.jsValueRef) else {
+                return .failure(.hookNotAFunction(name))
+            }
+            hooks[name] = value
+        }
+        return .success(hooks)
     }
 
     private static func stringProperty(_ name: String, in value: JSValue) -> String? {
@@ -332,8 +649,9 @@ final class ExtensionHost {
         return property.toString()
     }
 
-    private static func callBadge(
-        _ loaded: LoadedScript,
+    private static func callHook(
+        _ hook: JSValue,
+        in loaded: LoadedScript,
         clipType: String,
         text: String
     ) -> Result<String?, ExtensionError> {
@@ -342,17 +660,20 @@ final class ExtensionHost {
         clip?.setObject(text, forKeyedSubscript: "text" as NSString)
 
         var exceptionMessage: String?
+        loaded.context.exception = nil
         loaded.context.exceptionHandler = { _, exception in
             exceptionMessage = boundedExceptionMessage(exception)
         }
-        let value = loaded.badge.call(withArguments: [clip as Any])
+        let value = hook.call(withArguments: [clip as Any])
+        loaded.context.exceptionHandler = nil
         if let exceptionMessage {
+            loaded.context.exception = nil
             return .failure(.scriptException(exceptionMessage))
         }
         guard let value, value.isString, let string = value.toString() else {
             return .success(nil)
         }
-        return .success(sanitizeBadge(string))
+        return .success(string)
     }
 
     private static func boundedText(_ text: String) -> String {
@@ -367,13 +688,74 @@ final class ExtensionHost {
         return String(message.prefix(maximumExceptionCharacters))
     }
 
-    private static func sanitizeBadge(_ badge: String) -> String? {
-        let trimmed = badge.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func sanitize(_ value: String?, for hook: String) -> String? {
+        guard let value else { return nil }
+        switch hook {
+        case "badge":
+            return sanitizeDisplayValue(value, maximumCharacters: maximumBadgeCharacters)
+        case "label":
+            return sanitizeDisplayValue(value, maximumCharacters: maximumLabelCharacters)
+        case "title":
+            return sanitizeDisplayValue(value, maximumCharacters: maximumTitleCharacters)
+        case "subtitle":
+            return sanitizeDisplayValue(value, maximumCharacters: maximumSubtitleCharacters)
+        case "icon":
+            return sanitizeIcon(value)
+        case "color":
+            return sanitizeColor(value)
+        default:
+            return nil
+        }
+    }
+
+    private static func sanitizeDisplayValue(
+        _ value: String,
+        maximumCharacters: Int
+    ) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let forbidden = CharacterSet.controlCharacters.union(.newlines)
         let scalars = trimmed.unicodeScalars.filter { !forbidden.contains($0) }
         let sanitized = String(String.UnicodeScalarView(scalars))
         guard !sanitized.isEmpty else { return nil }
-        return String(sanitized.prefix(maximumBadgeCharacters))
+        return String(sanitized.prefix(maximumCharacters))
+    }
+
+    private static func sanitizeIcon(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...maximumIconCharacters).contains(trimmed.count) else { return nil }
+        let isValid = trimmed.unicodeScalars.allSatisfy { scalar in
+            (97...122).contains(scalar.value)
+                || (48...57).contains(scalar.value)
+                || scalar.value == 46
+        }
+        return isValid ? trimmed : nil
+    }
+
+    private static func sanitizeColor(_ value: String) -> String? {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 7, bytes[0] == 35 else { return nil }
+        let isHex = bytes.dropFirst().allSatisfy { byte in
+            (48...57).contains(byte)
+                || (65...70).contains(byte)
+                || (97...102).contains(byte)
+        }
+        return isHex ? value.uppercased() : nil
+    }
+
+    private static func setDecoration(
+        _ value: String?,
+        for hook: String,
+        in decorations: inout CardDecorations
+    ) {
+        switch hook {
+        case "badge": decorations.badge = value
+        case "subtitle": decorations.subtitle = value
+        case "icon": decorations.icon = value
+        case "color": decorations.color = value
+        case "title": decorations.title = value
+        case "label": decorations.label = value
+        default: break
+        }
     }
 }
 
@@ -387,7 +769,17 @@ private struct LoadedScript {
     let virtualMachine: JSVirtualMachine
     let context: JSContext
     let manifest: ExtensionManifest
-    let badge: JSValue
+    let hooks: [String: JSValue]
+}
+
+private struct HostEvaluation<Value> {
+    let result: Result<Value, ExtensionError>
+    let hadFailure: Bool
+}
+
+private struct HookWorkerResult {
+    let name: String
+    let result: Result<String?, ExtensionError>
 }
 
 private final class LockedBox<Value> {
@@ -407,23 +799,44 @@ private final class LockedBox<Value> {
     }
 }
 
-private final class BadgeWorkerState {
-    private let load = LockedBox<Result<ExtensionManifest, ExtensionError>>()
-    private let badge = LockedBox<Result<String?, ExtensionError>>()
+private final class CardWorkerState {
+    private let load = LockedBox<Result<[String], ExtensionError>>()
+    private let hook = LockedBox<HookWorkerResult>()
 
-    func setLoad(_ value: Result<ExtensionManifest, ExtensionError>) {
+    func setLoad(_ value: Result<[String], ExtensionError>) {
         load.set(value)
     }
 
-    func loadResult() -> Result<ExtensionManifest, ExtensionError>? {
+    func loadResult() -> Result<[String], ExtensionError>? {
         load.get()
     }
 
-    func setBadge(_ value: Result<String?, ExtensionError>) {
-        badge.set(value)
+    func setHook(_ value: HookWorkerResult) {
+        hook.set(value)
     }
 
-    func badgeResult() -> Result<String?, ExtensionError>? {
-        badge.get()
+    func hookResult() -> HookWorkerResult? {
+        hook.get()
+    }
+}
+
+private final class TransformWorkerState {
+    private let load = LockedBox<Result<Bool, ExtensionError>>()
+    private let transform = LockedBox<Result<String?, ExtensionError>>()
+
+    func setLoad(_ value: Result<Bool, ExtensionError>) {
+        load.set(value)
+    }
+
+    func loadResult() -> Result<Bool, ExtensionError>? {
+        load.get()
+    }
+
+    func setTransform(_ value: Result<String?, ExtensionError>) {
+        transform.set(value)
+    }
+
+    func transformResult() -> Result<String?, ExtensionError>? {
+        transform.get()
     }
 }

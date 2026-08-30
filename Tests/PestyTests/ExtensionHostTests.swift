@@ -13,7 +13,8 @@ final class ExtensionHostTests: XCTestCase {
                     id: "com.example.valid",
                     name: "Example",
                     version: "2.3",
-                    api: 1
+                    api: 1,
+                    hooks: ["badge"]
                 )
             )
         )
@@ -22,15 +23,42 @@ final class ExtensionHostTests: XCTestCase {
     func testBadgeReturnsString() {
         let host = ExtensionHost()
         let source = script(id: "com.example.badge", badgeBody: #"return "ready";"#)
+        let extensionValue = installed(source: source, id: "com.example.badge")
 
         XCTAssertEqual(
             host.badgeSync(
                 clipType: "text",
                 text: "hello",
-                extension: installed(source: source, id: "com.example.badge")
+                extension: extensionValue
             ),
             .success("ready")
         )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue
+            ),
+            .success(CardDecorations(badge: "ready"))
+        )
+    }
+
+    func testAsyncDecorationsCompleteOnMainQueue() {
+        let host = ExtensionHost()
+        let source = script(id: "com.example.async-decorations")
+        let completion = expectation(description: "decorations completion")
+
+        host.decorations(
+            clipType: "text",
+            text: "hello",
+            extension: installed(source: source, id: "com.example.async-decorations")
+        ) { decorations in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(decorations, CardDecorations(badge: "badge"))
+            completion.fulfill()
+        }
+
+        wait(for: [completion], timeout: 2)
     }
 
     func testAsyncBadgeCompletesOnMainQueue() {
@@ -68,21 +96,21 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
-    func testThrowingBadgeReturnsExceptionAndDoesNotPoisonHost() {
+    func testThrowingBadgeBecomesNilAndDoesNotPoisonHost() {
         let host = ExtensionHost()
         let throwingSource = script(
             id: "com.example.throwing",
             badgeBody: #"throw new Error("broken");"#
         )
 
-        guard case .failure(.scriptException(let message)) = host.badgeSync(
-            clipType: "text",
-            text: "hello",
-            extension: installed(source: throwingSource, id: "com.example.throwing")
-        ) else {
-            return XCTFail("Expected a script exception")
-        }
-        XCTAssertTrue(message.contains("broken"))
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(source: throwingSource, id: "com.example.throwing")
+            ),
+            .success(nil)
+        )
 
         let healthySource = script(id: "com.example.healthy", badgeBody: #"return "ok";"#)
         XCTAssertEqual(
@@ -159,6 +187,295 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
+    func testMultiHookDecorationsAreSanitizedPerField() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.multi-hook",
+          name: "Multi Hook",
+          version: "1.0",
+          api: 1,
+          badge: function (clip) { return "  abcdefghijklmnopqrstuvwxyz\n\u0007  "; },
+          subtitle: function (clip) { return "  " + "s".repeat(90) + "\n"; },
+          icon: function (clip) {
+            return clip.text === "invalid" ? "Square.and.arrow" : "  square.and.arrow.up  ";
+          },
+          color: function (clip) { return clip.text === "invalid" ? "#abcdzz" : "#a1b2c3"; },
+          title: function (clip) { return "t".repeat(70); },
+          label: function (clip) { return "abcdefghijklmnopqrst"; }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        XCTAssertEqual(
+            manifest.hooks,
+            ["badge", "color", "icon", "label", "subtitle", "title"]
+        )
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "valid",
+                extension: extensionValue
+            ),
+            .success(
+                CardDecorations(
+                    badge: "abcdefghijklmnopqrstuvwx",
+                    subtitle: String(repeating: "s", count: 80),
+                    icon: "square.and.arrow.up",
+                    color: "#A1B2C3",
+                    title: String(repeating: "t", count: 60),
+                    label: "abcdefghijklmnop"
+                )
+            )
+        )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "invalid",
+                extension: extensionValue
+            ),
+            .success(
+                CardDecorations(
+                    badge: "abcdefghijklmnopqrstuvwx",
+                    subtitle: String(repeating: "s", count: 80),
+                    title: String(repeating: "t", count: 60),
+                    label: "abcdefghijklmnop"
+                )
+            )
+        )
+    }
+
+    func testTypesFilterSkipsJavaScriptAndFailureTicks() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.filtered"
+        let extensionValue = installed(
+            source: #"throw new Error("must not run");"#,
+            id: extensionID,
+            types: ["link"],
+            hooks: ["badge"]
+        )
+
+        for _ in 0..<5 {
+            XCTAssertEqual(
+                host.decorationsSync(
+                    clipType: "text",
+                    text: "hello",
+                    extension: extensionValue
+                ),
+                .success(CardDecorations())
+            )
+        }
+        XCTAssertFalse(host.isQuarantined(extensionID))
+    }
+
+    func testWeightAndTypesAreValidatedAndNormalized() throws {
+        let host = ExtensionHost()
+        let clampedSource = """
+        pesty.register({
+          id: "com.example.weighted",
+          name: "Weighted",
+          version: "1.0",
+          api: 1,
+          weight: 2500,
+          types: ["link", "text", "link"],
+          badge: function (clip) { return "ok"; }
+        });
+        """
+        let clamped = try host.validate(source: clampedSource).get()
+        XCTAssertEqual(clamped.weight, 1000)
+        XCTAssertEqual(clamped.types, ["link", "text"])
+
+        let negativeSource = clampedSource
+            .replacingOccurrences(of: "com.example.weighted", with: "com.example.negative")
+            .replacingOccurrences(of: "2500", with: "-2500")
+        XCTAssertEqual(try host.validate(source: negativeSource).get().weight, -1000)
+
+        let nonNumber = clampedSource.replacingOccurrences(of: "2500", with: #""heavy""#)
+        XCTAssertEqual(
+            host.validate(source: nonNumber),
+            .failure(.invalidManifest("weight must be a finite number"))
+        )
+        let nonFinite = clampedSource.replacingOccurrences(of: "2500", with: "Infinity")
+        XCTAssertEqual(
+            host.validate(source: nonFinite),
+            .failure(.invalidManifest("weight must be a finite number"))
+        )
+        let unknownType = clampedSource.replacingOccurrences(
+            of: #"["link", "text", "link"]"#,
+            with: #"["video"]"#
+        )
+        XCTAssertEqual(
+            host.validate(source: unknownType),
+            .failure(.invalidManifest("unknown clip type video"))
+        )
+        let emptyTypes = clampedSource.replacingOccurrences(
+            of: #"["link", "text", "link"]"#,
+            with: "[]"
+        )
+        XCTAssertEqual(
+            host.validate(source: emptyTypes),
+            .failure(.invalidManifest("types must be a non-empty array"))
+        )
+        let nonStringType = clampedSource.replacingOccurrences(
+            of: #"["link", "text", "link"]"#,
+            with: "[42]"
+        )
+        XCTAssertEqual(
+            host.validate(source: nonStringType),
+            .failure(.invalidManifest("types entries must be strings"))
+        )
+    }
+
+    func testPerHookExceptionKeepsOtherValuesAndCleanEvaluationResetsFailures() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.partial-failure"
+        let source = #"""
+        pesty.register({
+          id: "com.example.partial-failure",
+          name: "Partial Failure",
+          version: "1.0",
+          api: 1,
+          badge: function (clip) { return "kept"; },
+          icon: function (clip) {
+            if (clip.text === "fail") { throw new Error("broken icon"); }
+            return "checkmark";
+          }
+        });
+        """#
+        let extensionValue = installed(
+            source: source,
+            id: extensionID,
+            hooks: ["badge", "icon"]
+        )
+        let partial = CardDecorations(badge: "kept")
+
+        for _ in 0..<4 {
+            XCTAssertEqual(
+                host.decorationsSync(
+                    clipType: "text",
+                    text: "fail",
+                    extension: extensionValue
+                ),
+                .success(partial)
+            )
+        }
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "clean",
+                extension: extensionValue
+            ),
+            .success(CardDecorations(badge: "kept", icon: "checkmark"))
+        )
+        for _ in 0..<4 {
+            _ = host.decorationsSync(
+                clipType: "text",
+                text: "fail",
+                extension: extensionValue
+            )
+        }
+        XCTAssertFalse(host.isQuarantined(extensionID))
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "fail",
+                extension: extensionValue
+            ),
+            .success(partial)
+        )
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
+    func testTransformIsOnDemandPreservesContentAndCompletesOnMainQueue() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.transform",
+          name: "Transform",
+          version: "1.0",
+          api: 1,
+          transform: function (clip) { return "  " + clip.type + ":" + clip.text + "\n"; }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        XCTAssertEqual(manifest.hooks, ["transform"])
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue
+            ),
+            .success(CardDecorations())
+        )
+        XCTAssertEqual(
+            host.transformSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue
+            ),
+            .success("  text:hello\n")
+        )
+
+        let completion = expectation(description: "transform completion")
+        host.transform(
+            clipType: "link",
+            text: "example",
+            extension: extensionValue
+        ) { value in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(value, "  link:example\n")
+            completion.fulfill()
+        }
+        wait(for: [completion], timeout: 2)
+    }
+
+    func testOversizeTransformBecomesNilAndTicksFailure() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.large-transform"
+        let source = #"""
+        pesty.register({
+          id: "com.example.large-transform",
+          name: "Large Transform",
+          version: "1.0",
+          api: 1,
+          transform: function (clip) { return "x".repeat(1048577); }
+        });
+        """#
+        let extensionValue = installed(
+            source: source,
+            id: extensionID,
+            hooks: ["transform"]
+        )
+
+        for _ in 0..<5 {
+            XCTAssertEqual(
+                host.transformSync(
+                    clipType: "text",
+                    text: "hello",
+                    extension: extensionValue
+                ),
+                .success(nil)
+            )
+        }
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
     func testInvalidRegistrationShapesAreRejected() {
         let host = ExtensionHost()
         XCTAssertEqual(
@@ -189,7 +506,22 @@ final class ExtensionHostTests: XCTestCase {
                 });
                 """
             ),
-            .failure(.badgeNotAFunction)
+            .failure(.hookNotAFunction("badge"))
+        )
+        XCTAssertEqual(
+            host.validate(
+                source: """
+                pesty.register({
+                  id: "com.example.numeric-icon",
+                  name: "Example",
+                  version: "1.0",
+                  api: 1,
+                  badge: function (clip) { return "ok"; },
+                  icon: 42
+                });
+                """
+            ),
+            .failure(.hookNotAFunction("icon"))
         )
     }
 
@@ -205,10 +537,10 @@ final class ExtensionHostTests: XCTestCase {
         });
         """
 
-        XCTAssertEqual(host.validate(source: source), .failure(.badgeNotAFunction))
+        XCTAssertEqual(host.validate(source: source), .failure(.hookNotAFunction("badge")))
     }
 
-    func testMissingBadgeIsRejectedWithoutCallingJSObjectAPI() {
+    func testRegistrationWithoutHooksIsRejected() {
         let host = ExtensionHost()
         let source = """
         pesty.register({
@@ -219,7 +551,10 @@ final class ExtensionHostTests: XCTestCase {
         });
         """
 
-        XCTAssertEqual(host.validate(source: source), .failure(.badgeNotAFunction))
+        XCTAssertEqual(
+            host.validate(source: source),
+            .failure(.invalidManifest("at least one hook function is required"))
+        )
     }
 
     func testExceptionMessagesAreCappedAt200CharactersAtBothBoundaries() {
@@ -232,18 +567,28 @@ final class ExtensionHostTests: XCTestCase {
         }
         XCTAssertEqual(loadMessage.count, 200)
 
-        let badgeSource = script(
+        let transformSource = """
+        pesty.register({
+          id: "com.example.large-error",
+          name: "Example",
+          version: "1.0",
+          api: 1,
+          transform: function (clip) { throw new Error("x".repeat(1000)); }
+        });
+        """
+        let transformExtension = installed(
+            source: transformSource,
             id: "com.example.large-error",
-            badgeBody: #"throw new Error("x".repeat(1000));"#
+            hooks: ["transform"]
         )
-        guard case .failure(.scriptException(let badgeMessage)) = host.badgeSync(
+        guard case .failure(.scriptException(let transformMessage)) = host.transformSync(
             clipType: "text",
             text: "hello",
-            extension: installed(source: badgeSource, id: "com.example.large-error")
+            extension: transformExtension
         ) else {
-            return XCTFail("Expected a badge exception")
+            return XCTFail("Expected a transform exception")
         }
-        XCTAssertEqual(badgeMessage.count, 200)
+        XCTAssertEqual(transformMessage.count, 200)
     }
 
     func testFiveConsecutiveFailuresQuarantineOnlyThatExtension() {
@@ -258,13 +603,14 @@ final class ExtensionHostTests: XCTestCase {
         )
 
         for _ in 0..<5 {
-            guard case .failure(.scriptException) = host.badgeSync(
-                clipType: "text",
-                text: "hello",
-                extension: failingExtension
-            ) else {
-                return XCTFail("Expected a script exception")
-            }
+            XCTAssertEqual(
+                host.badgeSync(
+                    clipType: "text",
+                    text: "hello",
+                    extension: failingExtension
+                ),
+                .success(nil)
+            )
         }
         XCTAssertTrue(host.isQuarantined(failingExtension.id))
         XCTAssertEqual(
@@ -311,7 +657,8 @@ final class ExtensionHostTests: XCTestCase {
             id: "com.alvst.pesty-alvie.token-count",
             name: "Token Count",
             version: "1.0",
-            api: 1
+            api: 1,
+            hooks: ["badge"]
         )
         let extensionValue = InstalledExtension(
             manifest: manifest,
@@ -354,9 +701,21 @@ final class ExtensionHostTests: XCTestCase {
         """
     }
 
-    private func installed(source: String, id: String) -> InstalledExtension {
+    private func installed(
+        source: String,
+        id: String,
+        types: [String]? = nil,
+        hooks: [String] = ["badge"]
+    ) -> InstalledExtension {
         InstalledExtension(
-            manifest: ExtensionManifest(id: id, name: "Example", version: "1.0", api: 1),
+            manifest: ExtensionManifest(
+                id: id,
+                name: "Example",
+                version: "1.0",
+                api: 1,
+                types: types,
+                hooks: hooks
+            ),
             source: source,
             enabled: true,
             isBundled: false,
@@ -425,6 +784,63 @@ final class RunawayExtensionHostTests: XCTestCase {
         XCTAssertTrue(host.isQuarantined(extensionID))
     }
 
+    func testSubtitleTimeoutQuarantinesImmediately() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.subtitle-timeout"
+        let source = """
+        pesty.register({
+          id: "com.example.subtitle-timeout",
+          name: "Subtitle Timeout",
+          version: "1.0",
+          api: 1,
+          badge: function (clip) { return "ready"; },
+          subtitle: function (clip) { while (true) {} }
+        });
+        """
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(
+                    source: source,
+                    id: extensionID,
+                    hooks: ["badge", "subtitle"]
+                )
+            ),
+            .failure(.timedOut)
+        )
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
+    func testTransformTimeoutQuarantinesImmediately() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.transform-timeout"
+        let source = """
+        pesty.register({
+          id: "com.example.transform-timeout",
+          name: "Transform Timeout",
+          version: "1.0",
+          api: 1,
+          transform: function (clip) { while (true) {} }
+        });
+        """
+
+        XCTAssertEqual(
+            host.transformSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(
+                    source: source,
+                    id: extensionID,
+                    hooks: ["transform"]
+                )
+            ),
+            .failure(.timedOut)
+        )
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
     private func script(
         id: String,
         badgeBody: String
@@ -440,9 +856,19 @@ final class RunawayExtensionHostTests: XCTestCase {
         """
     }
 
-    private func installed(source: String, id: String) -> InstalledExtension {
+    private func installed(
+        source: String,
+        id: String,
+        hooks: [String] = ["badge"]
+    ) -> InstalledExtension {
         InstalledExtension(
-            manifest: ExtensionManifest(id: id, name: "Example", version: "1.0", api: 1),
+            manifest: ExtensionManifest(
+                id: id,
+                name: "Example",
+                version: "1.0",
+                api: 1,
+                hooks: hooks
+            ),
             source: source,
             enabled: true,
             isBundled: false,

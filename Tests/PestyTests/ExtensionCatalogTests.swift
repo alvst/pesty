@@ -41,7 +41,8 @@ final class ExtensionCatalogTests: XCTestCase {
                     id: "com.example.installed",
                     name: "Example",
                     version: "1.0",
-                    api: 1
+                    api: 1,
+                    hooks: ["badge"]
                 )
             )
         )
@@ -50,6 +51,33 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))
         XCTAssertEqual(try permissions(of: directory), 0o700)
         XCTAssertEqual(try permissions(of: storeURL), 0o600)
+    }
+
+    func testInstallPersistsDerivedManifestCapabilities() throws {
+        let catalog = ExtensionCatalog(directory: directory)
+        let source = """
+        pesty.register({
+          id: "com.example.capabilities",
+          name: "Capabilities",
+          version: "1.0",
+          api: 1,
+          weight: 125.5,
+          types: ["link", "color"],
+          title: function (clip) { return "Title"; },
+          icon: function (clip) { return "link"; }
+        });
+        """
+
+        let manifest = try catalog.install(source: source).get()
+        XCTAssertEqual(manifest.weight, 125.5)
+        XCTAssertEqual(manifest.types, ["link", "color"])
+        XCTAssertEqual(manifest.hooks, ["icon", "title"])
+
+        let reloaded = ExtensionCatalog(directory: directory)
+        let persisted = try XCTUnwrap(
+            reloaded.extensions.first(where: { $0.id == "com.example.capabilities" })
+        )
+        XCTAssertEqual(persisted.manifest, manifest)
     }
 
     func testReloadRoundTripsInstalledExtensions() {
@@ -268,6 +296,10 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertEqual(installedExtension.id, "com.example.legacy")
         XCTAssertTrue(installedExtension.enabled)
         XCTAssertNil(installedExtension.autoDisabledAt)
+        XCTAssertEqual(installedExtension.manifest.weight, 0)
+        XCTAssertNil(installedExtension.manifest.types)
+        XCTAssertTrue(installedExtension.manifest.hooks.isEmpty)
+        XCTAssertEqual(installedExtension.manifest.effectiveHooks, ["badge"])
     }
 
     private func permissions(of url: URL) throws -> Int {

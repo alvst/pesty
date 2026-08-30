@@ -8,7 +8,7 @@ final class ExtensionErrorDescriptionTests: XCTestCase {
             .duplicateRegisterCall,
             .invalidManifest("invalid id"),
             .unsupportedAPI(2),
-            .badgeNotAFunction,
+            .hookNotAFunction("badge"),
             .scriptException("example failure"),
             .timedOut
         ]
