@@ -391,9 +391,7 @@ struct ClipCardView: View {
     }
 
     private var filePreviewImage: NSImage? {
-        guard item.fileURLs.count == 1, let urlString = item.fileURLs.first,
-              let url = URL(string: urlString), url.isFileURL else { return nil }
-        return NSImage(contentsOf: url)
+        store.loadPreviewImage(for: item)
     }
 
     private var cardImage: NSImage? {

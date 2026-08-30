@@ -111,10 +111,6 @@ struct ClipPreviewWindowView: View {
     }
 
     private var filePreviewImage: NSImage? {
-        guard item.fileURLs.count == 1,
-              let value = item.fileURLs.first,
-              let url = URL(string: value),
-              url.isFileURL else { return nil }
-        return NSImage(contentsOf: url)
+        store.loadPreviewImage(for: item)
     }
 }

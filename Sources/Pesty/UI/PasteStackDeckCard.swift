@@ -190,15 +190,8 @@ struct PasteStackDeckCard: View {
     }
 
     private func previewImage(for entry: PasteStackEntry) -> NSImage? {
-        if entry.item.type == .image {
-            return entry.imagePreview ?? ClipboardStore.shared.loadImage(for: entry.item)
-        }
-        guard entry.item.type == .file,
-              entry.item.fileURLs.count == 1,
-              let urlString = entry.item.fileURLs.first,
-              let url = URL(string: urlString),
-              url.isFileURL else { return nil }
-        return NSImage(contentsOf: url)
+        if entry.item.type == .image, let image = entry.imagePreview { return image }
+        return ClipboardStore.shared.loadPreviewImage(for: entry.item)
     }
 
     private var statusText: String {

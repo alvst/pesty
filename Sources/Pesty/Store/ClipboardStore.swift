@@ -846,6 +846,30 @@ final class ClipboardStore {
         return NSImage(contentsOf: url)
     }
 
+    /// The image a clip should show in Pesty's preview surfaces.
+    ///
+    /// Image-file clips retain their original file URL so they still paste as
+    /// files. A sandboxed build (including the Xcode Mac Development scheme)
+    /// cannot necessarily read that URL again, though, so fall back to the
+    /// private pixel copy captured alongside it.
+    func loadPreviewImage(for item: ClipItem) -> NSImage? {
+        switch item.type {
+        case .image:
+            return loadImage(for: item)
+        case .file:
+            guard item.fileURLs.count == 1 else { return nil }
+            if let value = item.fileURLs.first,
+               let url = URL(string: value),
+               url.isFileURL,
+               let image = NSImage(contentsOf: url) {
+                return image
+            }
+            return loadImage(for: item)
+        default:
+            return nil
+        }
+    }
+
     func storeImageData(_ data: Data) -> String? {
         let name = "\(UUID().uuidString).png"
         let url = imagesDir.appendingPathComponent(name)
