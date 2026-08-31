@@ -577,6 +577,8 @@ struct ClipCardView: View {
             .keyboardShortcut(.delete, modifiers: [])
 
             Divider()
+
+            suggestedPinboardAction
             pinMenu
 
             Divider()
@@ -660,6 +662,8 @@ struct ClipCardView: View {
             .keyboardShortcut(.delete, modifiers: [])
 
             Divider()
+
+            suggestedPinboardAction
             pinMenu
 
             Divider()
@@ -718,6 +722,26 @@ struct ClipCardView: View {
         } label: {
             Label("Pin", systemImage: "pin")
         }
+    }
+
+    @ViewBuilder
+    private var suggestedPinboardAction: some View {
+        if let pinboard = suggestedPinboard {
+            Button("Add to \(pinboard.name) — Suggested") {
+                store.saveToPinboard(item, boardID: pinboard.id)
+            }
+        }
+    }
+
+    private var suggestedPinboard: Pinboard? {
+        guard let pinboard = SuggestedPinboardMatcher.matchingPinboard(
+            named: extensionResults.suggestedPinboard(for: item.id),
+            in: store.pinboards,
+            for: item
+        ) else {
+            return nil
+        }
+        return pinboard
     }
 
     @ViewBuilder

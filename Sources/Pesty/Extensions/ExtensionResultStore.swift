@@ -90,6 +90,10 @@ final class ExtensionResultStore {
         firstValue(for: clipID, at: \.label)
     }
 
+    func suggestedPinboard(for clipID: UUID) -> String? {
+        firstValue(for: clipID, at: \.suggestedPinboard)
+    }
+
     func forget(_ clipID: UUID) {
         outcomes.removeValue(forKey: clipID)
         cancelRequests { $0.clipID == clipID }
@@ -192,5 +196,26 @@ final class ExtensionResultStore {
         let value: CardDecorations
         let weight: Double
         let catalogIndex: Int
+    }
+}
+
+enum SuggestedPinboardMatcher {
+    static func matchingPinboard(
+        named suggestion: String?,
+        in pinboards: [Pinboard],
+        for item: ClipItem
+    ) -> Pinboard? {
+        guard let suggestion = normalized(suggestion) else { return nil }
+        return pinboards.first { pinboard in
+            guard let name = normalized(pinboard.name) else { return false }
+            return name.compare(suggestion, options: .caseInsensitive) == .orderedSame
+                && !pinboard.items.contains(where: { $0.sameContent(as: item) })
+        }
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 }

@@ -252,6 +252,52 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
+    func testSuggestPinboardIsACardHookWithDisplaySanitation() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.suggest-pinboard",
+          name: "Suggest Pinboard",
+          version: "1.0",
+          api: 1,
+          suggestPinboard: function (clip) {
+            if (clip.text === "blank") { return " \n\t "; }
+            return "  Team\n\u0007 Inbox " + "x".repeat(40) + "  ";
+          }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        XCTAssertEqual(manifest.hooks, ["suggestPinboard"])
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "suggest",
+                extension: extensionValue
+            ),
+            .success(
+                CardDecorations(
+                    suggestedPinboard: "Team Inbox " + String(repeating: "x", count: 29)
+                )
+            )
+        )
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "blank",
+                extension: extensionValue
+            ),
+            .success(CardDecorations())
+        )
+    }
+
     func testTypesFilterSkipsJavaScriptAndFailureTicks() {
         let host = ExtensionHost()
         let extensionID = "com.example.filtered"

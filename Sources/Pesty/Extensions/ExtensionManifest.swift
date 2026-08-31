@@ -335,6 +335,7 @@ struct CardDecorations: Equatable {
     var color: String?
     var title: String?
     var label: String?
+    var suggestedPinboard: String?
 
     init(
         badge: String? = nil,
@@ -342,7 +343,8 @@ struct CardDecorations: Equatable {
         icon: String? = nil,
         color: String? = nil,
         title: String? = nil,
-        label: String? = nil
+        label: String? = nil,
+        suggestedPinboard: String? = nil
     ) {
         self.badge = badge
         self.subtitle = subtitle
@@ -350,6 +352,7 @@ struct CardDecorations: Equatable {
         self.color = color
         self.title = title
         self.label = label
+        self.suggestedPinboard = suggestedPinboard
     }
 }
 

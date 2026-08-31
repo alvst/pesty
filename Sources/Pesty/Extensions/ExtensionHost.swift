@@ -8,15 +8,18 @@ final class ExtensionHost {
     private static let maximumTitleCharacters = 60
     private static let maximumSubtitleCharacters = 80
     private static let maximumIconCharacters = 64
+    private static let maximumSuggestedPinboardCharacters = 40
     private static let maximumTransformUTF16Units = 1_048_576
     private static let maximumExceptionCharacters = 200
     private static let loadBudget: TimeInterval = 0.5
     private static let cardHookBudget: TimeInterval = 0.1
     private static let transformBudget: TimeInterval = 0.25
     private static let quarantineThreshold = 5
-    private static let cardHookNames = ["badge", "subtitle", "icon", "color", "title", "label"]
+    private static let cardHookNames = [
+        "badge", "subtitle", "icon", "color", "title", "label", "suggestPinboard"
+    ]
     private static let allHookNames = [
-        "badge", "color", "icon", "label", "subtitle", "title", "transform"
+        "badge", "color", "icon", "label", "subtitle", "suggestPinboard", "title", "transform"
     ]
     private static let supportedClipTypes: Set<String> = [
         "text", "richText", "link", "image", "file", "color"
@@ -919,6 +922,11 @@ final class ExtensionHost {
             return sanitizeDisplayValue(value, maximumCharacters: maximumTitleCharacters)
         case "subtitle":
             return sanitizeDisplayValue(value, maximumCharacters: maximumSubtitleCharacters)
+        case "suggestPinboard":
+            return sanitizeDisplayValue(
+                value,
+                maximumCharacters: maximumSuggestedPinboardCharacters
+            )
         case "icon":
             return sanitizeIcon(value)
         case "color":
@@ -974,6 +982,7 @@ final class ExtensionHost {
         case "color": decorations.color = value
         case "title": decorations.title = value
         case "label": decorations.label = value
+        case "suggestPinboard": decorations.suggestedPinboard = value
         default: break
         }
     }

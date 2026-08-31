@@ -308,6 +308,90 @@ final class ExtensionResultStoreTests: XCTestCase {
         XCTAssertEqual(store.labelOverride(for: item.id), "High label")
     }
 
+    func testSuggestedPinboardUsesHighestWeightNonNilValue() async throws {
+        let (_, catalog, store) = makeSystem()
+        _ = try install(
+            source: """
+            pesty.register({
+              id: "com.example.suggestion-high-nil",
+              name: "High Nil",
+              version: "1.0",
+              api: 1,
+              weight: 20,
+              suggestPinboard: function (clip) { return null; }
+            });
+            """,
+            in: catalog
+        )
+        _ = try install(
+            source: """
+            pesty.register({
+              id: "com.example.suggestion-middle",
+              name: "Middle",
+              version: "1.0",
+              api: 1,
+              weight: 10,
+              suggestPinboard: function (clip) { return "Inbox"; }
+            });
+            """,
+            in: catalog
+        )
+        _ = try install(
+            source: """
+            pesty.register({
+              id: "com.example.suggestion-low",
+              name: "Low",
+              version: "1.0",
+              api: 1,
+              weight: 0,
+              suggestPinboard: function (clip) { return "Archive"; }
+            });
+            """,
+            in: catalog
+        )
+        let item = ClipItem(type: .text, text: "hello")
+
+        store.requestDecorations(for: item)
+        await waitUntil { store.pendingEvaluationCount == 0 }
+
+        XCTAssertEqual(store.suggestedPinboard(for: item.id), "Inbox")
+    }
+
+    func testSuggestedPinboardMatcherTrimsIgnoresCaseAndSkipsExistingClip() {
+        let item = ClipItem(type: .text, text: "same content")
+        let duplicate = item.copiedWithFreshID()
+        let occupied = Pinboard(name: "  Work  ", items: [duplicate])
+        let eligible = Pinboard(name: "WORK")
+        let archive = Pinboard(name: "Archive")
+        let pinboards = [occupied, eligible, archive]
+
+        XCTAssertEqual(
+            SuggestedPinboardMatcher.matchingPinboard(
+                named: " work ",
+                in: pinboards,
+                for: item
+            )?.id,
+            eligible.id
+        )
+        XCTAssertNil(
+            SuggestedPinboardMatcher.matchingPinboard(
+                named: " archive ",
+                in: [Pinboard(name: "Archive", items: [duplicate])],
+                for: item
+            )
+        )
+        XCTAssertNil(
+            SuggestedPinboardMatcher.matchingPinboard(named: "  ", in: pinboards, for: item)
+        )
+        XCTAssertNil(
+            SuggestedPinboardMatcher.matchingPinboard(
+                named: "Missing",
+                in: pinboards,
+                for: item
+            )
+        )
+    }
+
     func testTypeFilterSkipsEvaluationBeforeThrowingSourceLoads() async throws {
         try FileManager.default.createDirectory(
             at: directory,

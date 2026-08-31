@@ -1,9 +1,9 @@
 # Pesty-Alvie extensions
 
 Pesty-Alvie extensions are JavaScript snippets that synchronously derive clip-card
-decorations or provide explicit transformed-paste and safe menu actions. API 1
-supports seven hooks: `badge`, `subtitle`, `icon`, `color`, `title`, `label`, and
-`transform`.
+decorations and Pinboard suggestions or provide explicit transformed-paste and
+safe menu actions. API 1 supports eight hooks: `badge`, `subtitle`, `icon`,
+`color`, `title`, `label`, `suggestPinboard`, and `transform`.
 Extensions cannot mutate stored clips, paste automatically, run commands, or
 observe clipboard history. They may declare a small bounded set of settings
 that the user controls in Pesty-Alvie's Extensions pane.
@@ -96,7 +96,8 @@ The registration fields are:
 - `menuItems`: an optional array of up to three explicit safe menu actions
   described below.
 - One or more supported hook functions: `badge`, `subtitle`, `icon`, `color`,
-  `title`, `label`, or `transform`. A present hook must be a function.
+  `title`, `label`, `suggestPinboard`, or `transform`. A present hook must be a
+  function.
 
 The clip object passed to every hook has this shape:
 
@@ -168,9 +169,9 @@ Every hook has the synchronous signature `function (clip)`. A string is the
 only value that can produce output. `null`, `undefined`, every other non-string
 value, and Promises produce no output.
 
-Display strings from `badge`, `subtitle`, `title`, and `label` are trimmed,
-stripped of control and newline characters, and then capped. A sanitized empty
-string produces no output.
+Display strings from `badge`, `subtitle`, `title`, `label`, and
+`suggestPinboard` are trimmed, stripped of control and newline characters, and
+then capped. A sanitized empty string produces no output.
 
 | Hook | Accepted string and sanitation | Rendering or action |
 | --- | --- | --- |
@@ -180,13 +181,14 @@ string produces no output.
 | `color(clip)` | Exactly `#RRGGBB`; hexadecimal digits are normalized to uppercase | The first color in weight order replaces the card header color, with the normal readability adjustment applied. |
 | `title(clip)` | Display string capped at 60 characters | The first title in weight order overrides the generated display title used by link previews and file-preview captions. A title explicitly set by the user still wins. |
 | `label(clip)` | Display string capped at 16 characters | The first label in weight order replaces the built-in clip-type label in the card header. |
+| `suggestPinboard(clip)` | Display string capped at 40 characters | The first suggestion in weight order may add `Add to <BoardName> — Suggested` to the card context menu. The sanitized suggestion must match an existing Pinboard name case-insensitively after trimming, and the clip must not already be in that board. |
 | `transform(clip)` | Content is preserved exactly and must not exceed 1,048,576 UTF-16 code units | Adds `Paste via <Extension Name>` to an ordinary clip card's context menu. The returned string is pasted as plain text. |
 
 For card decorations, higher `weight` values are considered first; equal
 weights retain catalog order. Badges and subtitles aggregate all available
-values in that order. Icon, color, title, and label use the first usable value.
-Weight does not reorder transformed-paste menu actions, which retain catalog
-order.
+values in that order. Icon, color, title, label, and suggested Pinboard use the
+first usable value. Weight does not reorder transformed-paste menu actions,
+which retain catalog order.
 
 ## Derived Categories
 
@@ -196,6 +198,12 @@ can reinforce it with `icon`, `color`, and `title`. Each hook remains
 independent: an extension can apply only the pieces that improve the card and
 return `null` when the text does not match. A `subtitle` can explain why the
 category was detected.
+
+A derived category can also return an existing board's display name from
+`suggestPinboard`. A matching suggestion offers one explicit context-menu
+action; it never files the clip automatically, creates a Pinboard, or changes
+the board's color or icon. Suggestions that name no existing Pinboard render
+nothing.
 
 The bundled JSON Detector is the worked example. It classifies text as JSON,
 uses `label` and `icon` to present that category, and uses `subtitle` for a
@@ -298,13 +306,14 @@ run automatically.
 | Config number value | Finite number |
 | `menuItems` | Optional array of at most 3 entries; each title has 1-30 display-sanitized characters |
 | Menu item verb | Exactly `copyTransformed` or `revealInFinder`; `openURL` and all other verbs are rejected |
-| Hooks | At least one of `badge`, `subtitle`, `icon`, `color`, `title`, `label`, or `transform`; each declared value must be a function |
+| Hooks | At least one of `badge`, `subtitle`, `icon`, `color`, `title`, `label`, `suggestPinboard`, or `transform`; each declared value must be a function |
 | `clip.type` | One of `text`, `richText`, `link`, `image`, `file`, or `color` |
 | `clip.text` | At most 65,536 UTF-16 code units |
 | Badge string | Display sanitation, then at most 24 characters |
 | Subtitle string | Display sanitation, then at most 80 characters |
 | Title string | Display sanitation, then at most 60 characters |
 | Label string | Display sanitation, then at most 16 characters |
+| Suggested Pinboard string | Display sanitation, then at most 40 characters |
 | Icon string | 1-64 lowercase ASCII letters, digits, or dots after trimming; must resolve to an SF Symbol to render |
 | Color string | Exactly seven ASCII bytes in `#RRGGBB` form |
 | Transform string | At most 1,048,576 UTF-16 code units; content is otherwise preserved exactly |
