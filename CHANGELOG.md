@@ -34,6 +34,9 @@ companions:
   capability chips, strict execution limits, persistent auto-disable after
   quarantine, an in-memory result cache, and bundled Token Count and JSON
   Detector examples.
+- Added reason-specific local notifications when an extension is automatically
+  disabled after a timeout or repeated exceptions, with lazy permission and a
+  direct path back to the Extensions settings pane.
 
 #### Changed
 - Renamed the personal fork's app, executable, bundle, icon, packaging, and

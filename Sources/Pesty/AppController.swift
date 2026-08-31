@@ -66,6 +66,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(appActivated(_:)),
             name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showExtensionSettingsFromNotification),
+            name: .pestyShowExtensionSettings,
+            object: nil
+        )
 
         monitor.start()
 
@@ -207,6 +213,9 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func menuOpen() { showBar() }
     @objc private func menuSettings() { showSettings() }
+    @objc private func showExtensionSettingsFromNotification() {
+        showSettings(initialSection: .extensions)
+    }
     @objc private func menuClear() { store.clearHistory() }
     @objc private func menuTogglePause() { togglePestyPause() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
@@ -1299,7 +1308,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
-    func showSettings() {
+    func showSettings(initialSection: SettingsSection = .general) {
         // Mission Control, ⌘-Tab, and the Dock draw an app's icon from its
         // Dock tile, and an accessory app has none — so the Settings window
         // showed up there as a bare name. Become a regular app for as long as
@@ -1310,7 +1319,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             win.makeKeyAndOrderFront(nil)
             return
         }
-        let view = SettingsView()
+        let view = SettingsView(initialSection: initialSection)
         let host = NSHostingController(rootView: view)
         let win = NSWindow(contentViewController: host)
         win.title = "Pesty-Alvie Settings"

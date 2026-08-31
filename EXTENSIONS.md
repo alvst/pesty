@@ -60,6 +60,14 @@ Any load or hook timeout immediately quarantines and persistently disables the
 installed extension. Re-enabling the extension in Settings clears its
 quarantine and persisted auto-disable state.
 
+The first time an extension enters quarantine, Pesty-Alvie persists the
+auto-disable before posting a local notification that names the extension and
+states whether it timed out or failed repeatedly. macOS asks for notification
+permission only when the first quarantine alert is needed, never just because
+Pesty-Alvie launched. If permission is denied, the extension still stays
+disabled and its reason remains visible in Settings. Re-enabling and later
+quarantining the extension can post a new alert.
+
 JavaScriptCore's public API cannot terminate a script that is already running.
 On timeout, Pesty-Alvie stops waiting, abandons the worker thread, and disables
 the extension. The script may continue consuming that thread and CPU until it
@@ -363,6 +371,7 @@ run automatically.
 | Transform hook | 0.25 seconds per call, after loading succeeds |
 | Exception quarantine | 5 consecutive failure ticks; a failure-free evaluation resets the count |
 | Timeout quarantine | Immediate, with the installed extension persistently disabled |
+| Quarantine alert | One reason-specific local notification per quarantine entry; permission is requested lazily on the first alert |
 | Card result cache | Outcomes for at most 512 clip IDs; the in-memory cache clears on overflow |
 | Keyword index | `extension-keywords.json` beside the extension catalog; atomically saved with `0600` permissions and source-fingerprint invalidation |
 | SF Symbol validation cache | Outcomes for at most 128 symbol names; the in-memory cache clears on overflow |
@@ -377,7 +386,8 @@ Open **Settings → Extensions** to manage extensions.
 2. Newly installed extensions are off by default. The installed row lists the
    hooks declared by the script. Use the switch beside an extension to enable
    it and use any controls below the hook chips to change its declared settings.
-   A warning marks an extension that was automatically disabled; switching it
+   A warning marks an extension that was automatically disabled and identifies
+   a timeout or repeated failures when that reason is available; switching it
    on again clears the quarantine.
 3. Use **Uninstall** to remove an extension. Its script text is deleted, so
    keep your own copy if you may need it again.

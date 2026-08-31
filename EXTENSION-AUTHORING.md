@@ -780,4 +780,8 @@ and Pinboard-name assumptions in the UI.
 Script exception messages shown by the app are capped at 200 characters. Five
 consecutive exception failures produce a quarantine warning and disable the
 row; a timeout does so immediately. Fix or reinstall the source as needed, then
-switch the row on again to clear the quarantine and retry.
+switch the row on again to clear the quarantine and retry. The warning states
+whether the extension timed out or failed repeatedly. Pesty-Alvie also posts
+one matching local notification when quarantine begins; macOS asks permission
+only when the first such alert is needed, so test both the allowed and denied
+permission paths without expecting a prompt at launch.

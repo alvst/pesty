@@ -35,13 +35,17 @@ final class ExtensionHost {
     private let failureStateLock = NSLock()
     private var consecutiveFailures: [String: Int] = [:]
     private var quarantinedIDs: Set<String> = []
-    private var quarantineHandler: (@MainActor @Sendable (String) -> Void)?
+    private var quarantineHandler: (
+        @MainActor @Sendable (String, ExtensionQuarantineReason) -> Void
+    )?
 
     init() {
         queue.setSpecific(key: queueKey, value: 1)
     }
 
-    var onQuarantine: (@MainActor @Sendable (String) -> Void)? {
+    var onQuarantine: (
+        @MainActor @Sendable (String, ExtensionQuarantineReason) -> Void
+    )? {
         get {
             failureStateLock.lock()
             defer { failureStateLock.unlock() }
@@ -313,7 +317,10 @@ final class ExtensionHost {
         _ evaluation: HostEvaluation<Value>,
         for id: String
     ) {
-        var callback: (@MainActor @Sendable (String) -> Void)?
+        var callback: (
+            @MainActor @Sendable (String, ExtensionQuarantineReason) -> Void
+        )?
+        var quarantineReason: ExtensionQuarantineReason?
         failureStateLock.lock()
 
         switch evaluation.result {
@@ -323,6 +330,7 @@ final class ExtensionHost {
             consecutiveFailures[id] = Self.quarantineThreshold
             if quarantinedIDs.insert(id).inserted {
                 callback = quarantineHandler
+                quarantineReason = .timedOut
             }
         case .success, .failure:
             let failures = (consecutiveFailures[id] ?? 0) + 1
@@ -330,13 +338,14 @@ final class ExtensionHost {
             if failures >= Self.quarantineThreshold,
                quarantinedIDs.insert(id).inserted {
                 callback = quarantineHandler
+                quarantineReason = .repeatedExceptions
             }
         }
         failureStateLock.unlock()
 
-        if let callback {
+        if let callback, let quarantineReason {
             DispatchQueue.main.async {
-                callback(id)
+                callback(id, quarantineReason)
             }
         }
     }

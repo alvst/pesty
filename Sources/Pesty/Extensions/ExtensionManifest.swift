@@ -385,6 +385,11 @@ enum ExtensionError: Error, Equatable {
     }
 }
 
+enum ExtensionQuarantineReason: String, Codable, Equatable, Sendable {
+    case timedOut
+    case repeatedExceptions
+}
+
 struct InstalledExtension: Codable, Equatable, Identifiable {
     var manifest: ExtensionManifest
     var source: String
@@ -392,6 +397,7 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
     var isBundled: Bool
     var installedAt: Date
     var autoDisabledAt: Date? = nil
+    var autoDisableReason: ExtensionQuarantineReason? = nil
     var settings: [String: ExtensionConfigValue] = [:]
 
     var id: String { manifest.id }
@@ -403,6 +409,7 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
         isBundled: Bool,
         installedAt: Date,
         autoDisabledAt: Date? = nil,
+        autoDisableReason: ExtensionQuarantineReason? = nil,
         settings: [String: ExtensionConfigValue] = [:]
     ) {
         self.manifest = manifest
@@ -411,6 +418,7 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
         self.isBundled = isBundled
         self.installedAt = installedAt
         self.autoDisabledAt = autoDisabledAt
+        self.autoDisableReason = autoDisableReason
         self.settings = settings
     }
 
@@ -421,6 +429,7 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
         case isBundled
         case installedAt
         case autoDisabledAt
+        case autoDisableReason
         case settings
     }
 
@@ -432,6 +441,10 @@ struct InstalledExtension: Codable, Equatable, Identifiable {
         isBundled = try container.decode(Bool.self, forKey: .isBundled)
         installedAt = try container.decode(Date.self, forKey: .installedAt)
         autoDisabledAt = try container.decodeIfPresent(Date.self, forKey: .autoDisabledAt)
+        autoDisableReason = try container.decodeIfPresent(
+            ExtensionQuarantineReason.self,
+            forKey: .autoDisableReason
+        )
         settings = try container.decodeIfPresent(
             [String: ExtensionConfigValue].self,
             forKey: .settings

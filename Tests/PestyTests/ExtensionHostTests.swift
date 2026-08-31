@@ -1110,6 +1110,89 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testRepeatedExceptionsReportTheirQuarantineReasonOnlyOnFirstEntry() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.quarantine-reason-exceptions"
+        let failingExtension = installed(
+            source: script(
+                id: extensionID,
+                badgeBody: #"throw new Error("nope");"#
+            ),
+            id: extensionID
+        )
+        let reported = expectation(description: "repeated-exception reason reported")
+        reported.assertForOverFulfill = true
+        var reports: [(String, ExtensionQuarantineReason)] = []
+        host.onQuarantine = { id, reason in
+            reports.append((id, reason))
+            reported.fulfill()
+        }
+
+        for _ in 0..<5 {
+            _ = host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: failingExtension
+            )
+        }
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: failingExtension
+            ),
+            .success(nil)
+        )
+        wait(for: [reported], timeout: 1)
+
+        XCTAssertEqual(reports.count, 1)
+        XCTAssertEqual(reports.first?.0, extensionID)
+        XCTAssertEqual(reports.first?.1, .repeatedExceptions)
+    }
+
+    @MainActor
+    func testTimeoutReportsItsQuarantineReasonOnlyOnFirstEntry() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.quarantine-reason-timeout"
+        let slowExtension = installed(
+            source: script(
+                id: extensionID,
+                badgeBody: "var deadline = Date.now() + 250; while (Date.now() < deadline) {}"
+            ),
+            id: extensionID
+        )
+        let reported = expectation(description: "timeout reason reported")
+        reported.assertForOverFulfill = true
+        var reports: [(String, ExtensionQuarantineReason)] = []
+        host.onQuarantine = { id, reason in
+            reports.append((id, reason))
+            reported.fulfill()
+        }
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: slowExtension
+            ),
+            .failure(.timedOut)
+        )
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: slowExtension
+            ),
+            .success(nil)
+        )
+        wait(for: [reported], timeout: 1)
+
+        XCTAssertEqual(reports.count, 1)
+        XCTAssertEqual(reports.first?.0, extensionID)
+        XCTAssertEqual(reports.first?.1, .timedOut)
+    }
+
     func testSuccessfulCallResetsConsecutiveFailureCount() {
         let host = ExtensionHost()
         let conditionalSource = script(

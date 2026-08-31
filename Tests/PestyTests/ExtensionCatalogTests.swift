@@ -367,7 +367,12 @@ final class ExtensionCatalogTests: XCTestCase {
 
     func testQuarantineAutoDisablesAndPersistsAcrossReload() throws {
         let host = ExtensionHost()
-        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let alerting = QuarantineAlertingSpy()
+        let catalog = ExtensionCatalog(
+            directory: directory,
+            host: host,
+            quarantineAlerting: alerting
+        )
         let extensionID = "com.example.catalog-quarantine"
         let source = script(
             id: extensionID,
@@ -402,6 +407,27 @@ final class ExtensionCatalogTests: XCTestCase {
         )
         XCTAssertFalse(autoDisabled.enabled)
         XCTAssertNotNil(autoDisabled.autoDisabledAt)
+        XCTAssertEqual(autoDisabled.autoDisableReason, .timedOut)
+        XCTAssertEqual(
+            alerting.alerts,
+            [
+                QuarantineAlertingSpy.Alert(
+                    extensionID: extensionID,
+                    extensionName: "Example",
+                    reason: .timedOut
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: installedExtension
+            ),
+            .success(nil)
+        )
+        XCTAssertEqual(alerting.alerts.count, 1)
 
         let storedData = try Data(
             contentsOf: directory.appendingPathComponent("extensions.json")
@@ -410,6 +436,7 @@ final class ExtensionCatalogTests: XCTestCase {
         let storedExtension = try XCTUnwrap(stored.first(where: { $0.id == extensionID }))
         XCTAssertFalse(storedExtension.enabled)
         XCTAssertEqual(storedExtension.autoDisabledAt, autoDisabled.autoDisabledAt)
+        XCTAssertEqual(storedExtension.autoDisableReason, .timedOut)
 
         let reloaded = ExtensionCatalog(directory: directory, host: ExtensionHost())
         let reloadedExtension = try XCTUnwrap(
@@ -417,6 +444,7 @@ final class ExtensionCatalogTests: XCTestCase {
         )
         XCTAssertFalse(reloadedExtension.enabled)
         XCTAssertEqual(reloadedExtension.autoDisabledAt, autoDisabled.autoDisabledAt)
+        XCTAssertEqual(reloadedExtension.autoDisableReason, .timedOut)
     }
 
     func testReenableClearsAutoDisableAndLiftsHostQuarantine() throws {
@@ -461,6 +489,7 @@ final class ExtensionCatalogTests: XCTestCase {
         )
         XCTAssertTrue(reenabled.enabled)
         XCTAssertNil(reenabled.autoDisabledAt)
+        XCTAssertNil(reenabled.autoDisableReason)
         XCTAssertFalse(host.isQuarantined(extensionID))
         XCTAssertEqual(
             host.badgeSync(
@@ -476,6 +505,75 @@ final class ExtensionCatalogTests: XCTestCase {
         )
         let stored = try JSONDecoder().decode([InstalledExtension].self, from: storedData)
         XCTAssertNil(stored.first(where: { $0.id == extensionID })?.autoDisabledAt)
+        XCTAssertNil(stored.first(where: { $0.id == extensionID })?.autoDisableReason)
+    }
+
+    func testRepeatedFailureAlertPostsAgainAfterReenable() throws {
+        let host = ExtensionHost()
+        let alerting = QuarantineAlertingSpy()
+        let catalog = ExtensionCatalog(
+            directory: directory,
+            host: host,
+            quarantineAlerting: alerting
+        )
+        let extensionID = "com.example.catalog-repeat-quarantine"
+        _ = catalog.install(
+            source: script(
+                id: extensionID,
+                badgeBody: #"throw new Error("nope");"#
+            )
+        )
+        catalog.setEnabled(true, id: extensionID)
+
+        let firstInvalidation = expectation(description: "first quarantine invalidated")
+        catalog.onExtensionInvalidated = { id in
+            if id == extensionID { firstInvalidation.fulfill() }
+        }
+        let firstRun = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+        for _ in 0..<5 {
+            _ = host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: firstRun
+            )
+        }
+        wait(for: [firstInvalidation], timeout: 1)
+
+        XCTAssertEqual(alerting.alerts.count, 1)
+        XCTAssertEqual(alerting.alerts.first?.extensionID, extensionID)
+        XCTAssertEqual(alerting.alerts.first?.extensionName, "Example")
+        XCTAssertEqual(alerting.alerts.first?.reason, .repeatedExceptions)
+        XCTAssertEqual(
+            catalog.extensions.first(where: { $0.id == extensionID })?.autoDisableReason,
+            .repeatedExceptions
+        )
+
+        catalog.onExtensionInvalidated = nil
+        catalog.setEnabled(true, id: extensionID)
+        let reenabled = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+        XCTAssertTrue(reenabled.enabled)
+        XCTAssertNil(reenabled.autoDisabledAt)
+        XCTAssertNil(reenabled.autoDisableReason)
+
+        let secondInvalidation = expectation(description: "second quarantine invalidated")
+        catalog.onExtensionInvalidated = { id in
+            if id == extensionID { secondInvalidation.fulfill() }
+        }
+        for _ in 0..<5 {
+            _ = host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: reenabled
+            )
+        }
+        wait(for: [secondInvalidation], timeout: 1)
+
+        XCTAssertEqual(alerting.alerts.count, 2)
+        XCTAssertEqual(alerting.alerts.last?.reason, .repeatedExceptions)
     }
 
     func testConfigValueAndInstalledSettingsCodableRoundTrips() throws {
@@ -711,6 +809,7 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertEqual(installedExtension.id, "com.example.legacy")
         XCTAssertTrue(installedExtension.enabled)
         XCTAssertNil(installedExtension.autoDisabledAt)
+        XCTAssertNil(installedExtension.autoDisableReason)
         XCTAssertEqual(installedExtension.manifest.weight, 0)
         XCTAssertNil(installedExtension.manifest.types)
         XCTAssertTrue(installedExtension.manifest.hooks.isEmpty)
@@ -780,5 +879,30 @@ final class ExtensionCatalogTests: XCTestCase {
           \(hooks)
         });
         """
+    }
+}
+
+@MainActor
+private final class QuarantineAlertingSpy: QuarantineAlerting {
+    struct Alert: Equatable {
+        let extensionID: String
+        let extensionName: String
+        let reason: ExtensionQuarantineReason
+    }
+
+    private(set) var alerts: [Alert] = []
+
+    func postQuarantineAlert(
+        extensionID: String,
+        extensionName: String,
+        reason: ExtensionQuarantineReason
+    ) {
+        alerts.append(
+            Alert(
+                extensionID: extensionID,
+                extensionName: extensionName,
+                reason: reason
+            )
+        )
     }
 }

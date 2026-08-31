@@ -15,20 +15,27 @@ final class ExtensionCatalog {
     static let sharedHost = ExtensionHost()
     static let shared = ExtensionCatalog(
         directory: ClipboardStore.localBase.appendingPathComponent("extensions", isDirectory: true),
-        host: sharedHost
+        host: sharedHost,
+        quarantineAlerting: ExtensionQuarantineNotifier()
     )
 
     private(set) var extensions: [InstalledExtension] = []
     @ObservationIgnored var onExtensionInvalidated: ((String) -> Void)?
+    @ObservationIgnored var quarantineAlerting: (any QuarantineAlerting)?
 
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let storeURL: URL
     @ObservationIgnored private let host: ExtensionHost
 
-    init(directory: URL, host: ExtensionHost = ExtensionHost()) {
+    init(
+        directory: URL,
+        host: ExtensionHost = ExtensionHost(),
+        quarantineAlerting: (any QuarantineAlerting)? = nil
+    ) {
         self.directory = directory
         self.storeURL = directory.appendingPathComponent("extensions.json")
         self.host = host
+        self.quarantineAlerting = quarantineAlerting
 
         prepareDirectory()
         if FileManager.default.fileExists(atPath: storeURL.path) {
@@ -38,8 +45,8 @@ final class ExtensionCatalog {
             saveNow()
         }
 
-        host.onQuarantine = { [weak self] id in
-            self?.autoDisableQuarantinedExtension(id: id)
+        host.onQuarantine = { [weak self] id, reason in
+            self?.autoDisableQuarantinedExtension(id: id, reason: reason)
         }
     }
 
@@ -117,12 +124,15 @@ final class ExtensionCatalog {
         guard let index = extensions.firstIndex(where: { $0.id == id }) else { return }
 
         let enabledChanged = extensions[index].enabled != enabled
-        let clearsAutoDisable = enabled && extensions[index].autoDisabledAt != nil
+        let hasAutoDisableState = extensions[index].autoDisabledAt != nil
+            || extensions[index].autoDisableReason != nil
+        let clearsAutoDisable = enabled && hasAutoDisableState
         if enabled {
             host.liftQuarantine(id)
             extensions[index].autoDisabledAt = nil
+            extensions[index].autoDisableReason = nil
         }
-        let persistsAutoDisable = !enabled && extensions[index].autoDisabledAt != nil
+        let persistsAutoDisable = !enabled && hasAutoDisableState
         guard enabledChanged || clearsAutoDisable || persistsAutoDisable else { return }
 
         extensions[index].enabled = enabled
@@ -156,10 +166,20 @@ final class ExtensionCatalog {
         return values
     }
 
-    private func autoDisableQuarantinedExtension(id: String) {
+    private func autoDisableQuarantinedExtension(
+        id: String,
+        reason: ExtensionQuarantineReason
+    ) {
         guard let index = extensions.firstIndex(where: { $0.id == id }) else { return }
+        let extensionName = extensions[index].manifest.name
         extensions[index].autoDisabledAt = .now
+        extensions[index].autoDisableReason = reason
         setEnabled(false, id: id)
+        quarantineAlerting?.postQuarantineAlert(
+            extensionID: id,
+            extensionName: extensionName,
+            reason: reason
+        )
     }
 
     private func prepareDirectory() {

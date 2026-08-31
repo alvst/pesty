@@ -3,7 +3,11 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    @State private var section: SettingsSection = .general
+    @State private var section: SettingsSection
+
+    init(initialSection: SettingsSection = .general) {
+        _section = State(initialValue: initialSection)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -30,6 +34,9 @@ struct SettingsView: View {
         }
         .frame(width: 760, height: 680)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onReceive(NotificationCenter.default.publisher(for: .pestyShowExtensionSettings)) { _ in
+            section = .extensions
+        }
     }
 
     private var settingsSidebar: some View {
@@ -83,7 +90,7 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsSection: CaseIterable, Identifiable {
+enum SettingsSection: CaseIterable, Identifiable {
     case general, privacy, shortcuts, extensions, sync, about
     var id: Self { self }
     var title: String {
@@ -842,6 +849,14 @@ private struct ExtensionsSettings: View {
     private func extensionRow(_ installedExtension: InstalledExtension) -> some View {
         let isQuarantined = catalog.isQuarantined(installedExtension.id)
         let showsQuarantineWarning = isQuarantined || installedExtension.autoDisabledAt != nil
+        let quarantineWarning = switch installedExtension.autoDisableReason {
+        case .timedOut:
+            "Turned off after a timeout"
+        case .repeatedExceptions:
+            "Turned off after repeated failures"
+        case nil:
+            "Turned off after repeated failures or a timeout"
+        }
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
@@ -878,7 +893,7 @@ private struct ExtensionsSettings: View {
                     .padding(.top, 2)
                     if showsQuarantineWarning {
                         Label(
-                            "Turned off after repeated failures or a timeout",
+                            quarantineWarning,
                             systemImage: "exclamationmark.triangle.fill"
                         )
                         .font(.caption)
