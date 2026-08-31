@@ -54,7 +54,8 @@ final class ExtensionResultStore {
             host.decorations(
                 clipType: item.type.rawValue,
                 text: item.text ?? "",
-                extension: installedExtension
+                extension: installedExtension,
+                settings: catalog.effectiveSettings(for: installedExtension.id)
             ) { [weak self] decorations in
                 self?.finish(key: key, token: token, decorations: decorations)
             }

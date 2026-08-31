@@ -56,13 +56,15 @@ final class ExtensionHost {
     func decorationsSync(
         clipType: String,
         text: String,
-        extension installedExtension: InstalledExtension
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:]
     ) -> Result<CardDecorations, ExtensionError> {
         syncOnQueue {
             decorationsOnQueue(
                 clipType: clipType,
                 text: text,
-                extension: installedExtension
+                extension: installedExtension,
+                settings: settings
             )
         }
     }
@@ -71,6 +73,7 @@ final class ExtensionHost {
         clipType: String,
         text: String,
         extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:],
         completion: @escaping @MainActor @Sendable (CardDecorations) -> Void
     ) {
         queue.async { [self] in
@@ -78,7 +81,8 @@ final class ExtensionHost {
             switch decorationsOnQueue(
                 clipType: clipType,
                 text: text,
-                extension: installedExtension
+                extension: installedExtension,
+                settings: settings
             ) {
             case .success(let decorations):
                 value = decorations
@@ -94,12 +98,14 @@ final class ExtensionHost {
     func badgeSync(
         clipType: String,
         text: String,
-        extension installedExtension: InstalledExtension
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:]
     ) -> Result<String?, ExtensionError> {
         decorationsSync(
             clipType: clipType,
             text: text,
-            extension: installedExtension
+            extension: installedExtension,
+            settings: settings
         ).map(\.badge)
     }
 
@@ -107,12 +113,14 @@ final class ExtensionHost {
         clipType: String,
         text: String,
         extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:],
         completion: @escaping @MainActor @Sendable (String?) -> Void
     ) {
         decorations(
             clipType: clipType,
             text: text,
-            extension: installedExtension
+            extension: installedExtension,
+            settings: settings
         ) { decorations in
             completion(decorations.badge)
         }
@@ -121,13 +129,15 @@ final class ExtensionHost {
     func transformSync(
         clipType: String,
         text: String,
-        extension installedExtension: InstalledExtension
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:]
     ) -> Result<String?, ExtensionError> {
         syncOnQueue {
             transformOnQueue(
                 clipType: clipType,
                 text: text,
-                extension: installedExtension
+                extension: installedExtension,
+                settings: settings
             )
         }
     }
@@ -136,6 +146,7 @@ final class ExtensionHost {
         clipType: String,
         text: String,
         extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:],
         completion: @escaping @MainActor @Sendable (String?) -> Void
     ) {
         queue.async { [self] in
@@ -143,7 +154,8 @@ final class ExtensionHost {
             switch transformOnQueue(
                 clipType: clipType,
                 text: text,
-                extension: installedExtension
+                extension: installedExtension,
+                settings: settings
             ) {
             case .success(let transformed):
                 value = transformed
@@ -172,7 +184,8 @@ final class ExtensionHost {
     private func decorationsOnQueue(
         clipType: String,
         text: String,
-        extension installedExtension: InstalledExtension
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue]
     ) -> Result<CardDecorations, ExtensionError> {
         let id = installedExtension.id
         guard !isQuarantined(id) else {
@@ -189,7 +202,8 @@ final class ExtensionHost {
         let evaluation = runDecorations(
             source: installedExtension.source,
             clipType: clipType,
-            text: Self.boundedText(text)
+            text: Self.boundedText(text),
+            settings: settings
         )
 
         record(evaluation, for: id)
@@ -199,7 +213,8 @@ final class ExtensionHost {
     private func transformOnQueue(
         clipType: String,
         text: String,
-        extension installedExtension: InstalledExtension
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue]
     ) -> Result<String?, ExtensionError> {
         let id = installedExtension.id
         guard !isQuarantined(id) else {
@@ -213,7 +228,8 @@ final class ExtensionHost {
         let evaluation = runTransform(
             source: installedExtension.source,
             clipType: clipType,
-            text: Self.boundedText(text)
+            text: Self.boundedText(text),
+            settings: settings
         )
 
         record(evaluation, for: id)
@@ -277,7 +293,8 @@ final class ExtensionHost {
     private func runDecorations(
         source: String,
         clipType: String,
-        text: String
+        text: String,
+        settings: [String: ExtensionConfigValue]
     ) -> HostEvaluation<CardDecorations> {
         let state = CardWorkerState()
         let loadFinished = DispatchSemaphore(value: 0)
@@ -291,6 +308,7 @@ final class ExtensionHost {
                     state.setLoad(.failure(error))
                     loadFinished.signal()
                 case .success(let loaded):
+                    Self.installConfig(settings, in: loaded.context)
                     let hookNames = Self.cardHookNames.filter { loaded.hooks[$0] != nil }
                     state.setLoad(.success(hookNames))
                     loadFinished.signal()
@@ -384,7 +402,8 @@ final class ExtensionHost {
     private func runTransform(
         source: String,
         clipType: String,
-        text: String
+        text: String,
+        settings: [String: ExtensionConfigValue]
     ) -> HostEvaluation<String?> {
         let state = TransformWorkerState()
         let loadFinished = DispatchSemaphore(value: 0)
@@ -398,6 +417,7 @@ final class ExtensionHost {
                     state.setLoad(.failure(error))
                     loadFinished.signal()
                 case .success(let loaded):
+                    Self.installConfig(settings, in: loaded.context)
                     let transform = loaded.hooks["transform"]
                     state.setLoad(.success(transform != nil))
                     loadFinished.signal()
@@ -536,7 +556,8 @@ final class ExtensionHost {
                 api: baseManifest.api,
                 weight: baseManifest.weight,
                 types: baseManifest.types,
-                hooks: hooks.keys.sorted()
+                hooks: hooks.keys.sorted(),
+                config: baseManifest.config
             )
             context.exceptionHandler = nil
             return .success(
@@ -608,6 +629,14 @@ final class ExtensionHost {
             types = nil
         }
 
+        let config: [ExtensionConfigField]
+        switch configFields(from: registration) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let fields):
+            config = fields
+        }
+
         let manifest = ExtensionManifest(
             id: id,
             name: name,
@@ -615,12 +644,130 @@ final class ExtensionHost {
             api: Int(apiDouble),
             weight: weight,
             types: types,
-            hooks: hooks
+            hooks: hooks,
+            config: config
         )
         if let error = manifest.validationError() {
             return .failure(error)
         }
         return .success(manifest)
+    }
+
+    private static func configFields(
+        from registration: JSValue
+    ) -> Result<[ExtensionConfigField], ExtensionError> {
+        guard let configValue = registration.forProperty("config"),
+              !configValue.isUndefined else {
+            return .success([])
+        }
+        guard configValue.isArray, let rawFields = configValue.toArray() else {
+            return .failure(.invalidManifest("config must be an array"))
+        }
+        guard rawFields.count <= 8 else {
+            return .failure(.invalidManifest("config must contain at most 8 fields"))
+        }
+
+        var fields: [ExtensionConfigField] = []
+        var keys: Set<String> = []
+        for index in rawFields.indices {
+            let prefix = "config[\(index)]"
+            guard let value = configValue.objectAtIndexedSubscript(index),
+                  value.isObject, !value.isArray, !value.isNull else {
+                return .failure(.invalidManifest("\(prefix) must be an object"))
+            }
+            guard let key = stringProperty("key", in: value) else {
+                return .failure(.invalidManifest("\(prefix).key must be a string"))
+            }
+            guard let rawType = stringProperty("type", in: value),
+                  let type = ExtensionConfigFieldType(rawValue: rawType) else {
+                return .failure(
+                    .invalidManifest(
+                        "\(prefix).type must be boolean, number, string, or choice"
+                    )
+                )
+            }
+            guard let rawLabel = stringProperty("label", in: value) else {
+                return .failure(.invalidManifest("\(prefix).label must be a string"))
+            }
+            let label = rawLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let optionsValue = value.forProperty("options")
+            let hasOptions = optionsValue != nil && optionsValue?.isUndefined == false
+            let options: [String]?
+            if type == .choice {
+                guard hasOptions, let optionsValue, optionsValue.isArray,
+                      let rawOptions = optionsValue.toArray() else {
+                    return .failure(
+                        .invalidManifest(
+                            "\(prefix).options must contain 2-10 strings for a choice field"
+                        )
+                    )
+                }
+                var parsedOptions: [String] = []
+                for optionIndex in rawOptions.indices {
+                    guard let optionValue = optionsValue.objectAtIndexedSubscript(optionIndex),
+                          optionValue.isString, let option = optionValue.toString() else {
+                        return .failure(
+                            .invalidManifest("\(prefix).options entries must be strings")
+                        )
+                    }
+                    parsedOptions.append(option)
+                }
+                options = parsedOptions
+            } else {
+                guard !hasOptions else {
+                    return .failure(
+                        .invalidManifest("\(prefix).options is only allowed for choice fields")
+                    )
+                }
+                options = nil
+            }
+
+            guard let rawDefault = value.forProperty("default"), !rawDefault.isUndefined else {
+                return .failure(.invalidManifest("\(prefix).default is required"))
+            }
+            let defaultValue: ExtensionConfigValue
+            switch type {
+            case .boolean:
+                guard rawDefault.isBoolean else {
+                    return .failure(.invalidManifest("\(prefix).default must be a boolean"))
+                }
+                defaultValue = .boolean(rawDefault.toBool())
+            case .number:
+                guard rawDefault.isNumber else {
+                    return .failure(.invalidManifest("\(prefix).default must be a number"))
+                }
+                let number = rawDefault.toDouble()
+                guard number.isFinite else {
+                    return .failure(
+                        .invalidManifest("\(prefix).default must be a finite number")
+                    )
+                }
+                defaultValue = .number(number)
+            case .string, .choice:
+                guard rawDefault.isString, let string = rawDefault.toString() else {
+                    let expected = type == .choice ? "a string for a choice field" : "a string"
+                    return .failure(.invalidManifest("\(prefix).default must be \(expected)"))
+                }
+                defaultValue = .string(string)
+            }
+
+            let field = ExtensionConfigField(
+                key: key,
+                type: type,
+                label: label,
+                defaultValue: defaultValue,
+                options: options
+            )
+            if let message = field.validationMessage(at: index) {
+                return .failure(.invalidManifest(message))
+            }
+            guard keys.insert(key).inserted else {
+                return .failure(.invalidManifest("config keys must be unique"))
+            }
+            fields.append(field)
+        }
+        return .success(fields)
     }
 
     private static func hookFunctions(
@@ -647,6 +794,24 @@ final class ExtensionHost {
             return nil
         }
         return property.toString()
+    }
+
+    private static func installConfig(
+        _ settings: [String: ExtensionConfigValue],
+        in context: JSContext
+    ) {
+        let config = JSValue(newObjectIn: context)
+        for (key, value) in settings {
+            switch value {
+            case .boolean(let boolean):
+                config?.setObject(boolean, forKeyedSubscript: key as NSString)
+            case .number(let number):
+                config?.setObject(number, forKeyedSubscript: key as NSString)
+            case .string(let string):
+                config?.setObject(string, forKeyedSubscript: key as NSString)
+            }
+        }
+        context.setObject(config, forKeyedSubscript: "config" as NSString)
     }
 
     private static func callHook(

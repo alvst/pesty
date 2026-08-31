@@ -843,68 +843,181 @@ private struct ExtensionsSettings: View {
         let isQuarantined = catalog.isQuarantined(installedExtension.id)
         let showsQuarantineWarning = isQuarantined || installedExtension.autoDisabledAt != nil
 
-        return HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 7) {
-                    Text(installedExtension.manifest.name)
-                        .font(.system(size: 13, weight: .medium))
-                    Text("Version \(installedExtension.manifest.version)")
-                        .font(.caption)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(installedExtension.manifest.name)
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Version \(installedExtension.manifest.version)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if installedExtension.isBundled {
+                            Text("Bundled")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.primary.opacity(0.06), in: Capsule())
+                        }
+                    }
+                    Text(installedExtension.id)
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.secondary)
-                    if installedExtension.isBundled {
-                        Text("Bundled")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.primary.opacity(0.06), in: Capsule())
+                    HStack(spacing: 4) {
+                        ForEach(installedExtension.manifest.effectiveHooks, id: \.self) { hook in
+                            Text(hook.capitalized)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.primary.opacity(0.06), in: Capsule())
+                                .accessibilityLabel("\(hook) hook")
+                        }
                     }
-                }
-                Text(installedExtension.id)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
-                    ForEach(installedExtension.manifest.effectiveHooks, id: \.self) { hook in
-                        Text(hook.capitalized)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.primary.opacity(0.06), in: Capsule())
-                            .accessibilityLabel("\(hook) hook")
-                    }
-                }
-                .padding(.top, 2)
-                if showsQuarantineWarning {
-                    Label(
-                        "Turned off after repeated failures or a timeout",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.orange)
                     .padding(.top, 2)
+                    if showsQuarantineWarning {
+                        Label(
+                            "Turned off after repeated failures or a timeout",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    Toggle(
+                        "Enable \(installedExtension.manifest.name)",
+                        isOn: Binding(
+                            get: { installedExtension.enabled },
+                            set: { catalog.setEnabled($0, id: installedExtension.id) }
+                        )
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("Enable \(installedExtension.manifest.name)")
+
+                    Button("Uninstall", role: .destructive) {
+                        uninstallCandidate = installedExtension
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 8) {
-                Toggle(
-                    "Enable \(installedExtension.manifest.name)",
-                    isOn: Binding(
-                        get: { installedExtension.enabled },
-                        set: { catalog.setEnabled($0, id: installedExtension.id) }
-                    )
-                )
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .accessibilityLabel("Enable \(installedExtension.manifest.name)")
-
-                Button("Uninstall", role: .destructive) {
-                    uninstallCandidate = installedExtension
+            if !installedExtension.manifest.config.isEmpty {
+                Divider()
+                    .padding(.vertical, 2)
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(installedExtension.manifest.config) { field in
+                        configRow(field, extensionID: installedExtension.id)
+                    }
                 }
+                .padding(.leading, 2)
+                .padding(.trailing, 4)
             }
         }
         .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private func configRow(_ field: ExtensionConfigField, extensionID: String) -> some View {
+        HStack(spacing: 12) {
+            Text(field.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+
+            switch field.type {
+            case .boolean:
+                Toggle(field.label, isOn: booleanBinding(for: field, extensionID: extensionID))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel(field.label)
+            case .number:
+                TextField(
+                    field.label,
+                    value: numberBinding(for: field, extensionID: extensionID),
+                    format: .number
+                )
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 110)
+                .accessibilityLabel(field.label)
+            case .string:
+                TextField(field.label, text: stringBinding(for: field, extensionID: extensionID))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 190)
+                    .accessibilityLabel(field.label)
+            case .choice:
+                Picker(
+                    field.label,
+                    selection: stringBinding(for: field, extensionID: extensionID)
+                ) {
+                    ForEach(field.options ?? [], id: \.self) { option in
+                        Text(option).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 150, alignment: .trailing)
+                .accessibilityLabel(field.label)
+            }
+        }
+    }
+
+    private func booleanBinding(
+        for field: ExtensionConfigField,
+        extensionID: String
+    ) -> Binding<Bool> {
+        Binding(
+            get: {
+                guard case .boolean(let value) = configValue(for: field, extensionID: extensionID)
+                else { return false }
+                return value
+            },
+            set: { catalog.setSetting(.boolean($0), forKey: field.key, id: extensionID) }
+        )
+    }
+
+    private func numberBinding(
+        for field: ExtensionConfigField,
+        extensionID: String
+    ) -> Binding<Double> {
+        Binding(
+            get: {
+                guard case .number(let value) = configValue(for: field, extensionID: extensionID)
+                else { return 0 }
+                return value
+            },
+            set: { catalog.setSetting(.number($0), forKey: field.key, id: extensionID) }
+        )
+    }
+
+    private func stringBinding(
+        for field: ExtensionConfigField,
+        extensionID: String
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                guard case .string(let value) = configValue(for: field, extensionID: extensionID)
+                else { return "" }
+                return value
+            },
+            set: { value in
+                let bounded = String(value.prefix(ExtensionConfigField.maximumStringCharacters))
+                catalog.setSetting(.string(bounded), forKey: field.key, id: extensionID)
+            }
+        )
+    }
+
+    private func configValue(
+        for field: ExtensionConfigField,
+        extensionID: String
+    ) -> ExtensionConfigValue {
+        catalog.effectiveSettings(for: extensionID)[field.key] ?? field.defaultValue
     }
 
     private func install() {

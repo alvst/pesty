@@ -333,6 +333,212 @@ final class ExtensionHostTests: XCTestCase {
         )
     }
 
+    func testConfigManifestParsesAllFieldTypes() throws {
+        let host = ExtensionHost()
+        let source = configScript(
+            config: #"""
+            [
+              { key: "flag", type: "boolean", label: " Enabled ", default: true },
+              { key: "ratio", type: "number", label: "Ratio", default: 2.5 },
+              { key: "suffix", type: "string", label: "Suffix", default: "tok" },
+              { key: "profile", type: "choice", label: "Profile", default: "fast",
+                options: ["slow", "fast"] }
+            ]
+            """#
+        )
+
+        let manifest = try host.validate(source: source).get()
+
+        XCTAssertEqual(
+            manifest.config,
+            [
+                ExtensionConfigField(
+                    key: "flag",
+                    type: .boolean,
+                    label: "Enabled",
+                    defaultValue: .boolean(true)
+                ),
+                ExtensionConfigField(
+                    key: "ratio",
+                    type: .number,
+                    label: "Ratio",
+                    defaultValue: .number(2.5)
+                ),
+                ExtensionConfigField(
+                    key: "suffix",
+                    type: .string,
+                    label: "Suffix",
+                    defaultValue: .string("tok")
+                ),
+                ExtensionConfigField(
+                    key: "profile",
+                    type: .choice,
+                    label: "Profile",
+                    defaultValue: .string("fast"),
+                    options: ["slow", "fast"]
+                )
+            ]
+        )
+    }
+
+    func testConfigManifestValidationMatrix() {
+        let host = ExtensionHost()
+        let validBoolean = #"{ key: "flag", type: "boolean", label: "Flag", default: false }"#
+        let nineFields = (0..<9).map {
+            #"{ key: "key\#($0)", type: "boolean", label: "Flag", default: false }"#
+        }.joined(separator: ",")
+        let elevenOptions = (0..<11).map { #""option\#($0)""# }.joined(separator: ",")
+
+        let cases: [(name: String, config: String, message: String)] = [
+            ("not array", "{}", "config must be an array"),
+            ("too many fields", "[\(nineFields)]", "config must contain at most 8 fields"),
+            ("field not object", "[42]", "config[0] must be an object"),
+            (
+                "key not string",
+                #"[{ key: 42, type: "boolean", label: "Flag", default: false }]"#,
+                "config[0].key must be a string"
+            ),
+            (
+                "empty key",
+                #"[{ key: "", type: "boolean", label: "Flag", default: false }]"#,
+                "config[0].key must be 1-32 lowercase ASCII letters, digits, underscores, or hyphens"
+            ),
+            (
+                "long key",
+                #"[{ key: "\#(String(repeating: "a", count: 33))", type: "boolean", label: "Flag", default: false }]"#,
+                "config[0].key must be 1-32 lowercase ASCII letters, digits, underscores, or hyphens"
+            ),
+            (
+                "invalid key character",
+                #"[{ key: "Upper", type: "boolean", label: "Flag", default: false }]"#,
+                "config[0].key must be 1-32 lowercase ASCII letters, digits, underscores, or hyphens"
+            ),
+            (
+                "duplicate key",
+                "[\(validBoolean), \(validBoolean)]",
+                "config keys must be unique"
+            ),
+            (
+                "type not string",
+                #"[{ key: "flag", type: 42, label: "Flag", default: false }]"#,
+                "config[0].type must be boolean, number, string, or choice"
+            ),
+            (
+                "unknown type",
+                #"[{ key: "flag", type: "date", label: "Flag", default: false }]"#,
+                "config[0].type must be boolean, number, string, or choice"
+            ),
+            (
+                "label not string",
+                #"[{ key: "flag", type: "boolean", label: 42, default: false }]"#,
+                "config[0].label must be a string"
+            ),
+            (
+                "blank label",
+                #"[{ key: "flag", type: "boolean", label: "   ", default: false }]"#,
+                "config[0].label must be non-empty after trimming and at most 40 characters"
+            ),
+            (
+                "long label",
+                #"[{ key: "flag", type: "boolean", label: "\#(String(repeating: "a", count: 41))", default: false }]"#,
+                "config[0].label must be non-empty after trimming and at most 40 characters"
+            ),
+            (
+                "missing default",
+                #"[{ key: "flag", type: "boolean", label: "Flag" }]"#,
+                "config[0].default is required"
+            ),
+            (
+                "boolean default type",
+                #"[{ key: "flag", type: "boolean", label: "Flag", default: "false" }]"#,
+                "config[0].default must be a boolean"
+            ),
+            (
+                "number default type",
+                #"[{ key: "ratio", type: "number", label: "Ratio", default: "4" }]"#,
+                "config[0].default must be a number"
+            ),
+            (
+                "nonfinite number",
+                #"[{ key: "ratio", type: "number", label: "Ratio", default: Infinity }]"#,
+                "config[0].default must be a finite number"
+            ),
+            (
+                "string default type",
+                #"[{ key: "suffix", type: "string", label: "Suffix", default: false }]"#,
+                "config[0].default must be a string"
+            ),
+            (
+                "long string default",
+                #"[{ key: "suffix", type: "string", label: "Suffix", default: "\#(String(repeating: "a", count: 201))" }]"#,
+                "config[0].default must be at most 200 characters"
+            ),
+            (
+                "options on non-choice",
+                #"[{ key: "flag", type: "boolean", label: "Flag", default: false, options: ["a", "b"] }]"#,
+                "config[0].options is only allowed for choice fields"
+            ),
+            (
+                "missing choice options",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a" }]"#,
+                "config[0].options must contain 2-10 strings for a choice field"
+            ),
+            (
+                "choice options not array",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: {} }]"#,
+                "config[0].options must contain 2-10 strings for a choice field"
+            ),
+            (
+                "too few choice options",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: ["a"] }]"#,
+                "config[0].options must contain 2-10 strings for a choice field"
+            ),
+            (
+                "too many choice options",
+                "[{ key: \"mode\", type: \"choice\", label: \"Mode\", default: \"option0\", options: [\(elevenOptions)] }]",
+                "config[0].options must contain 2-10 strings for a choice field"
+            ),
+            (
+                "choice option not string",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: ["a", 2] }]"#,
+                "config[0].options entries must be strings"
+            ),
+            (
+                "empty choice option",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: ["a", ""] }]"#,
+                "config[0].options entries must be non-empty strings of at most 30 characters"
+            ),
+            (
+                "long choice option",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: ["a", "\#(String(repeating: "b", count: 31))"] }]"#,
+                "config[0].options entries must be non-empty strings of at most 30 characters"
+            ),
+            (
+                "duplicate choice option",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "a", options: ["a", "a"] }]"#,
+                "config[0].options entries must be unique"
+            ),
+            (
+                "choice default type",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: false, options: ["a", "b"] }]"#,
+                "config[0].default must be a string for a choice field"
+            ),
+            (
+                "choice default absent from options",
+                #"[{ key: "mode", type: "choice", label: "Mode", default: "c", options: ["a", "b"] }]"#,
+                "config[0].default must be one of the choice options"
+            )
+        ]
+
+        for testCase in cases {
+            XCTAssertEqual(
+                host.validate(source: configScript(config: testCase.config)),
+                .failure(.invalidManifest(testCase.message)),
+                testCase.name
+            )
+        }
+    }
+
     func testPerHookExceptionKeepsOtherValuesAndCleanEvaluationResetsFailures() {
         let host = ExtensionHost()
         let extensionID = "com.example.partial-failure"
@@ -651,6 +857,161 @@ final class ExtensionHostTests: XCTestCase {
         XCTAssertFalse(host.isQuarantined(extensionValue.id))
     }
 
+    func testConfigGlobalReceivesAllTypesAndChangesBetweenEvaluations() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.config-values",
+          name: "Config Values",
+          version: "1.0",
+          api: 1,
+          config: [
+            { key: "flag", type: "boolean", label: "Flag", default: false },
+            { key: "ratio", type: "number", label: "Ratio", default: 1 },
+            { key: "suffix", type: "string", label: "Suffix", default: "old" },
+            { key: "mode", type: "choice", label: "Mode", default: "slow",
+              options: ["slow", "fast"] }
+          ],
+          badge: function (clip) {
+            return [config.flag, config.ratio, config.suffix, config.mode].join("|");
+          }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue,
+                settings: [
+                    "flag": .boolean(true),
+                    "ratio": .number(2.5),
+                    "suffix": .string("new"),
+                    "mode": .string("fast")
+                ]
+            ),
+            .success("true|2.5|new|fast")
+        )
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue,
+                settings: [
+                    "flag": .boolean(false),
+                    "ratio": .number(3),
+                    "suffix": .string("next"),
+                    "mode": .string("slow")
+                ]
+            ),
+            .success("false|3|next|slow")
+        )
+    }
+
+    func testConfigIsAnEmptyObjectAndInjectionShapedStringsRemainData() throws {
+        let host = ExtensionHost()
+        let emptySource = #"""
+        pesty.register({
+          id: "com.example.empty-config",
+          name: "Empty Config",
+          version: "1.0",
+          api: 1,
+          badge: function (clip) {
+            return typeof config + ":" + Object.keys(config).length;
+          }
+        });
+        """#
+        let emptyManifest = try host.validate(source: emptySource).get()
+        let emptyExtension = InstalledExtension(
+            manifest: emptyManifest,
+            source: emptySource,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+        XCTAssertEqual(
+            host.badgeSync(clipType: "text", text: "hello", extension: emptyExtension),
+            .success("object:0")
+        )
+
+        let injectionSource = #"""
+        pesty.register({
+          id: "com.example.config-injection",
+          name: "Config Injection",
+          version: "1.0",
+          api: 1,
+          config: [
+            { key: "payload", type: "string", label: "Payload", default: "safe" }
+          ],
+          badge: function (clip) {
+            return (config.payload === clip.text ? "same" : "changed")
+              + ":" + typeof globalThis.pwned;
+          }
+        });
+        """#
+        let injectionManifest = try host.validate(source: injectionSource).get()
+        let injectionExtension = InstalledExtension(
+            manifest: injectionManifest,
+            source: injectionSource,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+        let payload = #"'\"\\); globalThis.pwned = true; // <script>"#
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: payload,
+                extension: injectionExtension,
+                settings: ["payload": .string(payload)]
+            ),
+            .success("same:undefined")
+        )
+    }
+
+    func testTransformReceivesConfigSettings() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.config-transform",
+          name: "Config Transform",
+          version: "1.0",
+          api: 1,
+          config: [
+            { key: "prefix", type: "string", label: "Prefix", default: "default:" }
+          ],
+          transform: function (clip) { return config.prefix + clip.text; }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.transformSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue,
+                settings: ["prefix": .string("configured:")]
+            ),
+            .success("configured:hello")
+        )
+    }
+
     func testBundledTokenCountExtension() {
         let host = ExtensionHost()
         let manifest = ExtensionManifest(
@@ -658,7 +1019,16 @@ final class ExtensionHostTests: XCTestCase {
             name: "Token Count",
             version: "1.0",
             api: 1,
-            hooks: ["badge"]
+            hooks: ["badge"],
+            config: [
+                ExtensionConfigField(
+                    key: "profile",
+                    type: .choice,
+                    label: "Token profile",
+                    defaultValue: .string("default"),
+                    options: ["default", "cjk-heavy"]
+                )
+            ]
         )
         let extensionValue = InstalledExtension(
             manifest: manifest,
@@ -672,6 +1042,15 @@ final class ExtensionHostTests: XCTestCase {
         XCTAssertEqual(
             host.badgeSync(clipType: "text", text: "hello world", extension: extensionValue),
             .success("≈3 tok")
+        )
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello world",
+                extension: extensionValue,
+                settings: ["profile": .string("cjk-heavy")]
+            ),
+            .success("≈8 tok")
         )
         XCTAssertEqual(
             host.badgeSync(clipType: "image", text: "pixels", extension: extensionValue),
@@ -763,6 +1142,19 @@ final class ExtensionHostTests: XCTestCase {
           version: "\(version)",
           api: \(api),
           badge: function (clip) { \(badgeBody) }
+        });
+        """
+    }
+
+    private func configScript(config: String) -> String {
+        """
+        pesty.register({
+          id: "com.example.config",
+          name: "Config",
+          version: "1.0",
+          api: 1,
+          config: \(config),
+          badge: function (clip) { return "ok"; }
         });
         """
     }

@@ -57,8 +57,12 @@ final class ExtensionCatalog {
         case .success(let manifest):
             let replaced: Bool
             if let index = extensions.firstIndex(where: { $0.id == manifest.id }) {
+                let retainedSettings = extensions[index].settings.filter { key, value in
+                    manifest.config.first(where: { $0.key == key })?.accepts(value) == true
+                }
                 extensions[index].manifest = manifest
                 extensions[index].source = source
+                extensions[index].settings = retainedSettings
                 replaced = true
             } else {
                 extensions.append(
@@ -103,6 +107,32 @@ final class ExtensionCatalog {
         extensions[index].enabled = enabled
         saveNow()
         if !enabled { onExtensionInvalidated?(id) }
+    }
+
+    func setSetting(_ value: ExtensionConfigValue, forKey key: String, id: String) {
+        guard let index = extensions.firstIndex(where: { $0.id == id }),
+              let field = extensions[index].manifest.config.first(where: { $0.key == key }),
+              field.accepts(value),
+              extensions[index].settings[key] != value else { return }
+
+        extensions[index].settings[key] = value
+        saveNow()
+        onExtensionInvalidated?(id)
+    }
+
+    func effectiveSettings(for id: String) -> [String: ExtensionConfigValue] {
+        guard let installedExtension = extensions.first(where: { $0.id == id }) else {
+            return [:]
+        }
+
+        var values: [String: ExtensionConfigValue] = [:]
+        for field in installedExtension.manifest.config {
+            values[field.key] = field.defaultValue
+            if let stored = installedExtension.settings[field.key], field.accepts(stored) {
+                values[field.key] = stored
+            }
+        }
+        return values
     }
 
     private func autoDisableQuarantinedExtension(id: String) {

@@ -5,6 +5,15 @@ enum BundledExtensions {
       name: "Token Count",
       version: "1.0",
       api: 1,
+      config: [
+        {
+          key: "profile",
+          type: "choice",
+          label: "Token profile",
+          default: "default",
+          options: ["default", "cjk-heavy"]
+        }
+      ],
       badge: function (clip) {
         var PROFILES = {
           "default": 4.0,
@@ -14,7 +23,8 @@ enum BundledExtensions {
         if (textTypes.indexOf(clip.type) === -1 || clip.text.length === 0) {
           return null;
         }
-        var count = Math.max(1, Math.ceil(clip.text.length / PROFILES["default"]));
+        var profile = config.profile || "default";
+        var count = Math.max(1, Math.ceil(clip.text.length / PROFILES[profile]));
         return "≈" + count + " tok";
       }
     });

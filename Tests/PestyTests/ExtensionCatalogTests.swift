@@ -381,6 +381,212 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertNil(stored.first(where: { $0.id == extensionID })?.autoDisabledAt)
     }
 
+    func testConfigValueAndInstalledSettingsCodableRoundTrips() throws {
+        let values: [ExtensionConfigValue] = [
+            .boolean(true),
+            .number(2.5),
+            .string(#"quotes " slashes \\ and script </script>"#)
+        ]
+        for value in values {
+            let data = try JSONEncoder().encode(value)
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: data) as? [String: Any]
+            )
+            XCTAssertEqual(object.count, 1)
+            XCTAssertEqual(try JSONDecoder().decode(ExtensionConfigValue.self, from: data), value)
+        }
+
+        let manifest = ExtensionManifest(
+            id: "com.example.codable-config",
+            name: "Codable Config",
+            version: "1.0",
+            api: 1,
+            hooks: ["badge"],
+            config: [
+                ExtensionConfigField(
+                    key: "enabled",
+                    type: .boolean,
+                    label: "Enabled",
+                    defaultValue: .boolean(false)
+                ),
+                ExtensionConfigField(
+                    key: "mode",
+                    type: .choice,
+                    label: "Mode",
+                    defaultValue: .string("a"),
+                    options: ["a", "b"]
+                )
+            ]
+        )
+        let installedExtension = InstalledExtension(
+            manifest: manifest,
+            source: "source",
+            enabled: true,
+            isBundled: false,
+            installedAt: Date(timeIntervalSince1970: 123),
+            settings: ["enabled": .boolean(true), "mode": .string("b")]
+        )
+
+        let data = try JSONEncoder().encode(installedExtension)
+        XCTAssertEqual(
+            try JSONDecoder().decode(InstalledExtension.self, from: data),
+            installedExtension
+        )
+    }
+
+    func testSetSettingValidatesPersistsAndInvalidates() throws {
+        let extensionID = "com.example.settings"
+        let catalog = ExtensionCatalog(directory: directory)
+        _ = try catalog.install(
+            source: configScript(
+                id: extensionID,
+                config: #"""
+                [
+                  { key: "flag", type: "boolean", label: "Flag", default: false },
+                  { key: "ratio", type: "number", label: "Ratio", default: 1 },
+                  { key: "suffix", type: "string", label: "Suffix", default: "old" },
+                  { key: "mode", type: "choice", label: "Mode", default: "slow",
+                    options: ["slow", "fast"] }
+                ]
+                """#
+            )
+        ).get()
+        var invalidatedIDs: [String] = []
+        catalog.onExtensionInvalidated = { invalidatedIDs.append($0) }
+
+        catalog.setSetting(.boolean(true), forKey: "flag", id: extensionID)
+        catalog.setSetting(.number(2.5), forKey: "ratio", id: extensionID)
+        catalog.setSetting(.string("new"), forKey: "suffix", id: extensionID)
+        catalog.setSetting(.string("fast"), forKey: "mode", id: extensionID)
+
+        let expected: [String: ExtensionConfigValue] = [
+            "flag": .boolean(true),
+            "ratio": .number(2.5),
+            "suffix": .string("new"),
+            "mode": .string("fast")
+        ]
+        XCTAssertEqual(catalog.effectiveSettings(for: extensionID), expected)
+        XCTAssertEqual(invalidatedIDs, Array(repeating: extensionID, count: 4))
+
+        let storeURL = directory.appendingPathComponent("extensions.json")
+        let dataBeforeRejectedValues = try Data(contentsOf: storeURL)
+        catalog.setSetting(.string("wrong"), forKey: "flag", id: extensionID)
+        catalog.setSetting(.string("wrong"), forKey: "ratio", id: extensionID)
+        catalog.setSetting(.number(.infinity), forKey: "ratio", id: extensionID)
+        catalog.setSetting(
+            .string(String(repeating: "x", count: 201)),
+            forKey: "suffix",
+            id: extensionID
+        )
+        catalog.setSetting(.string("unknown"), forKey: "mode", id: extensionID)
+        catalog.setSetting(.string("value"), forKey: "missing", id: extensionID)
+        catalog.setSetting(.boolean(true), forKey: "flag", id: extensionID)
+
+        XCTAssertEqual(catalog.effectiveSettings(for: extensionID), expected)
+        XCTAssertEqual(invalidatedIDs, Array(repeating: extensionID, count: 4))
+        XCTAssertEqual(try Data(contentsOf: storeURL), dataBeforeRejectedValues)
+
+        let reloaded = ExtensionCatalog(directory: directory)
+        XCTAssertEqual(reloaded.effectiveSettings(for: extensionID), expected)
+        XCTAssertEqual(
+            reloaded.extensions.first(where: { $0.id == extensionID })?.settings,
+            expected
+        )
+    }
+
+    func testEffectiveSettingsUsesDefaultsAndDropsInvalidStoredKeys() throws {
+        let extensionID = "com.example.effective-settings"
+        let host = ExtensionHost()
+        let source = configScript(
+            id: extensionID,
+            config: #"""
+            [
+              { key: "flag", type: "boolean", label: "Flag", default: false },
+              { key: "mode", type: "choice", label: "Mode", default: "a",
+                options: ["a", "b"] }
+            ]
+            """#
+        )
+        let manifest = try host.validate(source: source).get()
+        let installedExtension = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now,
+            settings: [
+                "flag": .string("wrong type"),
+                "mode": .string("removed option"),
+                "removed": .string("stale")
+            ]
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode([installedExtension]).write(
+            to: directory.appendingPathComponent("extensions.json")
+        )
+
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+
+        XCTAssertEqual(
+            catalog.effectiveSettings(for: extensionID),
+            ["flag": .boolean(false), "mode": .string("a")]
+        )
+        XCTAssertTrue(catalog.effectiveSettings(for: "missing").isEmpty)
+    }
+
+    func testSameIDReinstallPrunesSettingsAgainstNewSchema() throws {
+        let extensionID = "com.example.reinstall-settings"
+        let catalog = ExtensionCatalog(directory: directory)
+        _ = try catalog.install(
+            source: configScript(
+                id: extensionID,
+                version: "1.0",
+                config: #"""
+                [
+                  { key: "flag", type: "boolean", label: "Flag", default: false },
+                  { key: "mode", type: "choice", label: "Mode", default: "a",
+                    options: ["a", "b"] },
+                  { key: "removed", type: "string", label: "Removed", default: "old" }
+                ]
+                """#
+            )
+        ).get()
+        catalog.setSetting(.boolean(true), forKey: "flag", id: extensionID)
+        catalog.setSetting(.string("b"), forKey: "mode", id: extensionID)
+        catalog.setSetting(.string("saved"), forKey: "removed", id: extensionID)
+
+        _ = try catalog.install(
+            source: configScript(
+                id: extensionID,
+                version: "2.0",
+                config: #"""
+                [
+                  { key: "flag", type: "boolean", label: "Flag", default: false },
+                  { key: "mode", type: "choice", label: "Mode", default: "c",
+                    options: ["b", "c"] },
+                  { key: "ratio", type: "number", label: "Ratio", default: 4 }
+                ]
+                """#
+            )
+        ).get()
+
+        let installedExtension = try XCTUnwrap(
+            catalog.extensions.first(where: { $0.id == extensionID })
+        )
+        XCTAssertEqual(
+            installedExtension.settings,
+            ["flag": .boolean(true), "mode": .string("b")]
+        )
+        XCTAssertEqual(
+            catalog.effectiveSettings(for: extensionID),
+            ["flag": .boolean(true), "mode": .string("b"), "ratio": .number(4)]
+        )
+
+        let reloaded = ExtensionCatalog(directory: directory)
+        XCTAssertEqual(reloaded.extensions.first(where: { $0.id == extensionID })?.settings,
+                       installedExtension.settings)
+    }
+
     func testInstalledExtensionDecodesOldJSONWithoutAutoDisabledAt() throws {
         let fixture = #"""
         [
@@ -412,6 +618,8 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertNil(installedExtension.manifest.types)
         XCTAssertTrue(installedExtension.manifest.hooks.isEmpty)
         XCTAssertEqual(installedExtension.manifest.effectiveHooks, ["badge"])
+        XCTAssertTrue(installedExtension.manifest.config.isEmpty)
+        XCTAssertTrue(installedExtension.settings.isEmpty)
     }
 
     private func permissions(of url: URL) throws -> Int {
@@ -432,6 +640,23 @@ final class ExtensionCatalogTests: XCTestCase {
           version: "\(version)",
           api: 1,
           badge: function (clip) { \(badgeBody) }
+        });
+        """
+    }
+
+    private func configScript(
+        id: String,
+        version: String = "1.0",
+        config: String
+    ) -> String {
+        """
+        pesty.register({
+          id: "\(id)",
+          name: "Config",
+          version: "\(version)",
+          api: 1,
+          config: \(config),
+          badge: function (clip) { return "ok"; }
         });
         """
     }

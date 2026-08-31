@@ -569,7 +569,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         ExtensionCatalog.sharedHost.transform(
             clipType: item.type.rawValue,
             text: item.text ?? "",
-            extension: installedExtension
+            extension: installedExtension,
+            settings: ExtensionCatalog.shared.effectiveSettings(for: installedExtension.id)
         ) { [monitor] transformed in
             // A failed or empty transform is a no-op. In particular, do not
             // call PasteService, because that would replace the pasteboard.

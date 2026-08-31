@@ -197,6 +197,38 @@ final class ExtensionResultStoreTests: XCTestCase {
         XCTAssertTrue(store.badges(for: item.id).isEmpty)
     }
 
+    func testSettingChangePurgesAndReevaluatesWithEffectiveConfig() async throws {
+        let (_, catalog, store) = makeSystem()
+        let extensionID = "com.example.configured-result"
+        _ = try install(
+            source: #"""
+            pesty.register({
+              id: "com.example.configured-result",
+              name: "Configured Result",
+              version: "1.0",
+              api: 1,
+              config: [
+                { key: "suffix", type: "string", label: "Suffix", default: "old" }
+              ],
+              badge: function (clip) { return config.suffix; }
+            });
+            """#,
+            in: catalog
+        )
+        let item = ClipItem(type: .text, text: "hello")
+
+        store.requestDecorations(for: item)
+        await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
+        XCTAssertEqual(store.badges(for: item.id), ["old"])
+
+        catalog.setSetting(.string("new"), forKey: "suffix", id: extensionID)
+        XCTAssertFalse(store.hasCachedOutcome(for: item.id, extensionID: extensionID))
+
+        store.requestDecorations(for: item)
+        await waitUntil { store.hasCachedOutcome(for: item.id, extensionID: extensionID) }
+        XCTAssertEqual(store.badges(for: item.id), ["new"])
+    }
+
     func testBadgesFollowCatalogOrderAndSkipNilOutcomes() async throws {
         let (_, catalog, store) = makeSystem()
         _ = try install(
