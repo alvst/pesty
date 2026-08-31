@@ -14,6 +14,83 @@ extension Notification.Name {
     static let pestyDragSessionEnded = Notification.Name("PestyDragSessionEnded")
 }
 
+enum PinboardJump {
+    private static let shortcutModifiers: NSEvent.ModifierFlags = [
+        .command, .option, .control, .shift
+    ]
+
+    nonisolated static func index(
+        forKeyCode keyCode: Int,
+        modifiers: NSEvent.ModifierFlags
+    ) -> Int? {
+        guard normalized(modifiers) == [.command, .option] else { return nil }
+        return digitIndex(forKeyCode: keyCode)
+    }
+
+    nonisolated static func digitIndex(forKeyCode keyCode: Int) -> Int? {
+        switch keyCode {
+        case kVK_ANSI_1, kVK_ANSI_Keypad1: 0
+        case kVK_ANSI_2, kVK_ANSI_Keypad2: 1
+        case kVK_ANSI_3, kVK_ANSI_Keypad3: 2
+        case kVK_ANSI_4, kVK_ANSI_Keypad4: 3
+        case kVK_ANSI_5, kVK_ANSI_Keypad5: 4
+        case kVK_ANSI_6, kVK_ANSI_Keypad6: 5
+        case kVK_ANSI_7, kVK_ANSI_Keypad7: 6
+        case kVK_ANSI_8, kVK_ANSI_Keypad8: 7
+        case kVK_ANSI_9, kVK_ANSI_Keypad9: 8
+        default: nil
+        }
+    }
+
+    nonisolated static func normalized(
+        _ modifiers: NSEvent.ModifierFlags
+    ) -> NSEvent.ModifierFlags {
+        modifiers.intersection(shortcutModifiers)
+    }
+}
+
+enum QuickPasteShortcut {
+    struct Match: Equatable {
+        let index: Int
+        let usesPlainText: Bool
+    }
+
+    nonisolated static func match(
+        forKeyCode keyCode: Int,
+        modifiers: NSEvent.ModifierFlags,
+        quickPasteModifier: Int,
+        plainTextModifier: Int
+    ) -> Match? {
+        guard let index = PinboardJump.digitIndex(forKeyCode: keyCode),
+              let quickFlags = flags(forCarbonModifier: quickPasteModifier),
+              !quickFlags.isEmpty else { return nil }
+
+        let eventFlags = PinboardJump.normalized(modifiers)
+        if eventFlags == quickFlags {
+            return Match(index: index, usesPlainText: false)
+        }
+        if let plainTextFlags = flags(forCarbonModifier: plainTextModifier),
+           eventFlags == quickFlags.union(plainTextFlags) {
+            return Match(index: index, usesPlainText: true)
+        }
+        return nil
+    }
+
+    nonisolated private static func flags(
+        forCarbonModifier modifier: Int
+    ) -> NSEvent.ModifierFlags? {
+        let supported = cmdKey | optionKey | controlKey | shiftKey
+        guard modifier & ~supported == 0 else { return nil }
+
+        var flags: NSEvent.ModifierFlags = []
+        if modifier & cmdKey != 0 { flags.insert(.command) }
+        if modifier & optionKey != 0 { flags.insert(.option) }
+        if modifier & controlKey != 0 { flags.insert(.control) }
+        if modifier & shiftKey != 0 { flags.insert(.shift) }
+        return flags
+    }
+}
+
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate {
     static let shared = AppController()
@@ -1513,16 +1590,33 @@ final class AppController: NSObject, NSApplicationDelegate {
         if searchHasFocus { return event }
         if renameHasFocus { return event }
 
+        // Quick Paste gets first refusal on digit chords. In particular, a
+        // user assignment that resolves to ⌘⌥ must win deterministically over
+        // the fixed Pinboard jump below.
         if store.source != .pasteStack,
-           includes(Settings.shared.quickPasteModifier, in: flags),
-           let chars = event.charactersIgnoringModifiers,
-           let n = Int(chars), (1...9).contains(n) {
+           let quickPaste = QuickPasteShortcut.match(
+               forKeyCode: code,
+               modifiers: flags,
+               quickPasteModifier: Settings.shared.quickPasteModifier,
+               plainTextModifier: Settings.shared.plainTextModifier
+           ) {
             monitor.pollNow()
             let items = store.visibleItems
-            if n <= items.count {
-                pasteItem(items[n - 1],
-                          format: includes(Settings.shared.plainTextModifier, in: flags) ? .plainText : .original)
+            if quickPaste.index < items.count {
+                pasteItem(
+                    items[quickPaste.index],
+                    format: quickPaste.usesPlainText ? .plainText : .original
+                )
             }
+            return nil
+        }
+
+        if let pinboardIndex = PinboardJump.index(forKeyCode: code, modifiers: flags) {
+            if pinboardIndex < store.pinboards.count {
+                store.selectPinboard(store.pinboards[pinboardIndex].id)
+            }
+            // Existing numbered Quick Paste consumes unavailable positions;
+            // Pinboard jumps follow that silent no-op convention as well.
             return nil
         }
 
@@ -1726,16 +1820,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         case let source:
             store.source = source
             store.selectFirst()
-        }
-    }
-
-    private func includes(_ carbonModifier: Int, in flags: NSEvent.ModifierFlags) -> Bool {
-        switch carbonModifier {
-        case cmdKey: flags.contains(.command)
-        case optionKey: flags.contains(.option)
-        case controlKey: flags.contains(.control)
-        case shiftKey: flags.contains(.shift)
-        default: false
         }
     }
 

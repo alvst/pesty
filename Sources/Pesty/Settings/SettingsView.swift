@@ -681,8 +681,15 @@ private struct ShortcutsSettings: View {
                             }
                             .font(.system(size: 14))
                             .padding(.vertical, 10)
+                            Divider()
+                            LabeledContent("Open Pinboard 1–9 (while the bar is shown)") {
+                                Text("⌘⌥1–9")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.system(size: 14))
+                            .padding(.vertical, 10)
                         }
-                        Text("Hold the plain-text modifier while using Quick Paste to remove formatting. With the defaults, ⌘⇧1 pastes the first item as plain text.")
+                        Text("Hold the plain-text modifier while using Quick Paste to remove formatting. With the defaults, ⌘⇧1 pastes the first item as plain text. Quick Paste takes precedence if its configured shortcut is ⌘⌥.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)

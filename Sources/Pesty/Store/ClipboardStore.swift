@@ -562,6 +562,14 @@ final class ClipboardStore {
         return b
     }
 
+    /// Shared by Pinboard tab clicks and keyboard jumps so both preserve the
+    /// current search and select its first visible result in exactly the same way.
+    func selectPinboard(_ id: UUID) {
+        guard pinboards.contains(where: { $0.id == id }) else { return }
+        source = .pinboard(id)
+        selectFirst()
+    }
+
     func renamePinboard(_ id: UUID, to name: String) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         pinboards[i].name = name

@@ -20,6 +20,8 @@ companions:
 ### Planned for 2.0.0 (macOS)
 
 #### Added
+- Added ⌘⌥1–9 shortcuts for opening Pinboards 1–9 in their displayed order
+  while the Paste Bar is shown.
 - Added an extension authoring cookbook with runnable examples for every API 1
   hook family and executable documentation tests that keep those examples
   valid and behaviorally verified.

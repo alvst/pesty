@@ -263,7 +263,7 @@ struct PinboardTabs: View {
             pill(title: board.name,
                  dot: board.color,
                  selected: store.source == .pinboard(board.id)) {
-                store.source = .pinboard(board.id); store.selectFirst()
+                store.selectPinboard(board.id)
             }
         }
     }
@@ -283,7 +283,7 @@ struct PinboardTabs: View {
                       selected: store.source == .pinboard(board.id))
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded {
-                store.source = .pinboard(board.id); store.selectFirst()
+                store.selectPinboard(board.id)
             })
             .onDrag {
                 pinboardDragLog.debug("onDrag FIRED for \(board.name, privacy: .public)")
