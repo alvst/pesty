@@ -1,3 +1,4 @@
+import CloudKit
 import XCTest
 @testable import Pesty
 
@@ -406,4 +407,208 @@ final class PestyLibraryTests: XCTestCase {
 
         XCTAssertEqual(library.activeBoards.map(\.id), [first.id, second.id])
     }
+
+    @MainActor
+    func testRefreshOnOpenReloadsSharedLibraryAndUsesActivationRefresh() throws {
+        let earlier = Date(timeIntervalSince1970: 1_000)
+        let later = Date(timeIntervalSince1970: 2_000)
+        let clipID = UUID()
+        let localClip = PestyClip(
+            id: clipID,
+            kind: .text,
+            text: "Local",
+            capturedAt: earlier,
+            updatedAt: earlier
+        )
+        let sharedClip = PestyClip(
+            id: clipID,
+            kind: .text,
+            text: "Shared",
+            capturedAt: earlier,
+            updatedAt: later
+        )
+        let syncService = RecordingLibrarySyncService()
+        var loadCount = 0
+        var savedLibrary: PestyLibrary?
+        let store = LibraryStore(
+            library: PestyLibrary(clips: [localClip], updatedAt: earlier),
+            syncService: syncService,
+            persistsToDisk: true,
+            sharedLibraryLoader: {
+                loadCount += 1
+                return PestyLibrary(clips: [sharedClip], updatedAt: later)
+            },
+            librarySaver: { savedLibrary = $0 }
+        )
+
+        store.refreshOnOpen()
+
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(store.clip(id: clipID)?.text, "Shared")
+        XCTAssertEqual(savedLibrary?.clip(id: clipID)?.text, "Shared")
+        XCTAssertEqual(syncService.refreshOnActivateCallCount, 1)
+        XCTAssertEqual(syncService.fetchNowCallCount, 0)
+    }
+
+    @MainActor
+    func testRefreshOnActivateKeepsFreshImmediateSyncWithoutDoubleFetch() async {
+        let startedAt = Date(timeIntervalSince1970: 3_000)
+        let clock = MutableDateProvider(startedAt)
+        let operation = ImmediateSyncOperationProbe()
+        let account = AccountStatusProbe()
+        let target = RecordingSyncTarget()
+        let service = CloudSyncService(
+            currentDate: { clock.date },
+            immediateSyncOperation: { try await operation.run() },
+            accountStatusProvider: { await account.status() }
+        )
+        service.start(target: target)
+        target.statuses.removeAll()
+
+        service.fetchNow()
+        await waitUntil { operation.callCount == 1 }
+        clock.date = startedAt.addingTimeInterval(10)
+        service.refreshOnActivate()
+        await waitUntil { account.callCount == 1 }
+
+        XCTAssertEqual(operation.callCount, 1)
+        XCTAssertEqual(target.statuses.last, .syncing)
+
+        operation.succeed(call: 0)
+        await waitUntil { target.statuses.last == .ready }
+        XCTAssertTrue(operation.cancelledCalls.isEmpty)
+    }
+
+    @MainActor
+    func testRefreshOnActivateReplacesStaleTaskAndOldCompletionCannotStompIt() async {
+        let startedAt = Date(timeIntervalSince1970: 4_000)
+        let clock = MutableDateProvider(startedAt)
+        let operation = ImmediateSyncOperationProbe()
+        let target = RecordingSyncTarget()
+        let service = CloudSyncService(
+            currentDate: { clock.date },
+            immediateSyncOperation: { try await operation.run() },
+            accountStatusProvider: { .available }
+        )
+        service.start(target: target)
+        target.statuses.removeAll()
+
+        service.fetchNow()
+        await waitUntil { operation.callCount == 1 }
+        clock.date = startedAt.addingTimeInterval(11)
+        service.refreshOnActivate()
+        await waitUntil { operation.callCount == 2 }
+
+        operation.fail(call: 0, with: ImmediateSyncTestError.staleCompletion)
+        await waitUntil { operation.finishedCalls.contains(0) }
+        service.fetchNow()
+        await Task.yield()
+
+        XCTAssertTrue(operation.cancelledCalls.contains(0))
+        XCTAssertEqual(operation.callCount, 2)
+        XCTAssertEqual(target.statuses.last, .syncing)
+
+        operation.succeed(call: 1)
+        await waitUntil { target.statuses.last == .ready }
+    }
+
+    @MainActor
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<1_000 {
+            if condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for asynchronous state", file: file, line: line)
+    }
+}
+
+@MainActor
+private final class RecordingLibrarySyncService: LibrarySyncing {
+    private(set) var fetchNowCallCount = 0
+    private(set) var refreshOnActivateCallCount = 0
+
+    func start(target: any LibrarySyncTarget) {}
+    func localLibraryDidChange() {}
+    func fetchNow() { fetchNowCallCount += 1 }
+    func refreshOnActivate() { refreshOnActivateCallCount += 1 }
+    func rebuildLocalReplica() {}
+}
+
+@MainActor
+private final class RecordingSyncTarget: LibrarySyncTarget {
+    var cloudSyncLibrary = PestyLibrary()
+    var statuses: [SyncStatus] = []
+
+    func applyRemoteSync(
+        clips: [CloudRecordCodec.DecodedClip],
+        boards: [PestyBoard],
+        deletedIDs: [UUID]
+    ) {}
+
+    func updateSyncStatus(_ status: SyncStatus) {
+        statuses.append(status)
+    }
+}
+
+@MainActor
+private final class MutableDateProvider {
+    var date: Date
+
+    init(_ date: Date) {
+        self.date = date
+    }
+}
+
+@MainActor
+private final class AccountStatusProbe {
+    private(set) var callCount = 0
+
+    func status() async -> CKAccountStatus {
+        callCount += 1
+        return .available
+    }
+}
+
+@MainActor
+private final class ImmediateSyncOperationProbe {
+    private var continuations: [Int: CheckedContinuation<Void, Error>] = [:]
+    private(set) var callCount = 0
+    private(set) var cancelledCalls: Set<Int> = []
+    private(set) var finishedCalls: Set<Int> = []
+
+    func run() async throws {
+        let call = callCount
+        callCount += 1
+        defer {
+            if Task.isCancelled { cancelledCalls.insert(call) }
+            finishedCalls.insert(call)
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            continuations[call] = continuation
+        }
+    }
+
+    func succeed(call: Int) {
+        guard let continuation = continuations.removeValue(forKey: call) else {
+            XCTFail("Missing immediate-sync continuation \(call)")
+            return
+        }
+        continuation.resume()
+    }
+
+    func fail(call: Int, with error: Error) {
+        guard let continuation = continuations.removeValue(forKey: call) else {
+            XCTFail("Missing immediate-sync continuation \(call)")
+            return
+        }
+        continuation.resume(throwing: error)
+    }
+}
+
+private enum ImmediateSyncTestError: Error {
+    case staleCompletion
 }

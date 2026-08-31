@@ -18,6 +18,8 @@ final class LibraryStore {
 
     private let syncService: any LibrarySyncing
     private let currentDate: () -> Date
+    private let sharedLibraryLoader: () -> PestyLibrary
+    private let librarySaver: (PestyLibrary) throws -> Void
     /// False for a demo launch: the seeded library lives only in memory and
     /// never overwrites the real one on disk.
     private let persistsToDisk: Bool
@@ -27,13 +29,21 @@ final class LibraryStore {
         library: PestyLibrary? = nil,
         syncService: (any LibrarySyncing)? = nil,
         currentDate: @escaping () -> Date = { .now },
-        persistsToDisk: Bool = true
+        persistsToDisk: Bool = true,
+        sharedLibraryLoader: @escaping () -> PestyLibrary = {
+            LocalLibraryPersistence.load()
+        },
+        librarySaver: @escaping (PestyLibrary) throws -> Void = {
+            try LocalLibraryPersistence.save($0)
+        }
     ) {
-        let initialLibrary = library ?? LocalLibraryPersistence.load()
+        let initialLibrary = library ?? sharedLibraryLoader()
         let now = currentDate()
         self.library = initialLibrary
         self.syncService = syncService ?? CloudSyncService()
         self.currentDate = currentDate
+        self.sharedLibraryLoader = sharedLibraryLoader
+        self.librarySaver = librarySaver
         self.persistsToDisk = persistsToDisk
         self.undoableDeletion = initialLibrary.undoableDeletion(at: now)
     }
@@ -58,7 +68,7 @@ final class LibraryStore {
 
     func reloadSharedLibrary() {
         guard persistsToDisk else { return }
-        let sharedLibrary = LocalLibraryPersistence.load()
+        let sharedLibrary = sharedLibraryLoader()
         guard sharedLibrary.updatedAt > library.updatedAt
                 || sharedLibrary.clips.count != library.clips.count
                 || sharedLibrary.boards.count != library.boards.count else { return }
@@ -69,6 +79,11 @@ final class LibraryStore {
 
     func refreshSyncStatus() async {
         syncService.fetchNow()
+    }
+
+    func refreshOnOpen() {
+        reloadSharedLibrary()
+        syncService.refreshOnActivate()
     }
 
     func clip(id: UUID) -> PestyClip? { library.clip(id: id) }
@@ -220,7 +235,7 @@ final class LibraryStore {
     private func persist(notifySync: Bool = true) {
         guard persistsToDisk else { return }
         do {
-            try LocalLibraryPersistence.save(library)
+            try librarySaver(library)
             WidgetCenter.shared.reloadAllTimelines()
             if notifySync { syncService.localLibraryDidChange() }
         } catch {

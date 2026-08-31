@@ -126,5 +126,6 @@ final class NoCloudSyncService: LibrarySyncing {
     func start(target: any LibrarySyncTarget) { target.updateSyncStatus(.ready) }
     func localLibraryDidChange() {}
     func fetchNow() {}
+    func refreshOnActivate() {}
     func rebuildLocalReplica() {}
 }

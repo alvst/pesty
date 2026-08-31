@@ -60,6 +60,7 @@ protocol LibrarySyncing: AnyObject {
     func start(target: any LibrarySyncTarget)
     func localLibraryDidChange()
     func fetchNow()
+    func refreshOnActivate()
     func rebuildLocalReplica()
 }
 
@@ -95,11 +96,30 @@ enum CloudSyncProjection {
 /// offline are retried automatically when the account becomes reachable.
 @MainActor
 final class CloudSyncService: LibrarySyncing {
+    private static let immediateSyncStaleInterval: TimeInterval = 10
+
     private weak var target: (any LibrarySyncTarget)?
     private var engine: CKSyncEngine?
     private var shadow: [String: String] = [:]
     private var isApplyingRemote = false
     private var immediateSyncTask: Task<Void, Never>?
+    private var immediateSyncStartedAt: Date?
+    private var immediateSyncGeneration: UInt64 = 0
+    private let currentDate: () -> Date
+    private let immediateSyncOperation: (() async throws -> Void)?
+    private let accountStatusProvider: () async throws -> CKAccountStatus
+
+    init(
+        currentDate: @escaping () -> Date = { .now },
+        immediateSyncOperation: (() async throws -> Void)? = nil,
+        accountStatusProvider: @escaping () async throws -> CKAccountStatus = {
+            try await CKContainer(identifier: CKSchema.containerID).accountStatus()
+        }
+    ) {
+        self.currentDate = currentDate
+        self.immediateSyncOperation = immediateSyncOperation
+        self.accountStatusProvider = accountStatusProvider
+    }
 
     private var stateURL: URL {
         LocalLibraryPersistence.supportDirectory.appendingPathComponent("cksync-state.json")
@@ -168,33 +188,79 @@ final class CloudSyncService: LibrarySyncing {
         diffAndEnqueue()
     }
 
+    func refreshOnActivate() {
+        if immediateSyncTask != nil,
+           let immediateSyncStartedAt,
+           currentDate().timeIntervalSince(immediateSyncStartedAt)
+               > Self.immediateSyncStaleInterval {
+            // A CloudKit call suspended in the background must not block every
+            // later foreground fetch. A fresh cold-launch task is left alone.
+            cancelImmediateSync()
+        }
+        refreshAccountStatus()
+        fetchNow()
+    }
+
     func fetchNow() {
-        guard let engine else {
+        guard engine != nil || immediateSyncOperation != nil else {
             if let target { start(target: target) }
             return
         }
         guard immediateSyncTask == nil else { return }
         target?.updateSyncStatus(.syncing)
+        immediateSyncGeneration &+= 1
+        let generation = immediateSyncGeneration
+        immediateSyncStartedAt = currentDate()
+        let engine = engine
+        let immediateSyncOperation = immediateSyncOperation
         immediateSyncTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.immediateSyncTask = nil }
+            var completionStatus: SyncStatus?
+            defer {
+                self.finishImmediateSync(
+                    generation: generation,
+                    status: completionStatus
+                )
+            }
             do {
-                try await engine.fetchChanges()
-                try await engine.sendChanges()
-                await MainActor.run { self.target?.updateSyncStatus(.ready) }
-            } catch {
-                await MainActor.run {
-                    self.target?.updateSyncStatus(.failed(Self.userFacingMessage(for: error)))
+                try Task.checkCancellation()
+                if let immediateSyncOperation {
+                    try await immediateSyncOperation()
+                } else {
+                    guard let engine else { return }
+                    try await engine.fetchChanges()
+                    try Task.checkCancellation()
+                    try await engine.sendChanges()
                 }
+                try Task.checkCancellation()
+                completionStatus = .ready
+            } catch {
+                guard !Task.isCancelled else { return }
+                completionStatus = .failed(Self.userFacingMessage(for: error))
             }
         }
+    }
+
+    private func finishImmediateSync(generation: UInt64, status: SyncStatus?) {
+        guard generation == immediateSyncGeneration else { return }
+        immediateSyncTask = nil
+        immediateSyncStartedAt = nil
+        if let status { target?.updateSyncStatus(status) }
+    }
+
+    private func cancelImmediateSync() {
+        // Invalidate first so a cancellation completion cannot clear or
+        // publish status over a task started immediately afterward.
+        immediateSyncGeneration &+= 1
+        immediateSyncTask?.cancel()
+        immediateSyncTask = nil
+        immediateSyncStartedAt = nil
     }
 
     /// Clears only local CloudKit bookkeeping, then downloads the account's
     /// records again. It intentionally does not enqueue deletions.
     func rebuildLocalReplica() {
-        immediateSyncTask?.cancel()
-        immediateSyncTask = nil
+        cancelImmediateSync()
         engine = nil
         shadow = [:]
         try? FileManager.default.removeItem(at: stateURL)
@@ -206,12 +272,13 @@ final class CloudSyncService: LibrarySyncing {
     }
 
     private func refreshAccountStatus() {
-        let container = CKContainer(identifier: CKSchema.containerID)
+        guard engine != nil || immediateSyncOperation != nil else { return }
+        let accountStatusProvider = accountStatusProvider
         Task {
             do {
-                let account = try await container.accountStatus()
+                let account = try await accountStatusProvider()
                 await MainActor.run {
-                    guard self.engine != nil else { return }
+                    guard self.engine != nil || self.immediateSyncOperation != nil else { return }
                     switch account {
                     case .available:
                         // The explicit launch/foreground fetch owns the ready

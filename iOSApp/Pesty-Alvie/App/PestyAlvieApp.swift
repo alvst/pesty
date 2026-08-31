@@ -18,8 +18,7 @@ struct PestyAlvieApp: App {
                 .task { libraryStore.start() }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
-                    libraryStore.reloadSharedLibrary()
-                    Task { await libraryStore.refreshSyncStatus() }
+                    libraryStore.refreshOnOpen()
                 }
         }
     }
