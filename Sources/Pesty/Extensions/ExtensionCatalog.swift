@@ -1,6 +1,14 @@
 import Foundation
 import Observation
 
+struct ExtensionMenuEntry: Identifiable, Equatable {
+    let installedExtension: InstalledExtension
+    let menuItem: ExtensionMenuItem
+    let itemIndex: Int
+
+    var id: String { "\(installedExtension.id):\(itemIndex)" }
+}
+
 @Observable
 @MainActor
 final class ExtensionCatalog {
@@ -43,6 +51,19 @@ final class ExtensionCatalog {
         enabledExtensions.filter { installedExtension in
             installedExtension.manifest.effectiveHooks.contains("transform")
                 && installedExtension.manifest.supports(clipType: clipType)
+        }
+    }
+
+    func menuEntries(for clipType: String) -> [ExtensionMenuEntry] {
+        enabledExtensions.flatMap { installedExtension -> [ExtensionMenuEntry] in
+            guard installedExtension.manifest.supports(clipType: clipType) else { return [] }
+            return installedExtension.manifest.menuItems.enumerated().map { index, menuItem in
+                ExtensionMenuEntry(
+                    installedExtension: installedExtension,
+                    menuItem: menuItem,
+                    itemIndex: index
+                )
+            }
         }
     }
 

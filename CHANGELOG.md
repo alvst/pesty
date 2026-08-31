@@ -24,7 +24,8 @@ companions:
   decorations, weighted and type-filtered derived categories, and explicit
   plain-text transform paste actions, including typed manifest-declared
   configuration with persisted inline controls and cache-safe `config`
-  injection, capability chips, strict execution limits, persistent auto-disable
+  injection, user-invoked safe menu actions for transformed copying and Finder
+  reveal, capability chips, strict execution limits, persistent auto-disable
   after quarantine, an in-memory result cache, and bundled Token Count and JSON
   Detector examples.
 

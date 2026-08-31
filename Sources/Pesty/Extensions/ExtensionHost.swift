@@ -557,8 +557,12 @@ final class ExtensionHost {
                 weight: baseManifest.weight,
                 types: baseManifest.types,
                 hooks: hooks.keys.sorted(),
-                config: baseManifest.config
+                config: baseManifest.config,
+                menuItems: baseManifest.menuItems
             )
+            if let error = manifest.menuHookValidationError() {
+                return .failure(error)
+            }
             context.exceptionHandler = nil
             return .success(
                 LoadedScript(
@@ -637,6 +641,14 @@ final class ExtensionHost {
             config = fields
         }
 
+        let menuItems: [ExtensionMenuItem]
+        switch manifestMenuItems(from: registration) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let items):
+            menuItems = items
+        }
+
         let manifest = ExtensionManifest(
             id: id,
             name: name,
@@ -645,12 +657,55 @@ final class ExtensionHost {
             weight: weight,
             types: types,
             hooks: hooks,
-            config: config
+            config: config,
+            menuItems: menuItems
         )
         if let error = manifest.validationError() {
             return .failure(error)
         }
         return .success(manifest)
+    }
+
+    private static func manifestMenuItems(
+        from registration: JSValue
+    ) -> Result<[ExtensionMenuItem], ExtensionError> {
+        guard let menuValue = registration.forProperty("menuItems"),
+              !menuValue.isUndefined else {
+            return .success([])
+        }
+        guard menuValue.isArray, let rawItems = menuValue.toArray() else {
+            return .failure(.invalidManifest("menuItems must be an array"))
+        }
+        guard rawItems.count <= 3 else {
+            return .failure(.invalidManifest("menuItems must contain at most 3 entries"))
+        }
+
+        var items: [ExtensionMenuItem] = []
+        for index in rawItems.indices {
+            let prefix = "menuItems[\(index)]"
+            guard let value = menuValue.objectAtIndexedSubscript(index),
+                  value.isObject, !value.isArray, !value.isNull else {
+                return .failure(.invalidManifest("\(prefix) must be an object"))
+            }
+            guard let rawTitle = stringProperty("title", in: value) else {
+                return .failure(.invalidManifest("\(prefix).title must be a string"))
+            }
+            guard let title = ExtensionMenuItem.sanitizedTitle(rawTitle) else {
+                return .failure(
+                    .invalidManifest("\(prefix).title must contain 1-30 display characters")
+                )
+            }
+            guard let rawVerb = stringProperty("verb", in: value),
+                  let verb = ExtensionMenuVerb(rawValue: rawVerb) else {
+                return .failure(
+                    .invalidManifest(
+                        "\(prefix).verb must be copyTransformed or revealInFinder"
+                    )
+                )
+            }
+            items.append(ExtensionMenuItem(title: title, verb: verb))
+        }
+        return .success(items)
     }
 
     private static func configFields(

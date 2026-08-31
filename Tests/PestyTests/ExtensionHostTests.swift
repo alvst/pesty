@@ -539,6 +539,103 @@ final class ExtensionHostTests: XCTestCase {
         }
     }
 
+    func testMenuItemsManifestParsesSafeVerbsAndSanitizesTitles() throws {
+        let host = ExtensionHost()
+        let source = menuScript(
+            menuItems: #"""
+            [
+              { title: " Copy\u0007 transformed ", verb: "copyTransformed" },
+              { title: "Reveal in Finder", verb: "revealInFinder" }
+            ]
+            """#,
+            hooks: #"transform: function (clip) { return clip.text; }"#
+        )
+
+        let manifest = try host.validate(source: source).get()
+
+        XCTAssertEqual(
+            manifest.menuItems,
+            [
+                ExtensionMenuItem(title: "Copy transformed", verb: .copyTransformed),
+                ExtensionMenuItem(title: "Reveal in Finder", verb: .revealInFinder)
+            ]
+        )
+        XCTAssertEqual(manifest.hooks, ["transform"])
+    }
+
+    func testMenuItemsManifestValidationMatrix() throws {
+        let host = ExtensionHost()
+        let reveal = #"{ title: "Reveal", verb: "revealInFinder" }"#
+        let fourEntries = Array(repeating: reveal, count: 4).joined(separator: ",")
+        let cases: [(name: String, menuItems: String, message: String)] = [
+            ("not array", "{}", "menuItems must be an array"),
+            (
+                "too many entries",
+                "[\(fourEntries)]",
+                "menuItems must contain at most 3 entries"
+            ),
+            ("entry not object", "[42]", "menuItems[0] must be an object"),
+            (
+                "title not string",
+                #"[{ title: 42, verb: "revealInFinder" }]"#,
+                "menuItems[0].title must be a string"
+            ),
+            (
+                "blank title",
+                #"[{ title: " \t ", verb: "revealInFinder" }]"#,
+                "menuItems[0].title must contain 1-30 display characters"
+            ),
+            (
+                "control-only title",
+                #"[{ title: "\u0007", verb: "revealInFinder" }]"#,
+                "menuItems[0].title must contain 1-30 display characters"
+            ),
+            (
+                "long title",
+                #"[{ title: "\#(String(repeating: "x", count: 31))", verb: "revealInFinder" }]"#,
+                "menuItems[0].title must contain 1-30 display characters"
+            ),
+            (
+                "verb not string",
+                #"[{ title: "Action", verb: 42 }]"#,
+                "menuItems[0].verb must be copyTransformed or revealInFinder"
+            ),
+            (
+                "openURL excluded",
+                #"[{ title: "Open", verb: "openURL" }]"#,
+                "menuItems[0].verb must be copyTransformed or revealInFinder"
+            ),
+            (
+                "copy without transform",
+                #"[{ title: "Copy", verb: "copyTransformed" }]"#,
+                "copyTransformed menu items require a transform hook"
+            )
+        ]
+
+        for testCase in cases {
+            XCTAssertEqual(
+                host.validate(source: menuScript(menuItems: testCase.menuItems)),
+                .failure(.invalidManifest(testCase.message)),
+                testCase.name
+            )
+        }
+
+        XCTAssertNoThrow(
+            try host.validate(
+                source: menuScript(
+                    menuItems: #"[{ title: "Reveal", verb: "revealInFinder" }]"#
+                )
+            ).get()
+        )
+        XCTAssertNoThrow(
+            try host.validate(
+                source: menuScript(
+                    menuItems: #"[{ title: "\#(String(repeating: "x", count: 30))", verb: "revealInFinder" }]"#
+                )
+            ).get()
+        )
+    }
+
     func testPerHookExceptionKeepsOtherValuesAndCleanEvaluationResetsFailures() {
         let host = ExtensionHost()
         let extensionID = "com.example.partial-failure"
@@ -1155,6 +1252,22 @@ final class ExtensionHostTests: XCTestCase {
           api: 1,
           config: \(config),
           badge: function (clip) { return "ok"; }
+        });
+        """
+    }
+
+    private func menuScript(
+        menuItems: String,
+        hooks: String = #"badge: function (clip) { return "ok"; }"#
+    ) -> String {
+        """
+        pesty.register({
+          id: "com.example.menu-items",
+          name: "Menu Items",
+          version: "1.0",
+          api: 1,
+          menuItems: \(menuItems),
+          \(hooks)
         });
         """
     }

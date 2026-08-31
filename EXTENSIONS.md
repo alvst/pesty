@@ -1,8 +1,9 @@
 # Pesty-Alvie extensions
 
 Pesty-Alvie extensions are JavaScript snippets that synchronously derive clip-card
-decorations or provide an explicit transformed-paste action. API 1 supports seven
-hooks: `badge`, `subtitle`, `icon`, `color`, `title`, `label`, and `transform`.
+decorations or provide explicit transformed-paste and safe menu actions. API 1
+supports seven hooks: `badge`, `subtitle`, `icon`, `color`, `title`, `label`, and
+`transform`.
 Extensions cannot mutate stored clips, paste automatically, run commands, or
 observe clipboard history. They may declare a small bounded set of settings
 that the user controls in Pesty-Alvie's Extensions pane.
@@ -81,7 +82,7 @@ pesty.register({
 The registration fields are:
 
 - `id`: the extension's stable identifier.
-- `name`: the display name shown in Settings and transformed-paste menus.
+- `name`: the display name shown in Settings and extension-provided menus.
 - `version`: the extension author's version string.
 - `api`: the Pesty-Alvie extension API version. API 1 requires the integer
   `1`.
@@ -92,6 +93,8 @@ The registration fields are:
   clip types. Unknown or non-string entries reject the manifest; duplicate
   entries are ignored.
 - `config`: an optional array of up to eight typed settings described below.
+- `menuItems`: an optional array of up to three explicit safe menu actions
+  described below.
 - One or more supported hook functions: `badge`, `subtitle`, `icon`, `color`,
   `title`, `label`, or `transform`. A present hook must be a function.
 
@@ -251,6 +254,33 @@ over-cap result, `null`, `undefined`, or empty string pastes nothing and leaves
 the pasteboard untouched. The transform call has a 0.25-second budget; a
 timeout immediately quarantines the extension.
 
+## Extension menu items
+
+An extension may add up to three explicit actions beside the existing `Paste
+via` entries on an ordinary clip card. Each entry requires a display-sanitized
+`title` of 1-30 characters and one of two exact verbs:
+
+```javascript
+menuItems: [
+  { title: "Copy cleaned text", verb: "copyTransformed" },
+  { title: "Reveal source files", verb: "revealInFinder" }
+]
+```
+
+The menu renders each action as `Title (Extension Name)`. Entries appear only
+while their extension is enabled, not quarantined, and supports the clip type
+through its `types` declaration. They are not added to Paste Stack cards.
+
+| Verb | Declaration and visibility | Explicit action |
+| --- | --- | --- |
+| `copyTransformed` | The extension must also declare a `transform` hook. | Runs `transform` with the current `config` and the normal 0.25-second and 1,048,576-UTF-16-unit limits, then copies a successful non-empty result as plain text. It does not paste or promote history. A failure or empty result leaves the pasteboard untouched. |
+| `revealInFinder` | Shown only for a `file` clip whose stored file-URL list is non-empty. | Parses and validates every stored URL as a file URL, then asks Finder to reveal the resolved files. An invalid URL makes the action a no-op. |
+
+No other verbs are accepted. In particular, API 1 deliberately excludes
+`openURL`: allowing an extension to construct and open a URL from clip content
+would create an exfiltration path. Menu items are user-invoked only and cannot
+run automatically.
+
 ## Limits
 
 | Surface | API 1 limit |
@@ -266,6 +296,8 @@ timeout immediately quarantines the extension.
 | Config `choice` options | 2-10 unique non-empty strings, each at most 30 characters |
 | Config string value | At most 200 characters |
 | Config number value | Finite number |
+| `menuItems` | Optional array of at most 3 entries; each title has 1-30 display-sanitized characters |
+| Menu item verb | Exactly `copyTransformed` or `revealInFinder`; `openURL` and all other verbs are rejected |
 | Hooks | At least one of `badge`, `subtitle`, `icon`, `color`, `title`, `label`, or `transform`; each declared value must be a function |
 | `clip.type` | One of `text`, `richText`, `link`, `image`, `file`, or `color` |
 | `clip.text` | At most 65,536 UTF-16 code units |

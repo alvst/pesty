@@ -614,6 +614,21 @@ struct ClipCardView: View {
                 }
             }
 
+            ForEach(ExtensionCatalog.shared.menuEntries(for: item.type.rawValue)) { entry in
+                if entry.menuItem.verb != .revealInFinder
+                    || (item.type == .file && !item.fileURLs.isEmpty) {
+                    Button(
+                        "\(entry.menuItem.title) (\(entry.installedExtension.manifest.name))"
+                    ) {
+                        AppController.shared.performExtensionMenuItem(
+                            entry.menuItem,
+                            for: item,
+                            using: entry.installedExtension
+                        )
+                    }
+                }
+            }
+
             Button { AppController.shared.copyItem(item) } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }

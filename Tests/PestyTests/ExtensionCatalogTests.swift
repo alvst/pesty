@@ -268,6 +268,103 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertTrue(catalog.transformExtensions(for: "text").isEmpty)
     }
 
+    func testMenuEntriesFilterByEnabledQuarantineAndClipTypeAndPersist() throws {
+        let host = ExtensionHost()
+        let catalog = ExtensionCatalog(directory: directory, host: host)
+        let textID = "com.example.text-menu"
+        let linkID = "com.example.link-menu"
+        let disabledID = "com.example.disabled-menu"
+
+        _ = try catalog.install(
+            source: menuScript(
+                id: textID,
+                types: ["text"],
+                menuItems: #"[{ title: "Copy Edited", verb: "copyTransformed" }]"#,
+                hooks: #"transform: function (clip) { return clip.text.toUpperCase(); }"#
+            )
+        ).get()
+        _ = try catalog.install(
+            source: menuScript(
+                id: linkID,
+                types: ["link"],
+                menuItems: #"[{ title: "Reveal", verb: "revealInFinder" }]"#
+            )
+        ).get()
+        _ = try catalog.install(
+            source: menuScript(
+                id: disabledID,
+                menuItems: #"[{ title: "Disabled", verb: "revealInFinder" }]"#
+            )
+        ).get()
+        catalog.setEnabled(true, id: textID)
+        catalog.setEnabled(true, id: linkID)
+
+        XCTAssertEqual(
+            catalog.menuEntries(for: "text").map {
+                "\($0.installedExtension.id):\($0.menuItem.title)"
+            },
+            ["\(textID):Copy Edited"]
+        )
+        XCTAssertEqual(
+            catalog.menuEntries(for: "link").map { $0.installedExtension.id },
+            [linkID]
+        )
+        XCTAssertTrue(catalog.menuEntries(for: "image").isEmpty)
+
+        catalog.setEnabled(true, id: disabledID)
+        XCTAssertEqual(
+            catalog.menuEntries(for: "image").map { $0.installedExtension.id },
+            [disabledID]
+        )
+
+        let reloaded = ExtensionCatalog(directory: directory)
+        XCTAssertEqual(
+            reloaded.extensions.first(where: { $0.id == textID })?.manifest.menuItems,
+            [ExtensionMenuItem(title: "Copy Edited", verb: .copyTransformed)]
+        )
+
+        let slowID = "com.example.quarantined-menu"
+        let slowSource = menuScript(
+            id: slowID,
+            types: ["text"],
+            menuItems: #"[{ title: "Reveal", verb: "revealInFinder" }]"#,
+            hooks: #"""
+            badge: function (clip) {
+              var deadline = Date.now() + 250;
+              while (Date.now() < deadline) {}
+              return "late";
+            }
+            """#
+        )
+        _ = try catalog.install(source: slowSource).get()
+        catalog.setEnabled(true, id: slowID)
+        let slowExtension = try XCTUnwrap(catalog.extensions.first { $0.id == slowID })
+        let invalidated = expectation(description: "menu extension quarantined")
+        catalog.onExtensionInvalidated = { id in
+            if id == slowID { invalidated.fulfill() }
+        }
+        XCTAssertEqual(
+            catalog.menuEntries(for: "text").map { $0.installedExtension.id },
+            [textID, disabledID, slowID]
+        )
+
+        XCTAssertEqual(
+            host.badgeSync(
+                clipType: "text",
+                text: "hello",
+                extension: slowExtension
+            ),
+            .failure(.timedOut)
+        )
+        wait(for: [invalidated], timeout: 1)
+
+        XCTAssertTrue(catalog.isQuarantined(slowID))
+        XCTAssertEqual(
+            catalog.menuEntries(for: "text").map { $0.installedExtension.id },
+            [textID, disabledID]
+        )
+    }
+
     func testQuarantineAutoDisablesAndPersistsAcrossReload() throws {
         let host = ExtensionHost()
         let catalog = ExtensionCatalog(directory: directory, host: host)
@@ -619,6 +716,7 @@ final class ExtensionCatalogTests: XCTestCase {
         XCTAssertTrue(installedExtension.manifest.hooks.isEmpty)
         XCTAssertEqual(installedExtension.manifest.effectiveHooks, ["badge"])
         XCTAssertTrue(installedExtension.manifest.config.isEmpty)
+        XCTAssertTrue(installedExtension.manifest.menuItems.isEmpty)
         XCTAssertTrue(installedExtension.settings.isEmpty)
     }
 
@@ -657,6 +755,29 @@ final class ExtensionCatalogTests: XCTestCase {
           api: 1,
           config: \(config),
           badge: function (clip) { return "ok"; }
+        });
+        """
+    }
+
+    private func menuScript(
+        id: String,
+        types: [String]? = nil,
+        menuItems: String,
+        hooks: String = #"badge: function (clip) { return "ok"; }"#
+    ) -> String {
+        let typesSource = types.map { values in
+            let entries = values.map { "\"\($0)\"" }.joined(separator: ", ")
+            return "types: [\(entries)],"
+        } ?? ""
+        return """
+        pesty.register({
+          id: "\(id)",
+          name: "Menu",
+          version: "1.0",
+          api: 1,
+          \(typesSource)
+          menuItems: \(menuItems),
+          \(hooks)
         });
         """
     }

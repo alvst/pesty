@@ -584,11 +584,56 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    func performExtensionMenuItem(
+        _ menuItem: ExtensionMenuItem,
+        for item: ClipItem,
+        using installedExtension: InstalledExtension
+    ) {
+        switch menuItem.verb {
+        case .copyTransformed:
+            copyItemTransformed(item, using: installedExtension)
+        case .revealInFinder:
+            revealFilesInFinder(for: item)
+        }
+    }
+
+    private func copyItemTransformed(
+        _ item: ClipItem,
+        using installedExtension: InstalledExtension
+    ) {
+        ExtensionCatalog.sharedHost.transform(
+            clipType: item.type.rawValue,
+            text: item.text ?? "",
+            extension: installedExtension,
+            settings: ExtensionCatalog.shared.effectiveSettings(for: installedExtension.id)
+        ) { [weak self] transformed in
+            // The verb is copy-only. A failed or empty transform leaves the
+            // pasteboard, history ordering, and current app untouched.
+            guard let self, let transformed, !transformed.isEmpty else { return }
+            copyItem(ClipItem(type: .text, text: transformed), promotesHistory: false)
+        }
+    }
+
+    private func revealFilesInFinder(for item: ClipItem) {
+        guard item.type == .file, !item.fileURLs.isEmpty else { return }
+
+        var urls: [URL] = []
+        for value in item.fileURLs {
+            guard let url = URL(string: value), url.isFileURL else { return }
+            urls.append(url.standardizedFileURL)
+        }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
     func copyItem(_ item: ClipItem) {
+        copyItem(item, promotesHistory: true)
+    }
+
+    private func copyItem(_ item: ClipItem, promotesHistory: Bool) {
         let previousChange = NSPasteboard.general.changeCount
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
-        if change != previousChange {
+        if promotesHistory, change != previousChange {
             store.promoteCopiedItem(item)
         }
         // Tink, not Pop: copy and paste stay audibly distinct.

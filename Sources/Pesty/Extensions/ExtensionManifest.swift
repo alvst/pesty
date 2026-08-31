@@ -175,6 +175,32 @@ struct ExtensionConfigField: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+enum ExtensionMenuVerb: String, Codable, Equatable, Sendable {
+    case copyTransformed
+    case revealInFinder
+}
+
+struct ExtensionMenuItem: Codable, Equatable, Sendable {
+    let title: String
+    let verb: ExtensionMenuVerb
+
+    static func sanitizedTitle(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let forbidden = CharacterSet.controlCharacters.union(.newlines)
+        let scalars = trimmed.unicodeScalars.filter { !forbidden.contains($0) }
+        let sanitized = String(String.UnicodeScalarView(scalars))
+        guard (1...30).contains(sanitized.count) else { return nil }
+        return sanitized
+    }
+
+    func validationMessage(at index: Int) -> String? {
+        guard Self.sanitizedTitle(title) != nil else {
+            return "menuItems[\(index)].title must contain 1-30 display characters"
+        }
+        return nil
+    }
+}
+
 struct ExtensionManifest: Codable, Equatable {
     let id: String
     let name: String
@@ -184,6 +210,7 @@ struct ExtensionManifest: Codable, Equatable {
     let types: [String]?
     let hooks: [String]
     let config: [ExtensionConfigField]
+    let menuItems: [ExtensionMenuItem]
 
     init(
         id: String,
@@ -193,7 +220,8 @@ struct ExtensionManifest: Codable, Equatable {
         weight: Double = 0,
         types: [String]? = nil,
         hooks: [String] = [],
-        config: [ExtensionConfigField] = []
+        config: [ExtensionConfigField] = [],
+        menuItems: [ExtensionMenuItem] = []
     ) {
         self.id = id
         self.name = name
@@ -203,6 +231,7 @@ struct ExtensionManifest: Codable, Equatable {
         self.types = types
         self.hooks = hooks
         self.config = config
+        self.menuItems = menuItems
     }
 
     var effectiveHooks: [String] {
@@ -253,7 +282,21 @@ struct ExtensionManifest: Codable, Equatable {
                 return .invalidManifest("config keys must be unique")
             }
         }
+        guard menuItems.count <= 3 else {
+            return .invalidManifest("menuItems must contain at most 3 entries")
+        }
+        for (index, menuItem) in menuItems.enumerated() {
+            if let message = menuItem.validationMessage(at: index) {
+                return .invalidManifest(message)
+            }
+        }
         return nil
+    }
+
+    func menuHookValidationError() -> ExtensionError? {
+        guard menuItems.contains(where: { $0.verb == .copyTransformed }),
+              !hooks.contains("transform") else { return nil }
+        return .invalidManifest("copyTransformed menu items require a transform hook")
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -265,6 +308,7 @@ struct ExtensionManifest: Codable, Equatable {
         case types
         case hooks
         case config
+        case menuItems
     }
 
     init(from decoder: Decoder) throws {
@@ -277,6 +321,10 @@ struct ExtensionManifest: Codable, Equatable {
         types = try container.decodeIfPresent([String].self, forKey: .types)
         hooks = try container.decodeIfPresent([String].self, forKey: .hooks) ?? []
         config = try container.decodeIfPresent([ExtensionConfigField].self, forKey: .config) ?? []
+        menuItems = try container.decodeIfPresent(
+            [ExtensionMenuItem].self,
+            forKey: .menuItems
+        ) ?? []
     }
 }
 
