@@ -127,7 +127,7 @@ final class ExtensionCatalog {
 
         extensions[index].enabled = enabled
         saveNow()
-        if !enabled { onExtensionInvalidated?(id) }
+        onExtensionInvalidated?(id)
     }
 
     func setSetting(_ value: ExtensionConfigValue, forKey key: String, id: String) {

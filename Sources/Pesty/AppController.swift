@@ -19,6 +19,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     static let shared = AppController()
 
     let store = ClipboardStore.shared
+    let keywordIndex = ExtensionKeywordIndex.shared
     let monitor = ClipboardMonitor()
     let pasteSequence = PasteSequence.shared
 
@@ -159,6 +160,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.saveNow()
+        keywordIndex.saveNow()
     }
 
     private func setupStatusItem() {

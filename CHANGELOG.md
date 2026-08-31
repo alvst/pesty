@@ -26,8 +26,10 @@ companions:
   configuration with persisted inline controls and cache-safe `config`
   injection, user-invoked safe menu actions for transformed copying and Finder
   reveal, user-confirmed suggestions for filing clips into matching existing
-  Pinboards, capability chips, strict execution limits, persistent auto-disable
-  after quarantine, an in-memory result cache, and bundled Token Count and JSON
+  Pinboards, background extension-provided keyword indexing for History and
+  Pinboard search with a private persisted, source-fingerprinted sidecar,
+  capability chips, strict execution limits, persistent auto-disable after
+  quarantine, an in-memory result cache, and bundled Token Count and JSON
   Detector examples.
 
 #### Changed

@@ -159,19 +159,33 @@ final class ClipboardStore {
     /// matching a query against a multi-megabyte clip costs a full scan of it.
     /// Recomputing that per access is what made typing in the search field
     /// lock the bar up.
-    @ObservationIgnored private var searchCache: (source: BarSource, query: String,
-                                                  version: Int, items: [ClipItem])?
+    @ObservationIgnored private var searchCache: (
+        source: BarSource,
+        query: String,
+        version: Int,
+        keywordVersion: UInt64,
+        items: [ClipItem]
+    )?
 
-    private func cachedSearchResults(for query: String) -> [ClipItem]? {
+    private func cachedSearchResults(for query: String, keywordVersion: UInt64) -> [ClipItem]? {
         guard let cache = searchCache,
               cache.version == contentVersion,
+              cache.keywordVersion == keywordVersion,
               cache.source == source,
               cache.query == query else { return nil }
         return cache.items
     }
 
-    private func searchResults(in base: [ClipItem], query: String) -> [ClipItem] {
-        if let cached = cachedSearchResults(for: query) { return cached }
+    private func searchResults(
+        in base: [ClipItem],
+        query: String,
+        keywordIndex: ExtensionKeywordIndex
+    ) -> [ClipItem] {
+        let keywordVersion = keywordIndex.contentVersion
+        if let cached = cachedSearchResults(
+            for: query,
+            keywordVersion: keywordVersion
+        ) { return cached }
 
         // Appending characters can only narrow substring-search results. Use
         // the previous matches as candidates while typing forward; deletion,
@@ -181,22 +195,39 @@ final class ClipboardStore {
         let candidates: [ClipItem]
         if let cache = searchCache,
            cache.version == contentVersion,
+           cache.keywordVersion == keywordVersion,
            cache.source == source,
            preparedQuery.canNarrowResults(from: TextSearch.Query(cache.query)) {
             candidates = cache.items
         } else {
             candidates = base
         }
-        let items = candidates.filter { $0.matches(query: preparedQuery) }
-        searchCache = (source, query, contentVersion, items)
+        let items = candidates.filter {
+            ExtensionSearchPredicate.matches(
+                $0,
+                query: preparedQuery,
+                keywordIndex: keywordIndex
+            )
+        }
+        searchCache = (source, query, contentVersion, keywordVersion, items)
         return items
     }
 
     var visibleItems: [ClipItem] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // ClipboardStore computes visibleItems while its singleton is loading.
+        // Defer the keyword singleton until a real query exists so index startup
+        // cannot recursively ask for ClipboardStore.shared during that load.
+        let keywordIndex: ExtensionKeywordIndex? = q.isEmpty ? nil : .shared
         // A cached query can return before a Pinboard rebuilds its promoted
         // ordering dictionaries and arrays for every SwiftUI consumer.
-        if !q.isEmpty, let cached = cachedSearchResults(for: q) { return cached }
+        if let keywordIndex,
+           let cached = cachedSearchResults(
+               for: q,
+               keywordVersion: keywordIndex.contentVersion
+           ) {
+            return cached
+        }
 
         let base: [ClipItem]
         switch source {
@@ -210,7 +241,7 @@ final class ClipboardStore {
         case .pinboard(let id):
             base = pinboards.first(where: { $0.id == id })?.orderedItems ?? []
         }
-        guard !q.isEmpty else {
+        guard let keywordIndex else {
             // Each saved Paste Stack is represented by one deck card on
             // Clipboard. Its member clips remain in history for persistence,
             // but should not also appear as individual Clipboard cards.
@@ -219,7 +250,7 @@ final class ClipboardStore {
                   PasteSequence.shared.hasSavedStacks else { return base }
             return base.filter { !PasteSequence.shared.containsHistoryItemID($0.id) }
         }
-        return searchResults(in: base, query: q)
+        return searchResults(in: base, query: q, keywordIndex: keywordIndex)
     }
 
     var selectedItem: ClipItem? {

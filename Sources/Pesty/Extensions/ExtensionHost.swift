@@ -13,13 +13,15 @@ final class ExtensionHost {
     private static let maximumExceptionCharacters = 200
     private static let loadBudget: TimeInterval = 0.5
     private static let cardHookBudget: TimeInterval = 0.1
+    private static let keywordHookBudget: TimeInterval = 0.1
     private static let transformBudget: TimeInterval = 0.25
     private static let quarantineThreshold = 5
     private static let cardHookNames = [
         "badge", "subtitle", "icon", "color", "title", "label", "suggestPinboard"
     ]
     private static let allHookNames = [
-        "badge", "color", "icon", "label", "subtitle", "suggestPinboard", "title", "transform"
+        "badge", "color", "icon", "keywords", "label", "subtitle", "suggestPinboard", "title",
+        "transform"
     ]
     private static let supportedClipTypes: Set<String> = [
         "text", "richText", "link", "image", "file", "color"
@@ -171,6 +173,48 @@ final class ExtensionHost {
         }
     }
 
+    func keywordsSync(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:]
+    ) -> Result<[String], ExtensionError> {
+        syncOnQueue {
+            keywordsOnQueue(
+                clipType: clipType,
+                text: text,
+                extension: installedExtension,
+                settings: settings
+            )
+        }
+    }
+
+    func keywords(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue] = [:],
+        completion: @escaping @MainActor @Sendable ([String]) -> Void
+    ) {
+        queue.async { [self] in
+            let value: [String]
+            switch keywordsOnQueue(
+                clipType: clipType,
+                text: text,
+                extension: installedExtension,
+                settings: settings
+            ) {
+            case .success(let keywords):
+                value = keywords
+            case .failure:
+                value = []
+            }
+            DispatchQueue.main.async {
+                completion(value)
+            }
+        }
+    }
+
     func isQuarantined(_ id: String) -> Bool {
         failureStateLock.lock()
         defer { failureStateLock.unlock() }
@@ -229,6 +273,32 @@ final class ExtensionHost {
         }
 
         let evaluation = runTransform(
+            source: installedExtension.source,
+            clipType: clipType,
+            text: Self.boundedText(text),
+            settings: settings
+        )
+
+        record(evaluation, for: id)
+        return evaluation.result
+    }
+
+    private func keywordsOnQueue(
+        clipType: String,
+        text: String,
+        extension installedExtension: InstalledExtension,
+        settings: [String: ExtensionConfigValue]
+    ) -> Result<[String], ExtensionError> {
+        let id = installedExtension.id
+        guard !isQuarantined(id) else {
+            return .success([])
+        }
+        guard installedExtension.manifest.supports(clipType: clipType),
+              installedExtension.manifest.effectiveHooks.contains("keywords") else {
+            return .success([])
+        }
+
+        let evaluation = runKeywords(
             source: installedExtension.source,
             clipType: clipType,
             text: Self.boundedText(text),
@@ -484,6 +554,78 @@ final class ExtensionHost {
             }
             return HostEvaluation(result: .success(value), hadFailure: false)
         }
+    }
+
+    private func runKeywords(
+        source: String,
+        clipType: String,
+        text: String,
+        settings: [String: ExtensionConfigValue]
+    ) -> HostEvaluation<[String]> {
+        let state = KeywordWorkerState()
+        let loadFinished = DispatchSemaphore(value: 0)
+        let startKeywords = DispatchSemaphore(value: 0)
+        let keywordsFinished = DispatchSemaphore(value: 0)
+
+        startWorker(named: "extension-keywords") {
+            autoreleasepool {
+                switch Self.load(source: source) {
+                case .failure(let error):
+                    state.setLoad(.failure(error))
+                    loadFinished.signal()
+                case .success(let loaded):
+                    Self.installConfig(settings, in: loaded.context)
+                    let keywords = loaded.hooks["keywords"]
+                    state.setLoad(.success(keywords != nil))
+                    loadFinished.signal()
+                    guard let keywords else { return }
+                    startKeywords.wait()
+                    state.setKeywords(
+                        Self.callKeywordsHook(
+                            keywords,
+                            in: loaded,
+                            clipType: clipType,
+                            text: text
+                        )
+                    )
+                    keywordsFinished.signal()
+                }
+            }
+        }
+
+        guard loadFinished.wait(timeout: .now() + Self.loadBudget) == .success else {
+            // Timeout termination abandons the tracking thread; the script
+            // itself cannot be killed with public JSC API.
+            return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
+        }
+        guard let loadResult = state.loadResult() else {
+            return HostEvaluation(
+                result: .failure(.scriptException("Extension load returned no result")),
+                hadFailure: false
+            )
+        }
+        switch loadResult {
+        case .failure(let error):
+            return HostEvaluation(result: .failure(error), hadFailure: false)
+        case .success(false):
+            return HostEvaluation(result: .success([]), hadFailure: false)
+        case .success(true):
+            break
+        }
+
+        startKeywords.signal()
+        guard keywordsFinished.wait(timeout: .now() + Self.keywordHookBudget) == .success else {
+            // Timeout termination abandons the tracking thread; the script
+            // itself cannot be killed with public JSC API.
+            return HostEvaluation(result: .failure(.timedOut), hadFailure: false)
+        }
+        guard let result = state.keywordsResult() else {
+            return HostEvaluation(
+                result: .failure(.scriptException("Extension keywords returned no result")),
+                hadFailure: false
+            )
+        }
+        return HostEvaluation(result: result, hadFailure: false)
     }
 
     private func startWorker(named suffix: String, operation: @escaping () -> Void) {
@@ -899,6 +1041,54 @@ final class ExtensionHost {
         return .success(string)
     }
 
+    private static func callKeywordsHook(
+        _ hook: JSValue,
+        in loaded: LoadedScript,
+        clipType: String,
+        text: String
+    ) -> Result<[String], ExtensionError> {
+        let clip = JSValue(newObjectIn: loaded.context)
+        clip?.setObject(clipType, forKeyedSubscript: "type" as NSString)
+        clip?.setObject(text, forKeyedSubscript: "text" as NSString)
+
+        var exceptionMessage: String?
+        loaded.context.exception = nil
+        loaded.context.exceptionHandler = { _, exception in
+            exceptionMessage = boundedExceptionMessage(exception)
+        }
+        let value = hook.call(withArguments: [clip as Any])
+        loaded.context.exceptionHandler = nil
+        if let exceptionMessage {
+            loaded.context.exception = nil
+            return .failure(.scriptException(exceptionMessage))
+        }
+        guard let value, value.isArray, let rawValues = value.toArray() else {
+            return .success([])
+        }
+
+        var keywords: [String] = []
+        var seen: Set<String> = []
+        for index in rawValues.indices {
+            guard keywords.count < 32 else { break }
+            guard let rawValue = value.objectAtIndexedSubscript(index),
+                  rawValue.isString,
+                  let string = rawValue.toString(),
+                  let keyword = sanitizeKeyword(string),
+                  seen.insert(keyword).inserted else { continue }
+            keywords.append(keyword)
+        }
+        return .success(keywords)
+    }
+
+    private static func sanitizeKeyword(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let forbidden = CharacterSet.controlCharacters.union(.newlines)
+        let scalars = trimmed.unicodeScalars.filter { !forbidden.contains($0) }
+        let sanitized = String(String.UnicodeScalarView(scalars)).lowercased()
+        guard !sanitized.isEmpty else { return nil }
+        return String(sanitized.prefix(32))
+    }
+
     private static func boundedText(_ text: String) -> String {
         String(
             decoding: text.utf16.prefix(maximumTextUTF16Units),
@@ -1067,5 +1257,26 @@ private final class TransformWorkerState {
 
     func transformResult() -> Result<String?, ExtensionError>? {
         transform.get()
+    }
+}
+
+private final class KeywordWorkerState {
+    private let load = LockedBox<Result<Bool, ExtensionError>>()
+    private let keywords = LockedBox<Result<[String], ExtensionError>>()
+
+    func setLoad(_ value: Result<Bool, ExtensionError>) {
+        load.set(value)
+    }
+
+    func loadResult() -> Result<Bool, ExtensionError>? {
+        load.get()
+    }
+
+    func setKeywords(_ value: Result<[String], ExtensionError>) {
+        keywords.set(value)
+    }
+
+    func keywordsResult() -> Result<[String], ExtensionError>? {
+        keywords.get()
     }
 }

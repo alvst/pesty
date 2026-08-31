@@ -1,9 +1,10 @@
 # Pesty-Alvie extensions
 
-Pesty-Alvie extensions are JavaScript snippets that synchronously derive clip-card
-decorations and Pinboard suggestions or provide explicit transformed-paste and
-safe menu actions. API 1 supports eight hooks: `badge`, `subtitle`, `icon`,
-`color`, `title`, `label`, `suggestPinboard`, and `transform`.
+Pesty-Alvie extensions are JavaScript snippets that derive clip-card decorations,
+Pinboard suggestions, and searchable keywords or provide explicit
+transformed-paste and safe menu actions. API 1 supports nine hooks: `badge`,
+`subtitle`, `icon`, `color`, `title`, `label`, `suggestPinboard`, `keywords`, and
+`transform`.
 Extensions cannot mutate stored clips, paste automatically, run commands, or
 observe clipboard history. They may declare a small bounded set of settings
 that the user controls in Pesty-Alvie's Extensions pane.
@@ -26,8 +27,9 @@ are rejected during capture, so they never reach an extension.
 Each evaluation uses a fresh JavaScriptCore virtual machine. An extension does
 not share a context or virtual machine with another extension, and contexts are
 not reused after an evaluation. The declared card-decoration hooks for one
-extension and clip share that evaluation's context; a transform uses a separate
-evaluation. Extension work runs off the main thread.
+extension and clip share that evaluation's context. A transform and a background
+keyword-index evaluation each use a separate context. Extension work runs off
+the main thread.
 
 This is a deliberately narrow host surface, not a hardened sandbox for
 untrusted code. Pasted scripts still execute inside the Pesty-Alvie process.
@@ -37,16 +39,19 @@ and trust.
 ### Timeouts, failures, and quarantine
 
 Loading a script has a 0.5-second budget. Each card-decoration hook has a
-separate 0.1-second call budget after loading succeeds. A transform has a
-0.25-second call budget.
+separate 0.1-second call budget after loading succeeds. A `keywords` call also
+has a 0.1-second budget, and a transform has a 0.25-second call budget.
 
 If one card-decoration hook throws a JavaScript exception, its value is omitted
 while values from the other hooks in that evaluation are retained. The
 evaluation records one failure tick toward quarantine. A transform exception
-produces no transformed paste and also records a failure tick. Five consecutive
-failure ticks quarantine and persistently disable the extension; an evaluation
-with no failure resets the count. Returning `null`, `undefined`, a non-string,
-or an empty display value is a successful no-result, not an exception.
+produces no transformed paste, and a `keywords` exception produces no indexed
+keywords; either also records a failure tick. Five consecutive failure ticks
+quarantine and persistently disable the extension; an evaluation with no
+failure resets the count. For string-valued hooks, returning `null`,
+`undefined`, a non-string, or an empty display value is a successful no-result,
+not an exception. For `keywords`, any value other than an array is likewise a
+successful empty result.
 
 Any load or hook timeout immediately quarantines and persistently disables the
 installed extension. Re-enabling the extension in Settings clears its
@@ -96,8 +101,8 @@ The registration fields are:
 - `menuItems`: an optional array of up to three explicit safe menu actions
   described below.
 - One or more supported hook functions: `badge`, `subtitle`, `icon`, `color`,
-  `title`, `label`, `suggestPinboard`, or `transform`. A present hook must be a
-  function.
+  `title`, `label`, `suggestPinboard`, `keywords`, or `transform`. A present hook
+  must be a function.
 
 The clip object passed to every hook has this shape:
 
@@ -159,21 +164,22 @@ Settings values are installed with JavaScriptCore property APIs, not assembled
 into JavaScript source, so quotes, backslashes, and script-shaped strings remain
 data. Defaults apply until the user changes a field in **Settings →
 Extensions**. A settings change immediately purges that extension's cached card
-decorations. Reinstalling source with the same ID updates it in place and keeps
-only stored settings that are still valid under the new schema; removed or
-changed fields fall back to their new defaults.
+decorations and searchable keywords. Reinstalling source with the same ID
+updates it in place and keeps only stored settings that are still valid under
+the new schema; removed or changed fields fall back to their new defaults.
 
 ### Hook signatures, results, and rendering
 
-Every hook has the synchronous signature `function (clip)`. A string is the
-only value that can produce output. `null`, `undefined`, every other non-string
-value, and Promises produce no output.
+Every hook has the synchronous signature `function (clip)`. Card-decoration and
+transform hooks produce output only from strings. `keywords` produces output
+only from a JavaScript array whose string entries are sanitized individually.
+`null`, `undefined`, Promises, and other unsupported values produce no output.
 
 Display strings from `badge`, `subtitle`, `title`, `label`, and
 `suggestPinboard` are trimmed, stripped of control and newline characters, and
 then capped. A sanitized empty string produces no output.
 
-| Hook | Accepted string and sanitation | Rendering or action |
+| Hook | Accepted result and sanitation | Rendering or action |
 | --- | --- | --- |
 | `badge(clip)` | Display string capped at 24 characters | All badge results appear in weight order on the card footer's decoration row, separated by ` · `. |
 | `subtitle(clip)` | Display string capped at 80 characters | All subtitle results appear in weight order on the footer's secondary line, separated by ` · `. |
@@ -182,13 +188,14 @@ then capped. A sanitized empty string produces no output.
 | `title(clip)` | Display string capped at 60 characters | The first title in weight order overrides the generated display title used by link previews and file-preview captions. A title explicitly set by the user still wins. |
 | `label(clip)` | Display string capped at 16 characters | The first label in weight order replaces the built-in clip-type label in the card header. |
 | `suggestPinboard(clip)` | Display string capped at 40 characters | The first suggestion in weight order may add `Add to <BoardName> — Suggested` to the card context menu. The sanitized suggestion must match an existing Pinboard name case-insensitively after trimming, and the clip must not already be in that board. |
+| `keywords(clip)` | Array of strings; each entry is trimmed, stripped of control and newline characters, lowercased, capped at 32 characters, and deduplicated; at most 32 entries are retained | Evaluated in the background once for each clip/extension pair, persisted, and used by the main History and Pinboard search predicate. It does not decorate cards. |
 | `transform(clip)` | Content is preserved exactly and must not exceed 1,048,576 UTF-16 code units | Adds `Paste via <Extension Name>` to an ordinary clip card's context menu. The returned string is pasted as plain text. |
 
 For card decorations, higher `weight` values are considered first; equal
 weights retain catalog order. Badges and subtitles aggregate all available
 values in that order. Icon, color, title, label, and suggested Pinboard use the
 first usable value. Weight does not reorder transformed-paste menu actions,
-which retain catalog order.
+which retain catalog order, and does not affect keyword indexing.
 
 ## Derived Categories
 
@@ -197,7 +204,8 @@ the stored clip type. The general pattern uses `label` for the category name and
 can reinforce it with `icon`, `color`, and `title`. Each hook remains
 independent: an extension can apply only the pieces that improve the card and
 return `null` when the text does not match. A `subtitle` can explain why the
-category was detected.
+category was detected. A `keywords` result can make the derived category
+searchable even when its name does not occur literally in the clip.
 
 A derived category can also return an existing board's display name from
 `suggestPinboard`. A matching suggestion offers one explicit context-menu
@@ -206,10 +214,11 @@ the board's color or icon. Suggestions that name no existing Pinboard render
 nothing.
 
 The bundled JSON Detector is the worked example. It classifies text as JSON,
-uses `label` and `icon` to present that category, and uses `subtitle` for a
-bounded structural summary. It deliberately leaves the header color and
-content title unchanged; another derived-category extension can add `color`
-and `title` hooks using the same detection function.
+uses `label` and `icon` to present that category, uses `subtitle` for a bounded
+structural summary, and indexes `json` so search can find JSON-shaped clips even
+when their text does not contain that word. It deliberately leaves the header
+color and content title unchanged; another derived-category extension can add
+`color` and `title` hooks using the same detection function.
 
 ```javascript
 function pestyJSONInfo(clip) {
@@ -243,9 +252,35 @@ pesty.register({
   subtitle: function (clip) {
     var info = pestyJSONInfo(clip);
     return info === null ? null : info.subtitle;
+  },
+  keywords: function (clip) {
+    return pestyJSONInfo(clip) === null ? null : ["json"];
   }
 });
 ```
+
+Bundled extensions are seeded only when a catalog is first created. Existing
+catalogs retain their stored JSON Detector source; reinstall the example under
+the same stable ID to adopt its `keywords` hook.
+
+## Keyword search indexing
+
+Pesty-Alvie evaluates `keywords` away from card rendering. A background sweep
+visits missing clip/extension pairs in chunks of at most 25, pauses briefly
+between chunks, and stops when no work remains. It starts after launch, after a
+store save adds clips, and after an extension is enabled or invalidated. Only
+enabled, non-quarantined extensions whose `types` include the clip are run.
+
+Sanitized results are stored in `extension-keywords.json` beside the extension
+catalog. The file is atomically replaced with owner-only permissions, and each
+extension's entries carry a SHA-256 source fingerprint. Deleting a clip,
+changing settings, disabling or uninstalling an extension, or replacing its
+source evicts affected results; stale in-flight results are discarded.
+
+Search performs a direct clip-ID lookup followed by a small substring scan over
+that clip's keywords. Keyword matches are ORed with the built-in clip match for
+the main History and Pinboard strip. Paste Stack search and other search
+surfaces are unchanged.
 
 ## Transform paste semantics
 
@@ -306,7 +341,7 @@ run automatically.
 | Config number value | Finite number |
 | `menuItems` | Optional array of at most 3 entries; each title has 1-30 display-sanitized characters |
 | Menu item verb | Exactly `copyTransformed` or `revealInFinder`; `openURL` and all other verbs are rejected |
-| Hooks | At least one of `badge`, `subtitle`, `icon`, `color`, `title`, `label`, `suggestPinboard`, or `transform`; each declared value must be a function |
+| Hooks | At least one of `badge`, `subtitle`, `icon`, `color`, `title`, `label`, `suggestPinboard`, `keywords`, or `transform`; each declared value must be a function |
 | `clip.type` | One of `text`, `richText`, `link`, `image`, `file`, or `color` |
 | `clip.text` | At most 65,536 UTF-16 code units |
 | Badge string | Display sanitation, then at most 24 characters |
@@ -314,16 +349,19 @@ run automatically.
 | Title string | Display sanitation, then at most 60 characters |
 | Label string | Display sanitation, then at most 16 characters |
 | Suggested Pinboard string | Display sanitation, then at most 40 characters |
+| Keyword result | JavaScript array; at most 32 unique strings retained; each is display-sanitized, lowercased, and capped at 32 characters |
 | Icon string | 1-64 lowercase ASCII letters, digits, or dots after trimming; must resolve to an SF Symbol to render |
 | Color string | Exactly seven ASCII bytes in `#RRGGBB` form |
 | Transform string | At most 1,048,576 UTF-16 code units; content is otherwise preserved exactly |
 | JavaScript exception message | Capped at 200 characters before display |
 | Script load or validation | 0.5 seconds per load |
 | Card-decoration hook | 0.1 seconds per hook, after loading succeeds |
+| Keyword hook | 0.1 seconds per call, after loading succeeds |
 | Transform hook | 0.25 seconds per call, after loading succeeds |
 | Exception quarantine | 5 consecutive failure ticks; a failure-free evaluation resets the count |
 | Timeout quarantine | Immediate, with the installed extension persistently disabled |
 | Card result cache | Outcomes for at most 512 clip IDs; the in-memory cache clears on overflow |
+| Keyword index | `extension-keywords.json` beside the extension catalog; atomically saved with `0600` permissions and source-fingerprint invalidation |
 | SF Symbol validation cache | Outcomes for at most 128 symbol names; the in-memory cache clears on overflow |
 
 ## Install and manage extensions
@@ -383,9 +421,9 @@ pesty.register({
 JSON Detector, shown in **Derived Categories**, is the second bundled example.
 Both bundled extensions are seeded off by default in a fresh catalog.
 Bundled seeding happens only when a catalog is first created, so an existing
-catalog keeps its previously stored Token Count source. To adopt this profile
-setting, paste the source above into **Install Extension**; its stable ID updates
-the existing installation in place.
+catalog keeps its previously stored bundled sources. To adopt this Token Count
+profile setting, paste the source above into **Install Extension**; its stable
+ID updates the existing installation in place.
 
 ## Versioning and distribution
 

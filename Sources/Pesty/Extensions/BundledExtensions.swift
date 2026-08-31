@@ -62,6 +62,9 @@ enum BundledExtensions {
       subtitle: function (clip) {
         var info = pestyJSONInfo(clip);
         return info === null ? null : info.subtitle;
+      },
+      keywords: function (clip) {
+        return pestyJSONInfo(clip) === null ? null : ["json"];
       }
     });
     """#

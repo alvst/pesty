@@ -25,6 +25,7 @@ final class ExtensionResultStore {
     @ObservationIgnored private var requestTokens: [RequestKey: UInt64] = [:]
     @ObservationIgnored private var nextRequestToken: UInt64 = 0
     @ObservationIgnored private var iconValidity: [String: Bool] = [:]
+    @ObservationIgnored private var keywordIndex: ExtensionKeywordIndex?
 
     init(catalog: ExtensionCatalog, host: ExtensionHost) {
         self.catalog = catalog
@@ -97,12 +98,14 @@ final class ExtensionResultStore {
     func forget(_ clipID: UUID) {
         outcomes.removeValue(forKey: clipID)
         cancelRequests { $0.clipID == clipID }
+        keywordIndex?.forget(clipID)
     }
 
     func forgetAll() {
         outcomes.removeAll(keepingCapacity: true)
         inFlight.removeAll(keepingCapacity: true)
         requestTokens.removeAll(keepingCapacity: true)
+        keywordIndex?.forgetAll()
     }
 
     func purge(extensionID: String) {
@@ -113,6 +116,11 @@ final class ExtensionResultStore {
             }
         }
         cancelRequests { $0.extensionID == extensionID }
+        keywordIndex?.purge(extensionID: extensionID)
+    }
+
+    func attachKeywordIndex(_ keywordIndex: ExtensionKeywordIndex) {
+        self.keywordIndex = keywordIndex
     }
 
     var cachedClipCount: Int { outcomes.count }

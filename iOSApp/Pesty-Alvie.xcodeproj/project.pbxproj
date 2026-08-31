@@ -73,6 +73,7 @@
 		AB10000000000000000000C3 /* ExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B3 /* ExtensionHost.swift */; };
 		AB10000000000000000000C4 /* ExtensionManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B4 /* ExtensionManifest.swift */; };
 		AB10000000000000000000C5 /* ExtensionResultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B5 /* ExtensionResultStore.swift */; };
+		AB10000000000000000000C6 /* ExtensionKeywordIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10000000000000000000B6 /* ExtensionKeywordIndex.swift */; };
 		9808BB1A9A73038036E81DBB /* LinkPreviewStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0EC8CC911DC3BA3B6B35D0 /* LinkPreviewStore.swift */; };
 		9FF661F7A8B876684C808ABA /* ClipTextMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1D1D4BDEE972ECBE9638BB /* ClipTextMetrics.swift */; };
 		A059C330B1FE50F383D4B8C1 /* DemoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A09D9FDB6CD4E42A3FD6798 /* DemoLibrary.swift */; };
@@ -203,6 +204,7 @@
 		AB10000000000000000000B3 /* ExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionHost.swift; sourceTree = "<group>"; };
 		AB10000000000000000000B4 /* ExtensionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifest.swift; sourceTree = "<group>"; };
 		AB10000000000000000000B5 /* ExtensionResultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionResultStore.swift; sourceTree = "<group>"; };
+		AB10000000000000000000B6 /* ExtensionKeywordIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionKeywordIndex.swift; sourceTree = "<group>"; };
 		864A35049FBB361612B5A0DC /* ClipDeletionLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDeletionLedger.swift; sourceTree = "<group>"; };
 		86C8E1BAB1888A61AD30AA3E /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		89FAC6B477E246B4103A4BC2 /* PestyAlvieApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PestyAlvieApp.swift; sourceTree = "<group>"; };
@@ -506,6 +508,7 @@
 				AB10000000000000000000B3 /* ExtensionHost.swift */,
 				AB10000000000000000000B4 /* ExtensionManifest.swift */,
 				AB10000000000000000000B5 /* ExtensionResultStore.swift */,
+				AB10000000000000000000B6 /* ExtensionKeywordIndex.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -746,6 +749,7 @@
 				AB10000000000000000000C3 /* ExtensionHost.swift in Sources */,
 				AB10000000000000000000C4 /* ExtensionManifest.swift in Sources */,
 				AB10000000000000000000C5 /* ExtensionResultStore.swift in Sources */,
+				AB10000000000000000000C6 /* ExtensionKeywordIndex.swift in Sources */,
 				D214CE646DF58FAD6FCCD8FF /* CloudKitSchema.swift in Sources */,
 				B75C0F1462C6DCF029C8C2AA /* CloudRecordCodec.swift in Sources */,
 				095FC08DAE0A4645AA669413 /* CloudSyncService.swift in Sources */,

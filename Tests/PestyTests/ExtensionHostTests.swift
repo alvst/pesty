@@ -825,6 +825,137 @@ final class ExtensionHostTests: XCTestCase {
         XCTAssertTrue(host.isQuarantined(extensionID))
     }
 
+    func testKeywordsHookSanitizesBoundsDeduplicatesAndCompletesOnMainQueue() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.keywords",
+          name: "Keywords",
+          version: "1.0",
+          api: 1,
+          keywords: function (clip) {
+            if (clip.text === "not-array") { return "keyword"; }
+            if (clip.text === "null") { return null; }
+            if (clip.text === "many") {
+              var values = [];
+              for (var i = 0; i < 40; i++) { values.push("KEY" + i); }
+              return values;
+            }
+            return [
+              "  ALP\n\u0007HA  ", "alpha", 42, null, true, "", "\n", "BETA",
+              "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+            ];
+          }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        XCTAssertEqual(manifest.hooks, ["keywords"])
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        XCTAssertEqual(
+            host.decorationsSync(
+                clipType: "text",
+                text: "dirty",
+                extension: extensionValue
+            ),
+            .success(CardDecorations())
+        )
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: "dirty",
+                extension: extensionValue
+            ),
+            .success([
+                "alpha",
+                "beta",
+                "abcdefghijklmnopqrstuvwxyz123456"
+            ])
+        )
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: "not-array",
+                extension: extensionValue
+            ),
+            .success([])
+        )
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: "null",
+                extension: extensionValue
+            ),
+            .success([])
+        )
+        let many = try host.keywordsSync(
+            clipType: "text",
+            text: "many",
+            extension: extensionValue
+        ).get()
+        XCTAssertEqual(many.count, 32)
+        XCTAssertEqual(many.first, "key0")
+        XCTAssertEqual(many.last, "key31")
+
+        let completion = expectation(description: "keywords completion")
+        host.keywords(
+            clipType: "text",
+            text: "dirty",
+            extension: extensionValue
+        ) { keywords in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(keywords.first, "alpha")
+            completion.fulfill()
+        }
+        wait(for: [completion], timeout: 2)
+    }
+
+    func testKeywordsExceptionsTickQuarantine() throws {
+        let host = ExtensionHost()
+        let source = #"""
+        pesty.register({
+          id: "com.example.throwing-keywords",
+          name: "Throwing Keywords",
+          version: "1.0",
+          api: 1,
+          keywords: function (clip) { throw new Error("broken keywords"); }
+        });
+        """#
+        let manifest = try host.validate(source: source).get()
+        let extensionValue = InstalledExtension(
+            manifest: manifest,
+            source: source,
+            enabled: true,
+            isBundled: false,
+            installedAt: .now
+        )
+
+        for _ in 0..<4 {
+            guard case .failure(.scriptException) = host.keywordsSync(
+                clipType: "text",
+                text: "hello",
+                extension: extensionValue
+            ) else {
+                return XCTFail("Expected a keyword hook exception")
+            }
+        }
+        XCTAssertFalse(host.isQuarantined(extensionValue.id))
+        guard case .failure(.scriptException) = host.keywordsSync(
+            clipType: "text",
+            text: "hello",
+            extension: extensionValue
+        ) else {
+            return XCTFail("Expected a fifth keyword hook exception")
+        }
+        XCTAssertTrue(host.isQuarantined(extensionValue.id))
+    }
+
     func testInvalidRegistrationShapesAreRejected() {
         let host = ExtensionHost()
         XCTAssertEqual(
@@ -1214,7 +1345,7 @@ final class ExtensionHostTests: XCTestCase {
             api: 1,
             weight: 10,
             types: ["text"],
-            hooks: ["icon", "label", "subtitle"]
+            hooks: ["icon", "keywords", "label", "subtitle"]
         )
         let extensionValue = InstalledExtension(
             manifest: manifest,
@@ -1268,6 +1399,22 @@ final class ExtensionHostTests: XCTestCase {
                 extension: extensionValue
             ),
             .success(CardDecorations())
+        )
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: #"{"valid":true}"#,
+                extension: extensionValue
+            ),
+            .success(["json"])
+        )
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: "not JSON",
+                extension: extensionValue
+            ),
+            .success([])
         )
     }
 
@@ -1451,6 +1598,34 @@ final class RunawayExtensionHostTests: XCTestCase {
                     source: source,
                     id: extensionID,
                     hooks: ["transform"]
+                )
+            ),
+            .failure(.timedOut)
+        )
+        XCTAssertTrue(host.isQuarantined(extensionID))
+    }
+
+    func testKeywordsTimeoutQuarantinesImmediately() {
+        let host = ExtensionHost()
+        let extensionID = "com.example.keywords-timeout"
+        let source = """
+        pesty.register({
+          id: "com.example.keywords-timeout",
+          name: "Keywords Timeout",
+          version: "1.0",
+          api: 1,
+          keywords: function (clip) { while (true) {} }
+        });
+        """
+
+        XCTAssertEqual(
+            host.keywordsSync(
+                clipType: "text",
+                text: "hello",
+                extension: installed(
+                    source: source,
+                    id: extensionID,
+                    hooks: ["keywords"]
                 )
             ),
             .failure(.timedOut)
