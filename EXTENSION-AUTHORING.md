@@ -111,7 +111,8 @@ pesty.register({
 Use `label: function (clip)` to replace the built-in type label with a display
 string capped at 16 characters. Pair it with `icon: function (clip)`, which
 must return a real lowercase SF Symbol name of at most 64 characters, and
-optionally `color: function (clip)`, which must return exactly `#RRGGBB`.
+optionally `color: function (clip)`, which must return exactly `#RRGGBB`. A
+user-edited clip title takes precedence over the extension label in the header.
 `title: function (clip)` may supply a title capped at 60 characters, although a
 user-edited title still wins. For each of these single-value decorations, the
 first usable result in descending `weight` order wins; an invalid SF Symbol is

@@ -183,3 +183,150 @@ final class PinboardJumpTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class ClipboardStoreDuplicateTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUp() {
+        super.setUp()
+        directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+
+    override func tearDown() {
+        if let directory {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        directory = nil
+        super.tearDown()
+    }
+
+    func testHistoryDuplicateIsFreshSelectedAndImmediatelyBeforeOriginal() throws {
+        let originalDate = Date(timeIntervalSince1970: 1_000)
+        let duplicateDate = Date(timeIntervalSince1970: 2_000)
+        let newer = ClipItem(type: .text, text: "newer")
+        let original = ClipItem(
+            type: .text,
+            text: "payload",
+            customTitle: "Named clip",
+            createdAt: originalDate,
+            updatedAt: originalDate
+        )
+        let older = ClipItem(type: .text, text: "older")
+        let store = ClipboardStore(
+            testingBaseDirectory: directory,
+            history: [newer, original, older]
+        )
+
+        let copy = try XCTUnwrap(store.duplicate(original, at: duplicateDate))
+
+        XCTAssertEqual(store.history.map(\.id), [newer.id, copy.id, original.id, older.id])
+        XCTAssertNotEqual(copy.id, original.id)
+        XCTAssertTrue(copy.sameContent(as: original))
+        XCTAssertEqual(copy.customTitle, original.customTitle)
+        XCTAssertEqual(copy.createdAt, original.createdAt)
+        XCTAssertEqual(copy.updatedAt, duplicateDate)
+        XCTAssertEqual(store.selectedID, copy.id)
+    }
+
+    func testPinboardDuplicateStaysInCurrentBoardAndPreservesDisplayedAdjacency() throws {
+        let before = ClipItem(type: .text, text: "before")
+        let original = ClipItem(type: .text, text: "payload")
+        let after = ClipItem(type: .text, text: "after")
+        let other = ClipItem(type: .text, text: "other board")
+        let board = Pinboard(
+            name: "Current",
+            items: [before, original, after],
+            pinnedItemIDs: [original.id]
+        )
+        let otherBoard = Pinboard(name: "Other", items: [other])
+        let store = ClipboardStore(
+            testingBaseDirectory: directory,
+            pinboards: [board, otherBoard]
+        )
+        store.source = .pinboard(board.id)
+
+        let copy = try XCTUnwrap(store.duplicate(original))
+        let current = try XCTUnwrap(store.pinboards.first(where: { $0.id == board.id }))
+        let untouched = try XCTUnwrap(store.pinboards.first(where: { $0.id == otherBoard.id }))
+
+        XCTAssertEqual(current.items.map(\.id), [before.id, copy.id, original.id, after.id])
+        XCTAssertEqual(Array(current.orderedItems.prefix(2)).map(\.id), [copy.id, original.id])
+        XCTAssertEqual(untouched.items.map(\.id), [other.id])
+        XCTAssertEqual(store.selectedID, copy.id)
+    }
+
+    func testImageDuplicateOwnsASeparateCopyOfTheBackingFile() throws {
+        let payload = Data("image payload".utf8)
+        let original = ClipItem(
+            type: .image,
+            imageFileName: "original.png",
+            imageHash: "same pixels"
+        )
+        let store = ClipboardStore(
+            testingBaseDirectory: directory,
+            history: [original]
+        )
+        let originalURL = try XCTUnwrap(store.imageURL(for: original))
+        try payload.write(to: originalURL)
+
+        let copy = try XCTUnwrap(store.duplicate(original))
+        let copyURL = try XCTUnwrap(store.imageURL(for: copy))
+
+        XCTAssertNotEqual(copy.imageFileName, original.imageFileName)
+        XCTAssertEqual(try Data(contentsOf: originalURL), payload)
+        XCTAssertEqual(try Data(contentsOf: copyURL), payload)
+        XCTAssertTrue(copy.sameContent(as: original))
+    }
+}
+
+final class ClipCardHeaderLabelTests: XCTestCase {
+    func testCustomTitleOutranksExtensionLabel() {
+        XCTAssertEqual(
+            ClipCardHeaderLabel.resolve(
+                customTitle: "My title",
+                extensionLabel: "JSON",
+                type: .text,
+                fileCount: 0
+            ),
+            "My title"
+        )
+    }
+
+    func testExtensionLabelOutranksMultiFileAndTypeLabels() {
+        XCTAssertEqual(
+            ClipCardHeaderLabel.resolve(
+                customTitle: nil,
+                extensionLabel: "Bundle",
+                type: .file,
+                fileCount: 3
+            ),
+            "Bundle"
+        )
+    }
+
+    func testMultiFileCountOutranksBuiltInTypeLabel() {
+        XCTAssertEqual(
+            ClipCardHeaderLabel.resolve(
+                customTitle: "",
+                extensionLabel: nil,
+                type: .file,
+                fileCount: 3
+            ),
+            "3 files"
+        )
+    }
+
+    func testBuiltInTypeLabelIsTheFallback() {
+        XCTAssertEqual(
+            ClipCardHeaderLabel.resolve(
+                customTitle: nil,
+                extensionLabel: nil,
+                type: .link,
+                fileCount: 0
+            ),
+            ClipType.link.label
+        )
+    }
+}

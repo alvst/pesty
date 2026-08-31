@@ -3,6 +3,20 @@ import SwiftUI
 import ImageIO
 import UniformTypeIdentifiers
 
+enum ClipCardHeaderLabel {
+    nonisolated static func resolve(
+        customTitle: String?,
+        extensionLabel: String?,
+        type: ClipType,
+        fileCount: Int
+    ) -> String {
+        if let customTitle, !customTitle.isEmpty { return customTitle }
+        if let extensionLabel { return extensionLabel }
+        if type == .file, fileCount > 1 { return "\(fileCount) files" }
+        return type.label
+    }
+}
+
 struct ClipCardView: View {
     private static let linkFooterMetaMaxWidth: CGFloat = 145
 
@@ -180,9 +194,12 @@ struct ClipCardView: View {
     /// A multi-file clip is one clip of many files, so the count is the
     /// headline - naming only the first file hid the other four.
     private var cardTypeLabel: String {
-        if let label = extensionResults.labelOverride(for: item.id) { return label }
-        guard item.type == .file, item.fileURLs.count > 1 else { return item.type.label }
-        return "\(item.fileURLs.count) files"
+        ClipCardHeaderLabel.resolve(
+            customTitle: item.customTitle,
+            extensionLabel: extensionResults.labelOverride(for: item.id),
+            type: item.type,
+            fileCount: item.fileURLs.count
+        )
     }
 
     private var titleOverride: String? {
@@ -635,6 +652,11 @@ struct ClipCardView: View {
                 Label("Copy", systemImage: "doc.on.doc")
             }
             .keyboardShortcut("c", modifiers: .command)
+
+            Button { store.duplicate(item) } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+            .keyboardShortcut("d", modifiers: .command)
 
             if settings.pasteStacksEnabled {
                 Divider()

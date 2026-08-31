@@ -142,6 +142,24 @@ final class ClipboardStore {
         if Settings.shared.iCloudSync { startWatching() }
     }
 
+#if DEBUG
+    /// Isolated on-disk store used by store-level tests. Production always
+    /// enters through `shared` and performs the full load/migration sequence.
+    init(
+        testingBaseDirectory base: URL,
+        history: [ClipItem] = [],
+        pinboards: [Pinboard] = []
+    ) {
+        self.history = history
+        self.pinboards = pinboards
+        baseDir = base
+        imagesDir = base.appendingPathComponent("images", isDirectory: true)
+        storeURL = base.appendingPathComponent("store.json")
+        legacyLibraryMigrationResolved = true
+        prepareDirectories()
+    }
+#endif
+
     /// The on-disk store root (history JSON plus saved images), exposed so
     /// Settings can report how much space history actually uses.
     var dataDirectory: URL { baseDir }
@@ -752,11 +770,61 @@ final class ClipboardStore {
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
         if pinboards[i].items.contains(where: { $0.sameContent(as: item) }) { return }
-        var copy = item.copiedWithFreshID()
-        if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
+        let copy = copyWithFreshIdentityAndOwnedImage(item)
         pinboards[i].items.insert(copy, at: 0)
         pinboards[i].touch()
         scheduleSave()
+    }
+
+    /// Duplicates the clip in the container currently shown by the bar. The
+    /// new copy sits immediately before the original: History is newest-first,
+    /// and the leading side is also the consistent adjacent side on Pinboards.
+    @discardableResult
+    func duplicate(_ item: ClipItem, at date: Date = .now) -> ClipItem? {
+        switch source {
+        case .history:
+            guard let index = history.firstIndex(where: { $0.id == item.id }) else { return nil }
+            let copy = copyWithFreshIdentityAndOwnedImage(history[index], at: date)
+            history.insert(copy, at: index)
+            _ = applyHistoryPolicyNow()
+            selectedID = copy.id
+            scheduleSave()
+            return copy
+
+        case .pinboard(let boardID):
+            guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }),
+                  let itemIndex = pinboards[boardIndex].items.firstIndex(
+                      where: { $0.id == item.id }
+                  ) else { return nil }
+            let original = pinboards[boardIndex].items[itemIndex]
+            let copy = copyWithFreshIdentityAndOwnedImage(original, at: date)
+            pinboards[boardIndex].items.insert(copy, at: itemIndex)
+            if let pinnedIndex = pinboards[boardIndex].pinnedItemIDs.firstIndex(of: original.id) {
+                pinboards[boardIndex].pinnedItemIDs.insert(copy.id, at: pinnedIndex)
+            }
+            pinboards[boardIndex].touch(at: date)
+            selectedID = copy.id
+            scheduleSave()
+            return copy
+
+        case .pasteStack:
+            return nil
+        }
+    }
+
+    /// Fresh container identity is paired with a fresh owned image file when
+    /// one exists. If a legacy backing file is already missing, retaining its
+    /// name matches the established Pinboard-copy fallback; deletion protects
+    /// shared names with a reachability check.
+    private func copyWithFreshIdentityAndOwnedImage(
+        _ item: ClipItem,
+        at date: Date = .now
+    ) -> ClipItem {
+        var copy = item.copiedWithFreshID(at: date)
+        if let duplicateName = duplicateImageFile(item) {
+            copy.imageFileName = duplicateName
+        }
+        return copy
     }
 
     /// `nil` or an all-whitespace title clears the card's name rather than

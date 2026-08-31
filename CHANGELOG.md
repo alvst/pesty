@@ -20,6 +20,8 @@ companions:
 ### Planned for 2.0.0 (macOS)
 
 #### Added
+- Added a Duplicate action to clip context menus, creating and selecting an
+  adjacent independently owned copy in History or the current Pinboard.
 - Added ⌘⌥1–9 shortcuts for opening Pinboards 1–9 in their displayed order
   while the Paste Bar is shown.
 - Added an extension authoring cookbook with runnable examples for every API 1
@@ -41,6 +43,8 @@ companions:
   direct path back to the Extensions settings pane.
 
 #### Changed
+- Clip-card headers now show a user-set custom title ahead of extension labels
+  and built-in type labels.
 - Renamed the personal fork's app, executable, bundle, icon, packaging, and
   documentation identity to Pesty-Alvie.
 - Separated preferences, local and iCloud Drive storage, preview temp folders,
