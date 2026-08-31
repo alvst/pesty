@@ -20,6 +20,9 @@ companions:
 ### Planned for 2.0.0 (macOS)
 
 #### Added
+- Added an extension authoring cookbook with runnable examples for every API 1
+  hook family and executable documentation tests that keep those examples
+  valid and behaviorally verified.
 - Added Mac-only JavaScript extensions for bounded multi-hook clip-card
   decorations, weighted and type-filtered derived categories, and explicit
   plain-text transform paste actions, including typed manifest-declared

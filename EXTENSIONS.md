@@ -11,6 +11,9 @@ that the user controls in Pesty-Alvie's Extensions pane.
 
 Extensions are currently available only in the Mac app.
 
+For complete, runnable examples organized by use case, see the
+[extension authoring cookbook](EXTENSION-AUTHORING.md).
+
 ## Trust and execution model
 
 The extension host exposes `pesty.register` to a JavaScriptCore context. It does
