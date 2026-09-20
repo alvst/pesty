@@ -1,9 +1,13 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import Observation
 
 struct SettingsView: View {
     @State private var section: SettingsSection
+    @State private var settingsSearchText = ""
+    @State private var searchTarget: SettingsSearchTarget?
+    @FocusState private var settingsSearchFocused: Bool
 
     init(initialSection: SettingsSection = .general) {
         _section = State(initialValue: initialSection)
@@ -31,11 +35,19 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
+            .simultaneousGesture(
+                TapGesture().onEnded { settingsSearchFocused = false }
+            )
         }
         .frame(width: 760, height: 680)
         .background(Color(nsColor: .windowBackgroundColor))
         .onReceive(NotificationCenter.default.publisher(for: .pestyShowExtensionSettings)) { _ in
             section = .extensions
+        }
+        .onAppear {
+            DispatchQueue.main.async {
+                settingsSearchFocused = false
+            }
         }
     }
 
@@ -46,72 +58,335 @@ struct SettingsView: View {
                     .resizable()
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                Text("Pesty-Alvie")
+                Text("Pesty")
                     .font(.system(size: 16, weight: .bold))
             }
             .padding(.bottom, 18)
 
-            ForEach(SettingsSection.allCases) { item in
-                Button { section = item } label: {
-                    Label(item.title, systemImage: item.symbol)
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        // A plain button only hit-tests its drawn pixels;
-                        // the whole row is the target, not just the glyphs.
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            ZStack(alignment: .trailing) {
+                TextField("Search settings", text: $settingsSearchText)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($settingsSearchFocused)
+                    .padding(.trailing, settingsSearchText.isEmpty ? 0 : 20)
+                if !settingsSearchText.isEmpty {
+                    Button {
+                        settingsSearchText = ""
+                        searchTarget = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear search")
+                    .accessibilityLabel("Clear settings search")
+                    .padding(.trailing, 5)
                 }
-                .buttonStyle(.plain)
             }
-            Spacer()
-            Text("Pesty-Alvie \(Bundle.main.appVersion)")
+            .padding(.bottom, 8)
+
+            if normalizedSearchQuery.isEmpty {
+                ForEach(SettingsSection.allCases) { item in
+                    Button {
+                        section = item
+                        settingsSearchFocused = false
+                    } label: {
+                        Label(item.title, systemImage: item.symbol)
+                            .font(.system(size: 13, weight: .medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(section == item ? Color.accentColor.opacity(0.16) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            } else if searchResults.isEmpty {
+                ContentUnavailableView.search(text: normalizedSearchQuery)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 3) {
+                        ForEach(searchResults) { result in
+                            Button { openSearchResult(result) } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(result.title)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .lineLimit(2)
+                                    Label(result.section.title, systemImage: result.section.symbol)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            Text("Pesty \(Bundle.main.appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
         .frame(width: 174)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background {
+            Color(nsColor: .controlBackgroundColor)
+                .contentShape(Rectangle())
+                .onTapGesture { settingsSearchFocused = false }
+        }
+    }
+
+    private var normalizedSearchQuery: String {
+        settingsSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var searchResults: [SettingsSearchItem] {
+        SettingsSearchIndex.results(for: normalizedSearchQuery)
+    }
+
+    private func openSearchResult(_ result: SettingsSearchItem) {
+        section = result.section
+        searchTarget = SettingsSearchTarget(section: result.section, anchor: result.anchor)
+        settingsSearchFocused = false
+    }
+
+    private func target(for targetSection: SettingsSection) -> SettingsSearchTarget? {
+        searchTarget?.section == targetSection ? searchTarget : nil
     }
 
     @ViewBuilder
     private var content: some View {
         switch section {
-        case .general: GeneralSettings()
-        case .privacy: PrivacySettings()
-        case .shortcuts: ShortcutsSettings()
-        case .extensions: ExtensionsSettings()
-        case .sync: SyncSettings()
+        case .general: GeneralSettings(searchTarget: target(for: .general))
+        case .icons: SourceIconSettings()
+        case .privacy: PrivacySettings(searchTarget: target(for: .privacy))
+        case .shortcuts: ShortcutsSettings(searchTarget: target(for: .shortcuts))
+        case .extensions: ExtensionsSettings(searchTarget: target(for: .extensions))
+        case .sync: SyncSettings(searchTarget: target(for: .sync))
         case .about: AboutView()
         }
     }
 }
 
 enum SettingsSection: CaseIterable, Identifiable {
-    case general, privacy, shortcuts, extensions, sync, about
+    case general, icons, privacy, shortcuts, extensions, sync, about
     var id: Self { self }
     var title: String {
-        switch self { case .general: "General"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .extensions: "Extensions"; case .sync: "Sync"; case .about: "About" }
+        switch self { case .general: "General"; case .icons: "Icons"; case .privacy: "Privacy"; case .shortcuts: "Shortcuts"; case .extensions: "Extensions"; case .sync: "Sync"; case .about: "About" }
     }
     var subtitle: String {
         switch self {
         case .general: "History, behavior, and app preferences"
-        case .privacy: "Keep clips from selected apps out of Pesty-Alvie"
-        case .shortcuts: "Keyboard controls for Pesty-Alvie and Paste Stack"
+        case .icons: "Choose the icons used for source applications"
+        case .privacy: "Keep clips from selected apps out of Pesty"
+        case .shortcuts: "Keyboard controls for Pesty and Paste Stack"
         case .extensions: "Manage scripts that decorate clips and transform paste"
         case .sync: "Keep your clipboard library available across your devices"
-        case .about: "Pesty-Alvie for macOS"
+        case .about: "Pesty for macOS"
         }
     }
     var symbol: String {
-        switch self { case .general: "gearshape"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .extensions: "puzzlepiece.extension"; case .sync: "icloud"; case .about: "info.circle" }
+        switch self { case .general: "gearshape"; case .icons: "photo"; case .privacy: "hand.raised"; case .shortcuts: "keyboard"; case .extensions: "puzzlepiece.extension"; case .sync: "icloud"; case .about: "info.circle" }
+    }
+}
+
+struct SettingsSearchTarget: Equatable {
+    let id = UUID()
+    let section: SettingsSection
+    let anchor: String
+}
+
+struct SettingsSearchItem: Identifiable {
+    let id: String
+    let title: String
+    let section: SettingsSection
+    let anchor: String
+    let keywords: String
+
+    init(_ id: String, _ title: String, section: SettingsSection,
+         anchor: String, keywords: String = "") {
+        self.id = id
+        self.title = title
+        self.section = section
+        self.anchor = anchor
+        self.keywords = keywords
+    }
+
+    var searchableText: String {
+        "\(title) \(section.title) \(section.subtitle) \(keywords)"
+    }
+}
+
+enum SettingsSearchIndex {
+    static let items: [SettingsSearchItem] = [
+        .init("history-mode", "Keep history by number or time", section: .general,
+              anchor: "general.history", keywords: "retention clips limit days weeks months forever"),
+        .init("history-limit", "Number of clips", section: .general,
+              anchor: "general.history", keywords: "history item count maximum stored"),
+        .init("history-delete", "Delete permanently", section: .general,
+              anchor: "general.history", keywords: "undo recover erase remove history option"),
+        .init("history-erase", "Erase saved clips now", section: .general,
+              anchor: "general.history", keywords: "clear delete history storage"),
+        .init("paste-direct", "Paste directly into the active app", section: .general,
+              anchor: "general.pasting", keywords: "accessibility automatic insert"),
+        .init("paste-plain", "Always paste as plain text", section: .general,
+              anchor: "general.pasting", keywords: "remove formatting unformatted"),
+        .init("paste-promote", "Move pasted clips to the top of history", section: .general,
+              anchor: "general.pasting", keywords: "recent reorder"),
+        .init("paste-sounds", "Play sounds when copying or pasting", section: .general,
+              anchor: "general.pasting", keywords: "audio sound copy paste"),
+        .init("paste-import", "Import from Paste", section: .general,
+              anchor: "general.import", keywords: "library history pinboards images migrate"),
+        .init("window-hide", "Hide when clicking outside", section: .general,
+              anchor: "general.appearance", keywords: "window dismiss close"),
+        .init("window-sharing", "Show during screen sharing", section: .general,
+              anchor: "general.appearance", keywords: "recording presentation privacy window"),
+        .init("launch-login", "Launch at login", section: .general,
+              anchor: "general.appearance", keywords: "startup open automatically"),
+        .init("card-style", "Paste-style clip cards", section: .general,
+              anchor: "general.appearance", keywords: "appearance design layout"),
+        .init("bar-resize", "Show resize handle on the bar", section: .general,
+              anchor: "general.appearance", keywords: "window size height drag"),
+        .init("menu-bar", "Show Pesty in the menu bar", section: .general,
+              anchor: "general.appearance", keywords: "status icon menubar"),
+        .init("bar-height", "Bar height", section: .general,
+              anchor: "general.appearance", keywords: "window size pixels resize"),
+        .init("clip-colors", "Clip color theme", section: .general,
+              anchor: "general.colors", keywords: "card colors accent source app shades"),
+        .init("clip-base-color", "Base color for accent shades", section: .general,
+              anchor: "general.colors", keywords: "color picker card theme"),
+        .init("clip-position", "Selected clip position", section: .general,
+              anchor: "general.navigation", keywords: "navigation center left selection"),
+        .init("preview-style", "Clip preview style", section: .general,
+              anchor: "general.previews", keywords: "native inline window quick look rich preview"),
+        .init("link-preview", "Generate link previews", section: .general,
+              anchor: "general.previews", keywords: "website metadata url network"),
+        .init("open-text", "Open text and rich text with", section: .general,
+              anchor: "general.open-with", keywords: "textedit preview application default"),
+        .init("open-images", "Open images with", section: .general,
+              anchor: "general.open-with", keywords: "pictures photos preview application default"),
+        .init("open-links", "Open links with", section: .general,
+              anchor: "general.open-with", keywords: "browser safari website url application default"),
+        .init("open-defaults", "Restore default preview applications", section: .general,
+              anchor: "general.open-with", keywords: "apple reset open clips with"),
+        .init("accessibility", "Accessibility permission", section: .general,
+              anchor: "general.accessibility", keywords: "system settings direct paste approval"),
+
+        .init("source-icons", "Source app icons", section: .icons,
+              anchor: "icons.source-apps", keywords: "custom choose reset light dark card colors application"),
+
+        .init("excluded-apps", "Exclude apps from clipboard history", section: .privacy,
+              anchor: "privacy.excluded-apps", keywords: "ignore source applications password manager 1password"),
+        .init("concealed", "Ignore concealed clipboard content", section: .privacy,
+              anchor: "privacy.concealed", keywords: "password passwords secret hidden marker password manager"),
+        .init("confidential", "Ignore confidential content", section: .privacy,
+              anchor: "privacy.clipboard", keywords: "password passwords secret private pasteboard marker"),
+        .init("transient", "Ignore transient content", section: .privacy,
+              anchor: "privacy.clipboard", keywords: "temporary app generated pasteboard marker"),
+        .init("sleep", "Pause clipboard capture while the Mac sleeps", section: .privacy,
+              anchor: "privacy.sleep", keywords: "lid closed wake history"),
+
+        .init("open-shortcut", "Shortcut to show the Pesty bar", section: .shortcuts,
+              anchor: "shortcuts.open", keywords: "hotkey keyboard open"),
+        .init("quick-paste", "Quick Paste items 1–9", section: .shortcuts,
+              anchor: "shortcuts.quick-paste", keywords: "keyboard shortcut hotkey plain text pinboard"),
+        .init("paste-stack", "Enable Paste Stacks", section: .shortcuts,
+              anchor: "shortcuts.paste-stack", keywords: "sequence queue collection shortcut next newest keep saved"),
+        .init("paste-stack-next", "Shortcut to paste the next stack item", section: .shortcuts,
+              anchor: "shortcuts.paste-stack", keywords: "sequence queue hotkey keyboard"),
+        .init("paste-stack-order", "Paste newest stack item first", section: .shortcuts,
+              anchor: "shortcuts.paste-stack", keywords: "reverse order sequence"),
+        .init("paste-stack-keep", "Keep pasted items in the stack", section: .shortcuts,
+              anchor: "shortcuts.paste-stack", keywords: "retain readd completed clips"),
+        .init("paste-stack-history", "Remove saved stacks with clipboard history", section: .shortcuts,
+              anchor: "shortcuts.paste-stack", keywords: "delete clear erase clips"),
+
+        .init("extensions-about", "About extensions", section: .extensions,
+              anchor: "extensions.about", keywords: "javascript scripts transform paste decorate security network file access"),
+        .init("extensions-installed", "Installed extensions", section: .extensions,
+              anchor: "extensions.installed", keywords: "enable disable uninstall scripts plugins"),
+        .init("extensions-install", "Install an extension", section: .extensions,
+              anchor: "extensions.install", keywords: "javascript script add validate"),
+
+        .init("sync", "Sync clipboard library", section: .sync,
+              anchor: "sync.icloud", keywords: "icloud drive cloudkit iphone ipad mac history pinboards"),
+        .init("sync-now", "Sync now", section: .sync,
+              anchor: "sync.icloud", keywords: "refresh upload download cloud"),
+        .init("sync-import", "Import existing Mac library", section: .sync,
+              anchor: "sync.icloud", keywords: "merge history direct download migrate"),
+
+        .init("about", "About Pesty", section: .about,
+              anchor: "about", keywords: "version github issue license quit")
+    ]
+
+    static func results(for query: String) -> [SettingsSearchItem] {
+        let normalizedQuery = normalize(query)
+        guard !normalizedQuery.isEmpty else { return [] }
+        let queryWords = normalizedQuery.split(separator: " ").map(String.init)
+        return items
+            .filter { item in
+                let words = normalize(item.searchableText).split(separator: " ").map(String.init)
+                return queryWords.allSatisfy { queryWord in
+                    words.contains { wordMatches(queryWord, candidate: $0) }
+                }
+            }
+            .sorted { score($0, query: normalizedQuery) > score($1, query: normalizedQuery) }
+    }
+
+    private static func score(_ item: SettingsSearchItem, query: String) -> Int {
+        let title = normalize(item.title)
+        let section = normalize(item.section.title)
+        if title == query { return 400 }
+        if title.hasPrefix(query) { return 300 }
+        if title.contains(query) { return 200 }
+        if section == query { return 150 }
+        return 100
+    }
+
+    private static func normalize(_ value: String) -> String {
+        let characters = value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .map { $0.isLetter || $0.isNumber ? $0 : " " }
+        return String(characters)
+            .split(separator: " ")
+            .joined(separator: " ")
+    }
+
+    private static func wordMatches(_ query: String, candidate: String) -> Bool {
+        if candidate.contains(query) || query.contains(candidate) { return true }
+        guard query.count >= 4, abs(query.count - candidate.count) <= 3 else { return false }
+        let tolerance = query.count >= 8 ? 4 : (query.count >= 6 ? 2 : 1)
+        return editDistance(query, candidate) <= tolerance
+    }
+
+    private static func editDistance(_ lhs: String, _ rhs: String) -> Int {
+        let left = Array(lhs)
+        let right = Array(rhs)
+        var previous = Array(0...right.count)
+        for (leftIndex, leftCharacter) in left.enumerated() {
+            var current = [leftIndex + 1]
+            for (rightIndex, rightCharacter) in right.enumerated() {
+                current.append(min(
+                    current[rightIndex] + 1,
+                    previous[rightIndex + 1] + 1,
+                    previous[rightIndex] + (leftCharacter == rightCharacter ? 0 : 1)
+                ))
+            }
+            previous = current
+        }
+        return previous[right.count]
     }
 }
 
 private struct GeneralSettings: View {
+    let searchTarget: SettingsSearchTarget?
     @Bindable private var settings = Settings.shared
     #if !MAS
     @State private var accessibilityGranted = AXIsProcessTrusted()
@@ -121,6 +396,7 @@ private struct GeneralSettings: View {
     #endif
 
     @State private var storageBytes: Int64?
+    @State private var pasteImportMessage: String?
 
     private var storageSummary: String {
         let count = ClipboardStore.shared.history.count
@@ -156,7 +432,7 @@ private struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 settingsGroup("Keep History") {
                     settingCard {
-                        VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Picker("Keep history by", selection: $settings.historyRetentionMode) {
                                 ForEach(HistoryRetentionMode.allCases) { mode in
                                     Text(mode.title).tag(mode)
@@ -164,12 +440,14 @@ private struct GeneralSettings: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
+                            Text("Switching between Number and Time does not immediately delete existing clips.")
+                                .font(.caption).foregroundStyle(.secondary)
                             if settings.historyRetentionMode == .itemCount {
-                                Stepper(value: $settings.historyLimit, in: 50...5000, step: 50) {
+                                Stepper(value: $settings.historyLimit, in: 10...5000, step: 10) {
                                     LabeledContent("Number of clips", value: "\(settings.historyLimit) items")
                                         .font(.system(size: 14))
                                 }
-                                Text("Pesty-Alvie keeps the most recent \(settings.historyLimit) clips.")
+                                Text("Pesty keeps the most recent \(settings.historyLimit) clips.")
                                     .font(.caption).foregroundStyle(.secondary)
                             } else {
                                 VStack(alignment: .leading, spacing: 9) {
@@ -205,9 +483,10 @@ private struct GeneralSettings: View {
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(.secondary)
                             }
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 4)
                             Divider()
-                            settingToggle("Delete permanently", isOn: $settings.deletePermanently)
+                            SettingSwitchRow(title: "Delete permanently", isOn: $settings.deletePermanently)
+                                .padding(.vertical, 4)
                             Text("Skips the five-minute Undo window — deleted clips are removed immediately and can't be recovered. Hold Option while deleting to bypass Undo for just one deletion, regardless of this setting.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -220,9 +499,12 @@ private struct GeneralSettings: View {
                                     ClipboardStore.shared.clearHistory()
                                 }
                             }
+                            .padding(.top, 6)
+                            .padding(.bottom, 14)
                         }
                     }
                 }
+                .id("general.history")
 
                 settingsGroup("Pasting") {
                     settingCard {
@@ -231,6 +513,8 @@ private struct GeneralSettings: View {
                             settingToggle("Paste directly into the active app", isOn: $settings.pasteDirectly)
                             Divider()
                             #endif
+                            settingToggle("Always paste as plain text", isOn: $settings.alwaysPastePlainText)
+                            Divider()
                             settingToggle("Move pasted clips to the top of history", isOn: $settings.promoteOnPaste)
                             Divider()
                             settingToggle("Play sound on paste", isOn: $settings.playSound)
@@ -238,19 +522,39 @@ private struct GeneralSettings: View {
                         }
                     }
                 }
+                .id("general.pasting")
+
+                settingsGroup("Import") {
+                    settingCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Import from Paste")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Bring in Paste history, pinboards, and supported images from its local library.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Import…") { importFromPaste() }
+                        }
+                        .padding(.vertical, 10)
+                    }
+                }
+                .id("general.import")
 
                 settingsGroup("Window & Appearance") {
                     settingCard {
                         VStack(alignment: .leading, spacing: 0) {
-                            settingToggle("Hide Pesty-Alvie when clicking outside", isOn: $settings.hideOnClickOutside)
+                            settingToggle("Hide Pesty when clicking outside", isOn: $settings.hideOnClickOutside)
+                            Divider()
+                            settingToggle("Show Pesty during screen sharing", isOn: $settings.showDuringScreenSharing)
                             Divider()
                             settingToggle("Launch at login", isOn: $settings.launchAtLogin)
                             Divider()
                             settingToggle("Paste-style clip cards", isOn: $settings.pasteStyleCards)
                             Divider()
-                            settingToggle("Show resize handle on the Pesty-Alvie bar", isOn: $settings.showBarResizeHandle)
+                            settingToggle("Show resize handle on the Pesty bar", isOn: $settings.showBarResizeHandle)
                             Divider()
-                            settingToggle("Show Pesty-Alvie in the menu bar", isOn: $settings.showMenuBarIcon)
+                            settingToggle("Show Pesty in the menu bar", isOn: $settings.showMenuBarIcon)
                             Divider()
                             VStack(alignment: .leading, spacing: 8) {
                                 LabeledContent("Bar height", value: "\(Int(settings.barHeight)) px")
@@ -264,6 +568,7 @@ private struct GeneralSettings: View {
                         }
                     }
                 }
+                .id("general.appearance")
 
                 settingsGroup("Clip Colors") {
                     settingCard {
@@ -308,6 +613,7 @@ private struct GeneralSettings: View {
                         }
                     }
                 }
+                .id("general.colors")
 
                 settingsGroup("Clip Navigation") {
                     settingCard {
@@ -328,6 +634,7 @@ private struct GeneralSettings: View {
                         }
                     }
                 }
+                .id("general.navigation")
 
                 settingsGroup("Clip Previews") {
                     settingCard {
@@ -344,6 +651,8 @@ private struct GeneralSettings: View {
                             .font(.system(size: 14))
                             .padding(.vertical, 10)
                             Divider()
+                            settingToggle("Generate link previews", isOn: $settings.generateLinkPreviews)
+                            Divider()
                             Text(settings.clipPreviewStyle.detail)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -351,6 +660,7 @@ private struct GeneralSettings: View {
                         }
                     }
                 }
+                .id("general.previews")
 
                 settingsGroup("Open Clips With") {
                     settingCard {
@@ -371,13 +681,14 @@ private struct GeneralSettings: View {
                             }
                             .padding(.vertical, 10)
                         }
-                        Text("These set the one-click app in Inline Pesty-Alvie previews. Use its arrow to choose a different app just once.")
+                        Text("These set the one-click app in Inline Pesty previews. Use its arrow to choose a different app just once.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
                             .padding(.bottom, 8)
                     }
                 }
+                .id("general.open-with")
 
                 #if !MAS
                 settingsGroup("Accessibility") {
@@ -402,19 +713,24 @@ private struct GeneralSettings: View {
                                     openAccessibilityPane()
                                 }
                             } else if requestedGrant {
-                                Button("Restart Pesty-Alvie") { AppController.restart() }
+                                Button("Restart Pesty") { AppController.restart() }
                             }
                         }
                     }
                 }
+                .id("general.accessibility")
                 #endif
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .settingsSearchTarget(searchTarget)
         .background(Color.clear)
         .task { await refreshStorageSize() }
+        .alert("Paste Import", isPresented: Binding(get: { pasteImportMessage != nil }, set: { if !$0 { pasteImportMessage = nil } })) {
+            Button("OK") { pasteImportMessage = nil }
+        } message: { Text(pasteImportMessage ?? "") }
         #if !MAS
         .onAppear { accessibilityGranted = AXIsProcessTrusted() }
         .onReceive(poll) { _ in
@@ -437,6 +753,27 @@ private struct GeneralSettings: View {
             get: { Color(hex: settings.clipColorAccentHex) ?? .pink },
             set: { settings.clipColorAccentHex = NSColor($0).hexString }
         )
+    }
+
+    private func importFromPaste() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Paste Library"
+        panel.message = "Select Paste's db.sqlite file. Pesty reads it without modifying it."
+        panel.prompt = "Import"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.data]
+        panel.directoryURL = PasteLibraryImporter.defaultURL.deletingLastPathComponent()
+        if FileManager.default.fileExists(atPath: PasteLibraryImporter.defaultURL.path) {
+            panel.nameFieldStringValue = PasteLibraryImporter.defaultURL.lastPathComponent
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let summary = try PasteLibraryImporter.importLibrary(from: url)
+            pasteImportMessage = "Imported \(summary.history) history clips, \(summary.pinboards) pinboards, and \(summary.images) images."
+        } catch {
+            pasteImportMessage = error.localizedDescription
+        }
     }
 
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -485,7 +822,7 @@ private struct GeneralSettings: View {
     private func choosePreviewApplication(for target: PreviewOpenTarget) {
         let panel = NSOpenPanel()
         panel.title = "Choose Default App for \(target.title)"
-        panel.message = "Pesty-Alvie will use this app when opening \(target.title.lowercased()) from an inline preview."
+        panel.message = "Pesty will use this app when opening \(target.title.lowercased()) from an inline preview."
         panel.prompt = "Choose App"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -527,6 +864,7 @@ private struct GeneralSettings: View {
 }
 
 private struct PrivacySettings: View {
+    let searchTarget: SettingsSearchTarget?
     @Bindable private var settings = Settings.shared
 
     var body: some View {
@@ -534,7 +872,7 @@ private struct PrivacySettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("Excluded Apps") {
                     SettingsSurface {
-                        Text("Pesty-Alvie will not save anything copied while one of these apps is the source. This is useful for password managers such as 1Password.")
+                        Text("Pesty will not save anything copied while one of these apps is the source. This is useful for password managers such as 1Password.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
@@ -543,7 +881,7 @@ private struct PrivacySettings: View {
                         if settings.ignoredSourceAppBundleIDs.isEmpty {
                             ContentUnavailableView("No apps excluded",
                                                    systemImage: "hand.raised",
-                                                   description: Text("Add an app to keep its copied content out of Pesty-Alvie."))
+                                                   description: Text("Add an app to keep its copied content out of Pesty."))
                             .font(.system(size: 12))
                             .padding(.vertical, 14)
                             // The surface is a leading-aligned stack; without
@@ -564,18 +902,35 @@ private struct PrivacySettings: View {
                         .padding(.vertical, 10)
                     }
                 }
+                .id("privacy.excluded-apps")
 
                 SettingsFormGroup("Concealed Clips") {
                     SettingsSurface {
                         SettingSwitchRow(title: "Ignore concealed clipboard content", isOn: $settings.ignoreConcealed)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Pesty-Alvie also respects the standard macOS concealed-clipboard marker used by password managers.")
+                        Text("Pesty also respects the standard macOS concealed-clipboard marker used by password managers.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 8)
                     }
                 }
+                .id("privacy.concealed")
+
+                SettingsFormGroup("Clipboard Privacy") {
+                    SettingsSurface {
+                        SettingSwitchRow(title: "Ignore confidential content", isOn: $settings.ignoreConfidential)
+                            .padding(.vertical, 10)
+                        Divider()
+                        SettingSwitchRow(title: "Ignore transient content", isOn: $settings.ignoreTransient)
+                            .padding(.vertical, 10)
+                        Text("Uses standard macOS pasteboard markers to avoid saving passwords, temporary data, and app-generated content.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
+                    }
+                }
+                .id("privacy.clipboard")
 
                 SettingsFormGroup("Sleep & Lid") {
                     SettingsSurface {
@@ -589,11 +944,13 @@ private struct PrivacySettings: View {
                             .padding(.bottom, 8)
                     }
                 }
+                .id("privacy.sleep")
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .settingsSearchTarget(searchTarget)
     }
 
     private func ignoredAppRow(_ bundleID: String) -> some View {
@@ -623,8 +980,8 @@ private struct PrivacySettings: View {
 
     private func chooseApps() {
         let panel = NSOpenPanel()
-        panel.title = "Exclude Apps from Pesty-Alvie"
-        panel.message = "Pesty-Alvie will ignore copied content from the apps you choose."
+        panel.title = "Exclude Apps from Pesty"
+        panel.message = "Pesty will ignore copied content from the apps you choose."
         panel.prompt = "Add Apps"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -648,19 +1005,32 @@ private struct PrivacySettings: View {
 }
 
 private struct ShortcutsSettings: View {
+    let searchTarget: SettingsSearchTarget?
     @Bindable private var settings = Settings.shared
+    @Bindable private var hotKeys = HotKeyCenter.shared
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                SettingsFormGroup("Open Pesty-Alvie") {
+                SettingsFormGroup("Open Pesty") {
                     SettingsSurface {
-                        LabeledContent("Show the Pesty-Alvie bar") {
+                        LabeledContent("Show the Pesty bar") {
                             HotkeyRecorderView(keyCode: $settings.hotkeyKeyCode,
                                                modifiers: $settings.hotkeyModifiers)
                         }
                         .font(.system(size: 14))
                         .padding(.vertical, 9)
+                    }
+                }
+                .id("shortcuts.open")
+
+                if !hotKeys.isMainHotKeyRegistered {
+                    SettingsSurface {
+                        Label("The global shortcut is not registered. Choose a different combination and try again.",
+                              systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .font(.system(size: 13))
+                            .padding(.vertical, 10)
                     }
                 }
 
@@ -696,6 +1066,7 @@ private struct ShortcutsSettings: View {
                             .padding(.bottom, 8)
                     }
                 }
+                .id("shortcuts.quick-paste")
 
                 SettingsFormGroup("Paste Stack") {
                     SettingsSurface {
@@ -732,16 +1103,19 @@ private struct ShortcutsSettings: View {
                         }
                     }
                 }
+                .id("shortcuts.paste-stack")
 
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .settingsSearchTarget(searchTarget)
     }
 }
 
 private struct ExtensionsSettings: View {
+    let searchTarget: SettingsSearchTarget?
     @Bindable private var catalog = ExtensionCatalog.shared
     @State private var source = ""
     @State private var installError: String?
@@ -752,7 +1126,7 @@ private struct ExtensionsSettings: View {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsFormGroup("About Extensions") {
                     SettingsSurface {
-                        Text("Extensions are JavaScript snippets that decorate clip cards and can add explicit transformed-paste actions. While enabled, they run inside Pesty-Alvie and receive only the type and text of clips.")
+                        Text("Extensions are JavaScript snippets that decorate clip cards and can add explicit transformed-paste actions. While enabled, they run inside Pesty and receive only the type and text of clips.")
                             .font(.system(size: 13))
                             .padding(.vertical, 10)
                         Divider()
@@ -766,6 +1140,7 @@ private struct ExtensionsSettings: View {
                             .padding(.bottom, 9)
                     }
                 }
+                .id("extensions.about")
 
                 SettingsFormGroup("Installed") {
                     SettingsSurface {
@@ -788,6 +1163,7 @@ private struct ExtensionsSettings: View {
                         }
                     }
                 }
+                .id("extensions.installed")
 
                 SettingsFormGroup("Install Extension") {
                     SettingsSurface {
@@ -828,11 +1204,13 @@ private struct ExtensionsSettings: View {
                         .padding(.vertical, 10)
                     }
                 }
+                .id("extensions.install")
             }
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .settingsSearchTarget(searchTarget)
         .confirmationDialog(
             "Uninstall \(uninstallCandidate?.manifest.name ?? "extension")?",
             isPresented: Binding(
@@ -1054,6 +1432,7 @@ private struct ExtensionsSettings: View {
 }
 
 private struct SyncSettings: View {
+    let searchTarget: SettingsSearchTarget?
     @Bindable private var settings = Settings.shared
     #if MAS
     @Bindable private var cloudSync = CloudSyncService.shared
@@ -1066,10 +1445,11 @@ private struct SyncSettings: View {
                 #if MAS
                 SettingsFormGroup("iCloud") {
                     SettingsSurface {
-                        SettingSwitchRow(title: "Sync with iPhone, iPad, and Mac", isOn: Binding(
+                            SettingSwitchRow(title: "Sync with iPhone, iPad, and Mac", isOn: Binding(
                             get: { settings.cloudKitSync },
                             set: { _ in AppController.shared.toggleCloudKitSync() }))
                             .padding(.vertical, 10)
+                            .disabled(ClipboardStore.isDemo)
                         Divider()
                         HStack {
                             Label(cloudSync.status, systemImage: "icloud")
@@ -1077,10 +1457,12 @@ private struct SyncSettings: View {
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Button("Sync Now") { cloudSync.refreshNow() }
-                                .disabled(!settings.cloudKitSync)
+                                .disabled(ClipboardStore.isDemo || !settings.cloudKitSync)
                         }
                         .padding(.vertical, 10)
-                        Text("Uses your private iCloud database. Pesty-Alvie never places clipboard content in the public database or application logs.")
+                        Text(ClipboardStore.isDemo
+                             ? "Demo mode uses an isolated local library and never connects to iCloud."
+                             : "Uses your private iCloud database. Pesty never places clipboard content in the public database or application logs.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.bottom, 8)
@@ -1096,6 +1478,7 @@ private struct SyncSettings: View {
                             Button("Import…") {
                                 AppController.shared.importExistingLibraryAndSync()
                             }
+                            .disabled(ClipboardStore.isDemo)
                         }
                         .padding(.vertical, 10)
                         if cloudSync.requiresAccountConfirmation {
@@ -1110,11 +1493,14 @@ private struct SyncSettings: View {
                 #else
                 SettingsFormGroup("iCloud Drive") {
                     SettingsSurface {
-                    SettingSwitchRow(title: "Sync clipboard via iCloud Drive", isOn: Binding(
+                            SettingSwitchRow(title: "Sync clipboard via iCloud Drive", isOn: Binding(
                             get: { settings.iCloudSync },
                             set: { _ in AppController.shared.toggleICloudSync() }))
                         .padding(.vertical, 10)
-                        Text(ClipboardStore.shared.iCloudAvailable
+                        .disabled(ClipboardStore.isDemo)
+                        Text(ClipboardStore.isDemo
+                             ? "Demo mode uses an isolated local library and never connects to iCloud."
+                             : ClipboardStore.shared.iCloudAvailable
                              ? "Keeps your history and pinboards in sync across your Macs through iCloud Drive."
                              : "Sign in to iCloud and enable iCloud Drive to use sync.")
                             .font(.caption)
@@ -1124,10 +1510,12 @@ private struct SyncSettings: View {
                 }
                 #endif
             }
+            .id("sync.icloud")
             .frame(maxWidth: 548, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .settingsSearchTarget(searchTarget)
         #if MAS
         .confirmationDialog(
             "Use the current iCloud account?",
@@ -1139,9 +1527,38 @@ private struct SyncSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your current local Pesty-Alvie library will be uploaded to this iCloud account. Nothing from the previous account is fetched or changed.")
+            Text("Your current local Pesty library will be uploaded to this iCloud account. Nothing from the previous account is fetched or changed.")
         }
         #endif
+    }
+}
+
+private struct SettingsSearchScrollModifier: ViewModifier {
+    let target: SettingsSearchTarget?
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content
+                .onAppear { scroll(to: target, using: proxy) }
+                .onChange(of: target) { _, newTarget in
+                    scroll(to: newTarget, using: proxy)
+                }
+        }
+    }
+
+    private func scroll(to target: SettingsSearchTarget?, using proxy: ScrollViewProxy) {
+        guard let target else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(target.anchor, anchor: .top)
+            }
+        }
+    }
+}
+
+private extension View {
+    func settingsSearchTarget(_ target: SettingsSearchTarget?) -> some View {
+        modifier(SettingsSearchScrollModifier(target: target))
     }
 }
 
@@ -1201,7 +1618,7 @@ private struct AboutView: View {
         VStack(spacing: 12) {
             Image(nsImage: NSApp.applicationIconImage ?? NSImage())
                 .resizable().frame(width: 88, height: 88)
-            Text("Pesty-Alvie").font(.system(size: 26, weight: .bold))
+            Text("Pesty").font(.system(size: 26, weight: .bold))
             Text("Version \(Bundle.main.appVersion)")
                 .font(.subheadline).foregroundStyle(.secondary)
             Text("A free, open-source clipboard manager for macOS.\nInspired by Paste.")
@@ -1209,11 +1626,11 @@ private struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
             HStack(spacing: 16) {
-                Link("Fork on GitHub", destination: URL(string: "https://github.com/momenbasel/pesty")!)
-                Link("Report an Issue", destination: URL(string: "https://github.com/momenbasel/pesty/issues")!)
+                Link("Fork on GitHub", destination: URL(string: "https://github.com/alvst/pesty")!)
+                Link("Report an Issue", destination: URL(string: "https://github.com/alvst/pesty/issues")!)
             }
             .padding(.top, 4)
-            Button("Quit Pesty-Alvie", role: .destructive) {
+            Button("Quit Pesty", role: .destructive) {
                 NSApp.terminate(nil)
             }
             .padding(.top, 8)

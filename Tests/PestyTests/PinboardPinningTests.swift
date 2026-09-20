@@ -182,6 +182,33 @@ final class PinboardJumpTests: XCTestCase {
             0
         )
     }
+
+    func testCommandTabMatchesBothAppSwitcherDirections() {
+        XCTAssertTrue(
+            CommandTabShortcut.matches(keyCode: kVK_Tab, modifiers: [.command])
+        )
+        XCTAssertTrue(
+            CommandTabShortcut.matches(
+                keyCode: kVK_Tab,
+                modifiers: [.command, .shift, .function]
+            )
+        )
+    }
+
+    func testCommandTabRejectsOtherKeysAndModifierChords() {
+        XCTAssertFalse(
+            CommandTabShortcut.matches(keyCode: kVK_ANSI_A, modifiers: [.command])
+        )
+        XCTAssertFalse(
+            CommandTabShortcut.matches(keyCode: kVK_Tab, modifiers: [])
+        )
+        XCTAssertFalse(
+            CommandTabShortcut.matches(
+                keyCode: kVK_Tab,
+                modifiers: [.command, .option]
+            )
+        )
+    }
 }
 
 @MainActor

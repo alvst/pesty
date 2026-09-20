@@ -22,7 +22,13 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
         panel.hasShadow = true
         panel.level = .modalPanel
         panel.hidesOnDeactivate = false
+        panel.sharingType = Settings.shared.showDuringScreenSharing ? .readOnly : .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // The collector is borderless, so it has no title bar to drag. Treat
+        // its background as the drag surface while controls keep handling
+        // their own clicks.
+        panel.isMovable = true
+        panel.isMovableByWindowBackground = true
         panel.contentView = NSHostingView(rootView: PasteStackView())
         super.init(window: panel)
         panel.delegate = self
@@ -53,7 +59,8 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
 
     /// The tray was mouse-only: the bar's central key monitor deliberately
     /// ignores every non-bar window. A local monitor scoped to this panel
-    /// gives it arrow-key/Return navigation without touching bar handling.
+    /// gives it arrow-key/Return navigation and Space preview without touching
+    /// bar handling.
     private func startKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -80,6 +87,16 @@ final class PasteStackWindowController: NSWindowController, NSWindowDelegate {
             return nil
         case kVK_DownArrow, kVK_RightArrow:
             sequence.moveSelection(by: 1, matching: query)
+            return nil
+        case kVK_Space:
+            guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else {
+                return event
+            }
+            let entries = sequence.displayEntries
+            QuickLookService.shared.toggle(
+                items: entries.map(\.item),
+                selectedID: sequence.selectedEntry?.item.id
+            )
             return nil
         case kVK_Return, kVK_ANSI_KeypadEnter:
             guard !event.isARepeat else { return nil }

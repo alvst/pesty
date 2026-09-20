@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import os.log
 
-private let pinboardDragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
+private let pinboardDragLog = Logger(subsystem: "com.alvst.pesty", category: "PinboardDrag")
 
 /// Each tab's frame, measured live in the row's own coordinate space, so a
 /// drop's location can be resolved to "insert before whichever tab this
@@ -108,6 +108,9 @@ private struct PinboardRowDropDelegate: DropDelegate {
 }
 
 struct PinboardTabs: View {
+    private static let pillHeight: CGFloat = 30
+
+    @Environment(\.displayScale) private var displayScale
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
     private var stack: PasteSequence { AppController.shared.pasteSequence }
@@ -255,10 +258,9 @@ struct PinboardTabs: View {
                     .onSubmit(finishEditing)
             }
             .padding(.horizontal, 12)
-            .frame(height: 29)
-            .background(Theme.pillSelected, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.pillStroke, lineWidth: 1))
-            .fixedSize()
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(height: Self.pillHeight)
+            .background { pillChrome(selected: true) }
         } else {
             pill(title: board.name,
                  dot: board.color,
@@ -353,6 +355,15 @@ struct PinboardTabs: View {
         .buttonStyle(.plain)
     }
 
+    private func pillChrome(selected: Bool) -> some View {
+        Capsule()
+            .fill(selected ? Theme.pillSelected : Theme.pillBG)
+            .overlay {
+                Capsule().strokeBorder(Theme.pillOutline, lineWidth: 1)
+            }
+            .frame(height: Self.pillHeight + (selected ? 1 / displayScale : 0))
+    }
+
     private func pillLabel(title: String, dot: Color?, icon: String?,
                            badge: Int?, selected: Bool) -> some View {
         HStack(spacing: 6) {
@@ -377,10 +388,9 @@ struct PinboardTabs: View {
         }
         .foregroundStyle(selected ? Theme.pillText : Theme.pillTextMuted)
         .padding(.horizontal, 12)
-        .frame(height: 29)
-        .background(selected ? Theme.pillSelected : Theme.pillBG, in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.pillStroke, lineWidth: selected ? 1 : 0.5))
-        .fixedSize()
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(height: Self.pillHeight)
+        .background { pillChrome(selected: selected) }
         .animation(.easeOut(duration: 0.15), value: selected)
     }
 

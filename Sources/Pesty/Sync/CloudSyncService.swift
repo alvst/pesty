@@ -19,6 +19,12 @@ final class CloudSyncService {
     @ObservationIgnored private var shadow: [String: String] = [:]
     @ObservationIgnored private var protectedRemoteRecordNames: Set<String> = []
     @ObservationIgnored private var isApplyingRemote = false
+    @ObservationIgnored private var lastFetchStartedAt: Date?
+    @ObservationIgnored private var fallbackFetchTimer: Timer?
+    /// Pushes from CloudKit can lag or drop, so opening the bar and a slow
+    /// timer both fetch as a fallback; these keep that from hammering iCloud.
+    private static let barOpenFetchThrottle: TimeInterval = 5
+    private static let fallbackFetchInterval: TimeInterval = 60
 
     private var store: ClipboardStore { ClipboardStore.shared }
     private var stateURL: URL { ClipboardStore.localBase.appendingPathComponent("cksync-state.json") }
@@ -67,13 +73,43 @@ final class CloudSyncService {
         addObservers()
         refreshAccountStatus()
         diffAndEnqueue()
-        Task { try? await engine.fetchChanges() }
+        fetchNow()
+        startFallbackFetchTimer()
     }
 
     func stop() {
         removeObservers()
+        fallbackFetchTimer?.invalidate()
+        fallbackFetchTimer = nil
         engine = nil
         status = "Sync is off"
+    }
+
+    /// Called when the bar opens: the user is probably looking for something
+    /// that just synced from another device, so do not wait for a push.
+    func fetchIfStale() {
+        guard engine != nil else { return }
+        if let lastFetchStartedAt,
+           Date.now.timeIntervalSince(lastFetchStartedAt) < Self.barOpenFetchThrottle {
+            return
+        }
+        fetchNow()
+    }
+
+    private func fetchNow() {
+        guard let engine else { return }
+        lastFetchStartedAt = .now
+        Task { try? await engine.fetchChanges() }
+    }
+
+    private func startFallbackFetchTimer() {
+        fallbackFetchTimer?.invalidate()
+        let timer = Timer(timeInterval: Self.fallbackFetchInterval, repeats: true) { _ in
+            Task { @MainActor in CloudSyncService.shared.fetchNow() }
+        }
+        timer.tolerance = 10
+        RunLoop.main.add(timer, forMode: .common)
+        fallbackFetchTimer = timer
     }
 
     func enable() {
@@ -106,6 +142,7 @@ final class CloudSyncService {
     func refreshNow() {
         guard let engine else { return }
         status = "Syncing…"
+        lastFetchStartedAt = .now
         Task {
             do {
                 try await engine.fetchChanges()

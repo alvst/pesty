@@ -33,7 +33,7 @@ final class LinkPreviewStore {
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
-        request.setValue("Pesty-Alvie/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("Pesty/1.0", forHTTPHeaderField: "User-Agent")
         URLSession.shared.dataTask(with: request) { data, _, _ in
             let metadata = data.flatMap { Self.pageMetadata(from: $0, relativeTo: url) }
             DispatchQueue.main.async {

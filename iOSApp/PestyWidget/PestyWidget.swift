@@ -16,7 +16,7 @@ struct PestyRecentClipsWidget: Widget {
             PestyWidgetView(entry: entry)
         }
         .configurationDisplayName("Recent Clips")
-        .description("Open your latest Pesty-Alvie clips, search, or add something new.")
+        .description("Open your latest Pesty clips, search, or add something new.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -71,10 +71,10 @@ private struct PestyWidgetView: View {
                         Label("Recent", systemImage: "clock.arrow.circlepath")
                             .font(.caption.weight(.bold))
                         Spacer()
-                        Link(destination: URL(string: "pesty-alvie://search")!) {
+                        Link(destination: URL(string: "pesty://search")!) {
                             Image(systemName: "magnifyingglass")
                         }
-                        Link(destination: URL(string: "pesty-alvie://new")!) {
+                        Link(destination: URL(string: "pesty://new")!) {
                             Image(systemName: "plus")
                         }
                     }
@@ -130,7 +130,7 @@ private struct PestyWidgetView: View {
     }
 
     private var emptyView: some View {
-        Link(destination: URL(string: "pesty-alvie://new")!) {
+        Link(destination: URL(string: "pesty://new")!) {
             VStack(spacing: 10) {
                 Image(systemName: "doc.on.clipboard")
                     .font(.title)
@@ -138,7 +138,7 @@ private struct PestyWidgetView: View {
                 Text("Add your first clip")
                     .font(.headline)
                     .multilineTextAlignment(.center)
-                Text("Tap to open Pesty-Alvie")
+                Text("Tap to open Pesty")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -179,6 +179,6 @@ private struct WidgetClipRow: View {
 
 private extension PestyClip {
     var deepLink: URL {
-        URL(string: "pesty-alvie://clip/\(id.uuidString)")!
+        URL(string: "pesty://clip/\(id.uuidString)")!
     }
 }

@@ -1,16 +1,21 @@
 import AppKit
 import Carbon.HIToolbox
+import Observation
 
+@Observable
 @MainActor
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
 
     var onTrigger: (() -> Void)?
     var onSequenceTrigger: (() -> Void)?
+    var onRegistrationChanged: (() -> Void)?
 
     private var hotKeyRef: EventHotKeyRef?
     private var sequenceHotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
+    private(set) var mainHotKeyStatus: OSStatus = noErr
+    private(set) var sequenceHotKeyStatus: OSStatus = noErr
     // "ALVI" keeps Carbon diagnostics distinct from upstream Pesty's "PSTY".
     private let signature: OSType = 0x414C5649
 
@@ -47,23 +52,36 @@ final class HotKeyCenter {
 
     func reload() {
         unregister()
-        hotKeyRef = register(keyCode: Settings.shared.hotkeyKeyCode,
-                             modifiers: Settings.shared.hotkeyModifiers,
-                             id: 1)
+        let main = register(keyCode: Settings.shared.hotkeyKeyCode,
+                            modifiers: Settings.shared.hotkeyModifiers,
+                            id: 1)
+        hotKeyRef = main.ref
+        mainHotKeyStatus = main.status
         if Settings.shared.pasteStacksEnabled {
-            sequenceHotKeyRef = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
-                                         modifiers: Settings.shared.sequenceHotkeyModifiers,
-                                         id: 2)
+            let sequence = register(keyCode: Settings.shared.sequenceHotkeyKeyCode,
+                                    modifiers: Settings.shared.sequenceHotkeyModifiers,
+                                    id: 2)
+            sequenceHotKeyRef = sequence.ref
+            sequenceHotKeyStatus = sequence.status
+        } else {
+            sequenceHotKeyStatus = noErr
         }
+        onRegistrationChanged?()
     }
 
-    private func register(keyCode: Int, modifiers: Int, id: UInt32) -> EventHotKeyRef? {
-        guard keyCode != 0 else { return nil }
+    var isMainHotKeyRegistered: Bool { mainHotKeyStatus == noErr && hotKeyRef != nil }
+    var isSequenceHotKeyRegistered: Bool {
+        sequenceHotKeyStatus == noErr && sequenceHotKeyRef != nil
+    }
+
+    private func register(keyCode: Int, modifiers: Int, id: UInt32)
+        -> (ref: EventHotKeyRef?, status: OSStatus) {
+        guard keyCode != 0 else { return (nil, OSStatus(paramErr)) }
         let hotKeyID = EventHotKeyID(signature: signature, id: id)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID,
                                          GetApplicationEventTarget(), 0, &ref)
-        return status == noErr ? ref : nil
+        return (status == noErr ? ref : nil, status)
     }
 
     private func unregister() {
@@ -97,5 +115,26 @@ final class HotKeyCenter {
             kVK_ANSI_Period: ".", kVK_ANSI_Comma: ",", kVK_ANSI_Slash: "/"
         ]
         return map[keyCode] ?? "?"
+    }
+
+    /// NSMenu draws key equivalents in its own trailing column. Convert the
+    /// configurable Carbon hotkey so the status menu gets that native layout.
+    static func menuKeyEquivalent(for keyCode: Int) -> String? {
+        switch keyName(for: keyCode) {
+        case "?": nil
+        case "Space": " "
+        case "↩": "\r"
+        case "⎋": "\u{1b}"
+        case let key: key.lowercased()
+        }
+    }
+
+    static func menuModifierMask(for modifiers: Int) -> NSEvent.ModifierFlags {
+        var mask: NSEvent.ModifierFlags = []
+        if modifiers & controlKey != 0 { mask.insert(.control) }
+        if modifiers & optionKey != 0 { mask.insert(.option) }
+        if modifiers & shiftKey != 0 { mask.insert(.shift) }
+        if modifiers & cmdKey != 0 { mask.insert(.command) }
+        return mask
     }
 }

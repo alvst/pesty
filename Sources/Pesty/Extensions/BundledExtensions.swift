@@ -1,7 +1,7 @@
 enum BundledExtensions {
     static let tokenCount = #"""
     pesty.register({
-      id: "com.alvst.pesty-alvie.token-count",
+      id: "com.alvst.pesty.token-count",
       name: "Token Count",
       version: "1.0",
       api: 1,
@@ -47,7 +47,7 @@ enum BundledExtensions {
     }
 
     pesty.register({
-      id: "com.alvst.pesty-alvie.json-detector",
+      id: "com.alvst.pesty.json-detector",
       name: "JSON",
       version: "1.0",
       api: 1,

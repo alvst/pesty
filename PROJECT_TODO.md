@@ -1,10 +1,10 @@
-# Pesty-Alvie project TODO
+# Pesty project TODO
 
 Last audited: 2026-08-10 PDT (2026-08-11 UTC for GitHub timestamps); all open PR timelines rechecked, including top-level comments, submitted reviews, and inline threads.
 
 Audited upstream reference: [`momenbasel/pesty` `main` at `bbce746`](https://github.com/momenbasel/pesty/commit/bbce746ca6982a7a2269e6880f97d90f84dbda98)
 
-Local product name: **Pesty-Alvie**
+Local product name: **Pesty**
 
 Purpose: implementation contract and handoff for the next coding agent.
 
@@ -25,7 +25,7 @@ each train. The 2.5.0 companion work may remain in development without blocking
 the macOS 2.0.0 release; likewise, Paste Stacks must not be folded into 2.0.0
 merely because prototype code exists in the fork.
 
-This is not a request to reopen closed pull requests or merge any current open head as-is. Closed PRs are design/code references. **Every currently open PR remains open and is still required work**; amend/rebase it in place only after its named fixes and foundations are ready. Preserve the Pesty-Alvie identity isolation throughout.
+This is not a request to reopen closed pull requests or merge any current open head as-is. Closed PRs are design/code references. **Every currently open PR remains open and is still required work**; amend/rebase it in place only after its named fixes and foundations are ready. Preserve the Pesty identity isolation throughout.
 
 ## How to use this roadmap
 
@@ -33,7 +33,7 @@ This is not a request to reopen closed pull requests or merge any current open h
 2. Use the dependency table as the authority. Normally work in numerical order, but optional/independent stages may be parked indefinitely; never start a dependent stage merely because prototype code already exists locally.
 3. Finish one small, testable slice before starting the next. For anything intended for upstream, target roughly **300 changed production lines or fewer** per PR, excluding focused tests and documentation. Split by behavior or layer, not by arbitrary line count.
 4. Wait for each dependency to be integrated before building its follow-up. For the personal fork, make the equivalent small checkpoint commits.
-5. Treat every old PR as read-only reference material. **Do not reopen, comment on, push to, or otherwise modify any GitHub PR or issue without Alvie's explicit approval.**
+5. Treat every old PR as read-only reference material. **Do not reopen, comment on, push to, or otherwise modify any GitHub PR or issue without the fork maintainer's explicit approval.**
 6. Re-check upstream `main` at the start of implementation. `bbce746` is the audit reference, not permission to ignore newer upstream work.
 7. A checked item means it was verified in this checkout during the audit. It does not mean it has been committed or pushed.
 
@@ -41,7 +41,7 @@ This is not a request to reopen closed pull requests or merge any current open h
 
 Rechecked 2026-08-10 PDT / 2026-08-11 UTC, including every top-level comment, submitted review, and inline review thread on the 15 open PRs. No formal submitted reviews or inline review threads exist on these PRs; each has one decisive top-level maintainer comment, while #41 also has earlier duplicate author screenshot comments. Every head is 13 commits behind audited `main` at `bbce746`; historical green CI does not prove current-main compatibility. None of the open branches literally contains a rejected prerequisite PR, so **no PR should be closed merely because a dependency was rejected**.
 
-No current head is ready to merge as-is. This is a proposal only: no PR should be closed, edited, commented on, or otherwise changed on GitHub without Alvie's explicit approval.
+No current head is ready to merge as-is. This is a proposal only: no PR should be closed, edited, commented on, or otherwise changed on GitHub without the fork maintainer's explicit approval.
 
 | Open PR | Proposed disposition | Maintainer outcome and required revision |
 |---:|---|---|
@@ -50,13 +50,13 @@ No current head is ready to merge as-is. This is a proposal only: no PR should b
 | [#16](https://github.com/momenbasel/pesty/pull/16) | **Keep/Revise; blocked on tests** | [Drag-out is wanted](https://github.com/momenbasel/pesty/pull/16#issuecomment-5247489680); the 80 ms hide timer is rejected. Use safe drag-session lifecycle, all files, `public.url`, native color, lazy images, collision-safe names, and cancellation/reopen tests. |
 | [#17](https://github.com/momenbasel/pesty/pull/17) | **Keep/Revise; blocked** | [The read path is explicitly wanted](https://github.com/momenbasel/pesty/pull/17#issuecomment-5247499190). Preserve actual origin, validate the marker, resolve ID/name together, and apply #27 exclusions; keep #61's `CopyResult`/toast as a separate slice. |
 | [#18](https://github.com/momenbasel/pesty/pull/18) | **Keep/Revise; blocked on trigger rewrite/tests; early candidate** | [The bug is confirmed](https://github.com/momenbasel/pesty/pull/18#issuecomment-5247495036), but `selectedID` usually does not change. Use a presentation token/scroll state, preserve the leading inset, and test same-ID/rapid reopen. |
-| [#19](https://github.com/momenbasel/pesty/pull/19) | **Keep/Revise; blocked on repeat-safe exact deletion** | [Bare Backspace is wanted](https://github.com/momenbasel/pesty/pull/19#issuecomment-5247448060), but repeat events and current cross-container selection/deletion are unsafe. The maintainer's minimum unblock is repeat suppression; exact scope, adjacent selection, docs/tests also remain. Pesty-Alvie additionally defers final release until Stage 16 Undo. |
+| [#19](https://github.com/momenbasel/pesty/pull/19) | **Keep/Revise; blocked on repeat-safe exact deletion** | [Bare Backspace is wanted](https://github.com/momenbasel/pesty/pull/19#issuecomment-5247448060), but repeat events and current cross-container selection/deletion are unsafe. The maintainer's minimum unblock is repeat suppression; exact scope, adjacent selection, docs/tests also remain. Pesty additionally defers final release until Stage 16 Undo. |
 | [#20](https://github.com/momenbasel/pesty/pull/20) | **Keep/Revise; blocked on #42 infrastructure** | [The idea is right](https://github.com/momenbasel/pesty/pull/20#issuecomment-5247494782), but character parsing breaks the default chord. Use key codes for 1–9, prevent modifier conflicts, define file/plain-text behavior, and test non-US layouts. |
 | [#21](https://github.com/momenbasel/pesty/pull/21) | **Keep/Revise; blocked on retention/sync redesign** | [Current implementation is unsafe](https://github.com/momenbasel/pesty/pull/21#issuecomment-5247449956): it breaks current `trimHistory()`/CloudKit compilation and can turn one device's policy into account-wide deletion. Keep the PR open, preserve its useful preference migration, and rewrite the retention engine after choosing safe sync semantics. |
 | [#22](https://github.com/momenbasel/pesty/pull/22) | **Keep open; blocked on #42 `pasteTarget`** | [The isolated guard/default are correct](https://github.com/momenbasel/pesty/pull/22#issuecomment-5247494930), but persistence exposes stale destination, escape, modal-level, full-screen, and Cmd-Tab/Settings semantics. Rebase/update after target resolution. |
 | [#36](https://github.com/momenbasel/pesty/pull/36) | **Keep/Revise; documentation-only** | [Maintainer supplied mergeable wording](https://github.com/momenbasel/pesty/pull/36#issuecomment-5247499565): visual changes require before/after strip images; only a stated no-visual-delta change may omit them. |
 | [#37](https://github.com/momenbasel/pesty/pull/37) | **Keep/Revise** | [Head truncation is good](https://github.com/momenbasel/pesty/pull/37#issuecomment-5247499441), but the binary `22→700 pt` jump is not. Use content-driven ideal width capped at `700 pt`; remove the no-op reserve/GeometryReader/container label. |
-| [#38](https://github.com/momenbasel/pesty/pull/38) | **Keep/Revise; blocked on launch-source redesign** | [Reopen behavior is wanted](https://github.com/momenbasel/pesty/pull/38#issuecomment-5247489562); unconditional delayed presentation after every launch is rejected because it breaks Launch at Login. Keep the PR open: preserve first-run onboarding, safely show for explicit user launches/reopens, and never show for login/background launch. The user-launch addition is a Pesty-Alvie requirement that needs redesign and upstream re-discussion. |
+| [#38](https://github.com/momenbasel/pesty/pull/38) | **Keep/Revise; blocked on launch-source redesign** | [Reopen behavior is wanted](https://github.com/momenbasel/pesty/pull/38#issuecomment-5247489562); unconditional delayed presentation after every launch is rejected because it breaks Launch at Login. Keep the PR open: preserve first-run onboarding, safely show for explicit user launches/reopens, and never show for login/background launch. The user-launch addition is a Pesty requirement that needs redesign and upstream re-discussion. |
 | [#40](https://github.com/momenbasel/pesty/pull/40) | **Keep/Revise; blocked on deletion/selection redesign** | [Collection-scoped deletion/image cleanup is wanted](https://github.com/momenbasel/pesty/pull/40#issuecomment-5247489406) and lands first; multi-select also remains required, but needs event-carried modifiers, reconciliation, confirmation, current identity semantics, and Undo integration. |
 | [#41](https://github.com/momenbasel/pesty/pull/41) | **Keep/Revise** | [Padding is wanted](https://github.com/momenbasel/pesty/pull/41#issuecomment-5247499323); alignment/GeometryReader is a measured no-op. Keep only top `4→16 pt` and bottom `18→26 pt`, test at `300 pt`, and rename around spacing. |
 | [#42](https://github.com/momenbasel/pesty/pull/42) | **Keep/Revise; blocked on foundations and safe mutation model** | [Key-monitor scoping and `pasteTarget` land first](https://github.com/momenbasel/pesty/pull/42#issuecomment-5247489252). The menu/editor/context feature remains required, but the current 921-line head must be rebuilt around CloudKit-safe mutation, current IDs, native menus, explicit clipboard behavior, and correct lifecycle. |
@@ -69,14 +69,14 @@ The current checkout is not a normal continuation of upstream `main`:
 
 - The current local branch is `context-menu-structure` at `f4a07eb`.
 - Git reports **no merge base** between this branch and audited upstream `main`.
-- The working tree contains a large mixture of tracked modifications, deletions, and untracked files, including the completed Pesty-Alvie identity work.
+- The working tree contains a large mixture of tracked modifications, deletions, and untracked files, including the completed Pesty identity work.
 - The local tree currently omits upstream CloudKit source files and contains an older Paste Bar window controller that regresses merged fixes [#63](https://github.com/momenbasel/pesty/pull/63) and [issue #64](https://github.com/momenbasel/pesty/issues/64).
 
 Therefore:
 
-- [ ] Before implementation, show Alvie the exact dirty-tree inventory and agree on a recoverable checkpoint.
+- [ ] Before implementation, show the fork maintainer the exact dirty-tree inventory and agree on a recoverable checkpoint.
 - [ ] Do **not** run a destructive reset, checkout, clean, ordinary rebase, or bulk conflict resolution.
-- [ ] Prefer creating a clean integration branch from the then-current upstream `main`, then porting the Pesty-Alvie identity changes and approved feature slices deliberately.
+- [ ] Prefer creating a clean integration branch from the then-current upstream `main`, then porting the Pesty identity changes and approved feature slices deliberately.
 - [ ] If work continues in this checkout instead, restore current-main architecture file by file and prove equivalence with tests before feature work.
 - [ ] Include every identity-critical untracked file in any checkpoint, especially `Sources/Pesty/AppIdentity.swift`, the renamed entitlement files, and the entire intended `iOSApp/` tree.
 
@@ -91,7 +91,7 @@ Known reasons the local prototypes cannot be treated as finished:
 - Current-main CloudKit/sync files are deleted in the local comparison.
 - Local update/delete helpers still contain shared-UUID assumptions that conflict with per-container copies.
 - `pasteStacksFollowHistory` currently defaults to false, retaining stack payloads after Clear History.
-- Outgoing copy marks Pesty-Alvie as source instead of preserving every clip's actual origin; incoming declared source is not bounded/validated.
+- Outgoing copy marks Pesty as source instead of preserving every clip's actual origin; incoming declared source is not bounded/validated.
 - Drag-out eagerly handles some images on the MainActor, exposes only one file, and lacks correct native URL/color representations and drag-end lifecycle.
 - Preview/network/temp cleanup and Paste Stack identity/sync behavior have not passed the privacy gates below.
 - The local source-color prototype does not yet expose the approved Default/Vibrant/Accent Shades contract.
@@ -99,40 +99,40 @@ Known reasons the local prototypes cannot be treated as finished:
 
 ## Non-negotiable product and architecture rules
 
-### Pesty-Alvie identity and coexistence
+### Pesty identity and coexistence
 
-- [x] macOS visible product, app bundle, executable, icon, and System Settings-facing name are `Pesty-Alvie`.
-- [x] macOS bundle and signing identifier are `com.alvst.pesty-alvie`.
-- [x] iOS visible product is `Pesty-Alvie`; app and test IDs are `com.alvst.pesty-alvie.companion` and `com.alvst.pesty-alvie.companion.tests`.
-- [x] Pesty-Alvie's CloudKit container reference is `iCloud.com.alvst.pesty-alvie`.
-- [x] Local storage uses `Application Support/Pesty-Alvie`; iCloud Drive storage uses `Pesty-Alvie`; temporary exports use Pesty-Alvie-specific directories.
+- [x] macOS visible product, app bundle, executable, icon, and System Settings-facing name are `Pesty`.
+- [x] macOS bundle and signing identifier are `com.alvst.pesty`.
+- [x] iOS visible product is `Pesty`; app and test IDs are `com.alvst.pesty.companion` and `com.alvst.pesty.companion.tests`.
+- [x] Pesty's CloudKit container reference is `iCloud.com.alvst.pesty`.
+- [x] Local storage uses `Application Support/Pesty`; iCloud Drive storage uses `Pesty`; temporary exports use Pesty-specific directories.
 - [x] User defaults, login item registration, Accessibility/TCC identity, app bundle, and designated requirement are isolated from upstream Pesty.
 - [x] The default global shortcuts are distinct from upstream Pesty, and the Carbon signature is `ALVI`.
 - [ ] Preserve those values in every build script, entitlement, generated Xcode project, release artifact, help page, About screen, user agent, and fallback identifier.
 - [ ] Keep the Swift module/target and internal model names such as `Pesty`, `PestyMain`, `PestyClip`, and `PestyBoard` where changing them would be needless source/schema churn.
-- [ ] Keep standard pasteboard types such as `org.nspasteboard.source` unchanged. Preserve the clip's validated actual origin in the marker; use Pesty-Alvie's bundle ID only when the item has no valid source ID.
+- [ ] Keep standard pasteboard types such as `org.nspasteboard.source` unchanged. Preserve the clip's validated actual origin in the marker; use Pesty's bundle ID only when the item has no valid source ID.
 - [ ] Never add automatic fallback reads or writes to upstream Pesty's defaults or storage directories. A one-time user-approved copy while both apps are quit is the only acceptable data migration.
 - [ ] Assume the system pasteboard is intentionally shared. Coexistence does not mean separate clipboards.
 
 Exact identity map to preserve:
 
-| Upstream identity/artifact | Pesty-Alvie identity/artifact |
+| Upstream identity/artifact | Pesty identity/artifact |
 |---|---|
-| `Pesty.app` / executable `Pesty` | `Pesty-Alvie.app` / executable `Pesty-Alvie` |
-| `Pesty.icns`, `Pesty.iconset` | `Pesty-Alvie.icns`, `Pesty-Alvie.iconset` |
-| `Pesty.entitlements`, `Pesty-MAS.entitlements` | `Pesty-Alvie.entitlements`, `Pesty-Alvie-MAS.entitlements` |
-| `com.greycorelabs.pesty` | `com.alvst.pesty-alvie` |
-| `Application Support/Pesty` | `Application Support/Pesty-Alvie` |
-| iCloud Drive folder `Pesty` | iCloud Drive folder `Pesty-Alvie` |
-| temp `Pesty-QuickLook`, `Pesty-Open` | `Pesty-Alvie-QuickLook`, `Pesty-Alvie-Open` |
-| iOS `com.greycorelabs.pesty.companion` | `com.alvst.pesty-alvie.companion` |
-| iOS test bundle | `com.alvst.pesty-alvie.companion.tests` |
-| `iCloud.com.greycorelabs.pesty` | `iCloud.com.alvst.pesty-alvie` |
-| iOS local directory `PestyCompanion` | Pesty-Alvie-specific local directory `Pesty-Alvie` |
+| `Pesty.app` / executable `Pesty` | `Pesty.app` / executable `Pesty` |
+| `Pesty.icns`, `Pesty.iconset` | `Pesty.icns`, `Pesty.iconset` |
+| `Pesty.entitlements`, `Pesty-MAS.entitlements` | `Pesty.entitlements`, `Pesty-MAS.entitlements` |
+| `com.greycorelabs.pesty` | `com.alvst.pesty` |
+| `Application Support/Pesty` | `Application Support/Pesty` |
+| iCloud Drive folder `Pesty` | iCloud Drive folder `Pesty` |
+| temp `Pesty-QuickLook`, `Pesty-Open` | `Pesty-QuickLook`, `Pesty-Open` |
+| iOS `com.greycorelabs.pesty.companion` | `com.alvst.pesty.companion` |
+| iOS test bundle | `com.alvst.pesty.companion.tests` |
+| `iCloud.com.greycorelabs.pesty` | `iCloud.com.alvst.pesty` |
+| iOS local directory `PestyCompanion` | Pesty-specific local directory `Pesty` |
 | Carbon signature `PSTY` | `ALVI` |
-| upstream default global hotkeys | Pesty-Alvie defaults `⌃⌘V` and `⌃⌥⌘V` |
+| upstream default global hotkeys | Pesty defaults `⌃⌘V` and `⌃⌥⌘V` |
 
-Keep the package product named `Pesty-Alvie`, but keep the internal Swift target/module at `Pesty`. Point About/support links only to a real fork URL such as `https://github.com/alvst/pesty`, or label links explicitly as upstream; do not invent a repository URL.
+Keep the package product named `Pesty`, but keep the internal Swift target/module at `Pesty`. Point About/support links only to a real fork URL such as `https://github.com/alvst/pesty`, or label links explicitly as upstream; do not invent a repository URL.
 
 ### Current-main behavior that must not regress
 
@@ -155,7 +155,7 @@ Keep the package product named `Pesty-Alvie`, but keep the internal Swift target
 
 ## Design baseline and sizing contract
 
-These values describe the current Pesty-Alvie prototype and the intended visual proportions. They are starting constraints, not permission to clip content on a small display. Every visual change must include before/after screenshots of the full strip and test the smallest supported visible frame. If a change has no visual delta—such as a refactor, accessibility-label change, or focus-order fix—say so explicitly in the PR/checkpoint description instead.
+These values describe the current Pesty prototype and the intended visual proportions. They are starting constraints, not permission to clip content on a small display. Every visual change must include before/after screenshots of the full strip and test the smallest supported visible frame. If a change has no visual delta—such as a refactor, accessibility-label change, or focus-order fix—say so explicitly in the PR/checkpoint description instead.
 
 | Surface/token | Baseline | Required behavior |
 |---|---:|---|
@@ -194,7 +194,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 | Stage | Deliverable | Main dependencies |
 |---:|---|---|
-| 0 | Recoverable Pesty-Alvie baseline on current architecture | User-approved preservation decision |
+| 0 | Recoverable Pesty baseline on current architecture | User-approved preservation decision |
 | 1 | Test target and required CI | Stage 0 |
 | 2 | Responder chain, menus, target resolution, lifecycle, modifiers, and corrected search pill | Stages 0–1 |
 | 3 | Resize handle, accepted strip spacing, and stable Settings sidebar | Stage 2 and #63/#64 restoration |
@@ -214,24 +214,24 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 ## Stage 0 — Preserve the fork and restore a trustworthy baseline
 
-**Goal:** make the Pesty-Alvie work recoverable, then remove architectural regressions before adding features.
+**Goal:** make the Pesty work recoverable, then remove architectural regressions before adding features.
 
 **References:** merged [#3](https://github.com/momenbasel/pesty/pull/3), [#7](https://github.com/momenbasel/pesty/pull/7), [#23](https://github.com/momenbasel/pesty/pull/23), [#25](https://github.com/momenbasel/pesty/pull/25), [#27](https://github.com/momenbasel/pesty/pull/27), [#39](https://github.com/momenbasel/pesty/pull/39), [#63](https://github.com/momenbasel/pesty/pull/63), and completed [issue #64](https://github.com/momenbasel/pesty/issues/64).
 
-- [ ] Make a user-approved checkpoint containing all intended tracked and untracked Pesty-Alvie files. Record the pre-checkpoint `git status` and exact HEAD.
+- [ ] Make a user-approved checkpoint containing all intended tracked and untracked Pesty files. Record the pre-checkpoint `git status` and exact HEAD.
 - [ ] Reconfirm whether a clean current-main integration branch or in-place restoration is the chosen path. Do not assume.
 - [ ] Restore/adapt current-main CloudKit and sync files that the local tree currently deletes.
-- [ ] Port the Pesty-Alvie identity through restored files without reintroducing `com.greycorelabs.pesty`, upstream Team IDs, storage paths, or artifact names.
+- [ ] Port the Pesty identity through restored files without reintroducing `com.greycorelabs.pesty`, upstream Team IDs, storage paths, or artifact names.
 - [ ] Restore #63/#64's `BarWindowController`, AppController integration, and hotkey retry behavior before porting any feature code that touches those files.
 - [ ] Force-disable unfinished Paste Stack capture, UI, and shortcut registration at baseline. Preserve existing local prototype data for the explicit Stage 12 migration, but prevent unsafe Stack persistence from shipping; do not attempt a partial setting flip before the tested identity/asset engine exists.
 - [ ] While restoring current sync sources, correct the stale `CloudSyncService.desiredRecords` comment that says a pinned clip keeps its UUID. Pinboard copies mint independent IDs, and CloudKit record names are globally keyed by those independent copy IDs—not by reusing one ID in multiple containers.
-- [ ] Verify the current local Pesty-Alvie build contains no upstream bundle/team ID or upstream storage/temp path in its compiled executable.
+- [ ] Verify the current local Pesty build contains no upstream bundle/team ID or upstream storage/temp path in its compiled executable.
 - [ ] Verify the old ignored upstream `Pesty.app`, icons, and `.build/.../Pesty` products are not recreated or accidentally distributed. A temporary backup is not a release artifact.
 - [ ] Keep the fork's standard shortcuts distinct from upstream so both apps can be installed; document that only one app can own an identical global shortcut.
 
 **Exit gate**
 
-- [ ] Direct macOS build succeeds as a universal app and reports `Pesty-Alvie`, `com.alvst.pesty-alvie`, and the matching designated requirement.
+- [ ] Direct macOS build succeeds as a universal app and reports `Pesty`, `com.alvst.pesty`, and the matching designated requirement.
 - [ ] MAS compile path succeeds without using upstream certificates, profiles, Team IDs, or signing defaults.
 - [ ] iOS simulator build-for-testing succeeds with the renamed product, app/test IDs, module import, test host, and CloudKit entitlement.
 - [ ] The three existing iOS tests pass.
@@ -248,7 +248,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Add one small current-main unit test in the same slice to prove discovery and linking.
 - [ ] Introduce dependency seams for temporary storage/defaults where tests need them; tests must never touch a user's live pasteboard history, defaults, iCloud, Application Support, or images.
 - [ ] Add CI for `swift test`, `swift build`, `swift build -Xswiftc -DMAS`, and `git diff --check`.
-- [ ] Add the universal local app build as a release-readiness gate without requiring Alvie's personal signing secrets on ordinary PRs.
+- [ ] Add the universal local app build as a release-readiness gate without requiring the fork maintainer's personal signing secrets on ordinary PRs.
 - [ ] Keep Swift 6 strict-concurrency diagnostics clean and do not hide warnings by weakening compiler settings.
 - [ ] Make failures block dependent work. Do not postpone all tests until the final feature PR.
 
@@ -297,7 +297,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Define an explicit, testable launch intent—first run, foreground user launch, user reopen, or login/background launch. Do not infer intent from a fixed delay.
 - [ ] A foreground user launch or Dock/Finder/Spotlight reopen may show the Paste Bar on the pointer's display. Gate on `barController.isPresented`, never `window.isVisible`; coalesce duplicate requests and never reset an already-active session.
 - [ ] Launch at Login/background launch must remain hidden with no focus flash. If macOS does not provide a trustworthy source signal in the chosen architecture, prefer hidden state and require an explicit user action rather than guessing.
-- [ ] Revise #38 in place with this launch-source-aware behavior. The upstream comment explicitly accepts reopen and rejects unconditional launch presentation; therefore present foreground-launch behavior as a Pesty-Alvie requirement needing maintainer approval, not as already accepted review feedback.
+- [ ] Revise #38 in place with this launch-source-aware behavior. The upstream comment explicitly accepts reopen and rejects unconditional launch presentation; therefore present foreground-launch behavior as a Pesty requirement needing maintainer approval, not as already accepted review feedback.
 - [ ] Keep #22 blocked until the #42 `pasteTarget` slice lands. Its default and three-line guard are correct in isolation, but a persistent bar must update the destination whenever another non-Pesty app activates so Safari→Notes cannot still paste into Safari.
 - [ ] For #22, provide a reliable hide/escape route even while the bar is non-key and the menu icon is hidden; decide a non-obstructive panel level for persistent mode/full-screen apps; align the setting label with the real `windowDidResignKey`/Cmd-Tab/Settings triggers; preserve `suppressAutoHide` and #64 epochs.
 
@@ -308,7 +308,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Reject unsupported combinations and conflicts with the main hotkey, Paste Stack hotkey, menu shortcuts, and system-reserved combinations.
 - [ ] Prevent or explicitly resolve identical quick-paste and plain-text modifier selections. Define file plain-text behavior so it does not silently paste bare filenames, and either expose the plain-text path through intended non-digit commands or narrow/document the feature honestly.
 - [ ] Persist normalized `NSEvent.ModifierFlags.rawValue` rather than a second ad-hoc modifier encoding.
-- [ ] Preserve existing Pesty-Alvie defaults through migration; a reset must restore the fork's non-conflicting defaults, not upstream's.
+- [ ] Preserve existing Pesty defaults through migration; a reset must restore the fork's non-conflicting defaults, not upstream's.
 
 ### 2E — Content-driven search pill
 
@@ -430,7 +430,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 ### 5A — Validated source attribution
 
 - [ ] Write `org.nspasteboard.source` as `validated(item.sourceBundleID) ?? validated(Bundle.main.bundleIdentifier) ?? AppIdentity.bundleIdentifier`.
-- [ ] Never hardcode upstream Pesty or Pesty-Alvie as the origin of content that originally came from another app.
+- [ ] Never hardcode upstream Pesty or Pesty as the origin of content that originally came from another app.
 - [ ] Treat an incoming source marker as untrusted. Accept at most 255 characters, require at least one dot, and allow only `[A-Za-z0-9.-]`.
 - [ ] Reject invalid markers before LaunchServices lookup, exclusion matching, persistence, CloudKit, icon lookup, or color derivation.
 - [ ] Apply the same validation during local-store load, migration, and remote apply so legacy stored source IDs cannot bypass the outbound check.
@@ -469,7 +469,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 ### 6A — Legacy per-container identity migration
 
-- [ ] Before **any** History-removal path is enabled, scan the force-disabled legacy Paste Stack data and build a versioned local quarantine/index under `Application Support/Pesty-Alvie`.
+- [ ] Before **any** History-removal path is enabled, scan the force-disabled legacy Paste Stack data and build a versioned local quarantine/index under `Application Support/Pesty`.
 - [ ] For each legacy Stack entry, mint a Stack-owned item ID, record the matching old History ID as explicit provenance when determinable, and clone its asset into quarantine ownership. Default the quarantined follow-history policy to true; isolate unmatched entries for explicit Stage 12 review rather than guessing.
 - [ ] Route Stage 6 History removals through this quarantine index so matched legacy entries/assets cascade safely even before the final Paste Stack engine/UI exists.
 - [ ] If the Stack quarantine/index migration cannot complete and roll back cleanly, keep Stack UI disabled **and block History deletion/retention** rather than destroying the History-side evidence needed for later provenance cleanup.
@@ -496,7 +496,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 **Revision gate:** keep #21 open, but do not merge or superficially rebase its current implementation. First choose and test its sync contract on current main, then rewrite the branch while retaining only validated preference-migration behavior.
 
 - [ ] For the upstream #21 revision, choose and document one of the maintainer's no-delete contracts: **device-local cache/view pruning invisible to `CloudSyncService.diffAndEnqueue`**, or an **identical deterministic per-device age filter** that converges without any device issuing CloudKit deletes. A local preference must never silently emit account-wide tombstones.
-- [ ] If Pesty-Alvie separately wants synced account-wide retention with additive CloudKit policy/schema, treat it as a new product feature requiring explicit maintainer approval, migration, conflict resolution, and two-device convergence—not as behavior accepted by #21's review.
+- [ ] If Pesty separately wants synced account-wide retention with additive CloudKit policy/schema, treat it as a new product feature requiring explicit maintainer approval, migration, conflict resolution, and two-device convergence—not as behavior accepted by #21's review.
 - [ ] Preserve/adapt current-main `trimHistory()` call sites so every intermediate slice compiles; do not replace them with #21's stale API wholesale.
 - [ ] Define history count and age policies independently, with clear Settings copy, bounded inputs, and migration for existing preferences.
 - [ ] Preserve the part #21 got right: keep the existing `historyLimit` preference intact and default existing users to item-count mode unless an explicit migration says otherwise.
@@ -572,7 +572,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 **Goal:** make selection explicit and safe across filtering, live capture, source changes, and sync before enabling destructive bulk actions.
 
-**PR lineage:** keep/revise open [#40](https://github.com/momenbasel/pesty/pull/40): land its explicitly accepted collection-scoped deletion/image-ownership foundation in Stage 6, then complete the still-required multi-select behavior with event-carried modifiers and per-container IDs here. Keep open [#19](https://github.com/momenbasel/pesty/pull/19): the maintainer's minimum unblock is repeat suppression, with exact scope, adjacent selection, docs, and tests also requested. This roadmap imposes the stricter Pesty-Alvie release policy that the shortcut remains interim until Stage 16 Undo. Closed [#57](https://github.com/momenbasel/pesty/pull/57) is only a seven-line bulk-delete follow-up and must be folded into the finished selection model. Revised #37 search sizing lands in Stage 2; this stage only proves selection remains correct while filtering.
+**PR lineage:** keep/revise open [#40](https://github.com/momenbasel/pesty/pull/40): land its explicitly accepted collection-scoped deletion/image-ownership foundation in Stage 6, then complete the still-required multi-select behavior with event-carried modifiers and per-container IDs here. Keep open [#19](https://github.com/momenbasel/pesty/pull/19): the maintainer's minimum unblock is repeat suppression, with exact scope, adjacent selection, docs, and tests also requested. This roadmap imposes the stricter Pesty release policy that the shortcut remains interim until Stage 16 Undo. Closed [#57](https://github.com/momenbasel/pesty/pull/57) is only a seven-line bulk-delete follow-up and must be folded into the finished selection model. Revised #37 search sizing lands in Stage 2; this stage only proves selection remains correct while filtering.
 
 ### 8A — Selection state model
 
@@ -627,7 +627,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 ### 9B — Drag lifecycle
 
 - [ ] Do not hide at drag threshold or session start.
-- [ ] Advertise a copy-only source operation mask so Finder or another destination can never move/delete an original or Pesty-Alvie-managed asset.
+- [ ] Advertise a copy-only source operation mask so Finder or another destination can never move/delete an original or Pesty-managed asset.
 - [ ] Let ordinary resign-key behavior hide when a real destination activates, or dismiss from `draggingSession(_:endedAt:operation:)` only after a successful external operation.
 - [ ] Escape, a refused destination, a click that barely crosses the drag threshold, and a local/no-op drop must preserve the bar, query, selection, and #64 phase.
 - [ ] Any completion token must be tied to the current epoch so it cannot hide a newly reopened bar.
@@ -668,7 +668,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 - [ ] Validate URL schemes before opening links; initial allow-list should be `http`/`https` for browsers and existing local files for file apps.
 - [ ] Open text/images from owner-only exported copies so external edits cannot mutate Pesty-managed history assets. Use a unique `0700` directory per operation and verify the final exported file mode is `0600` after writing/replacing it.
-- [ ] Clean the `Pesty-Alvie-Open` directory with a bounded TTL plus startup/termination and explicit replacement cleanup. Do not delete an export merely because `NSWorkspace.open` returned; the destination may not have finished reading it.
+- [ ] Clean the `Pesty-Open` directory with a bounded TTL plus startup/termination and explicit replacement cleanup. Do not delete an export merely because `NSWorkspace.open` returned; the destination may not have finished reading it.
 - [ ] Provide browser/Preview/TextEdit actions only when compatible; keep one-off app choice scoped to the current item.
 - [ ] Split the opener implementation and its Settings UI if together they exceed a focused review size.
 
@@ -676,7 +676,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 - [ ] A mocked URL loader proves **zero network requests** in all default/local preview paths.
 - [ ] Tests cover permissions, cleanup, invalid schemes, missing files, non-key behavior, selection changes, edit/delete lifecycle, sleep/wake, and display changes.
-- [ ] External edits cannot modify Pesty-Alvie's managed stored file.
+- [ ] External edits cannot modify Pesty's managed stored file.
 - [ ] MAS/direct builds and Debug Demo screenshots pass on small, large, and stacked displays.
 
 ## Stage 11 — Optional link enrichment
@@ -728,7 +728,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Current CloudKit indexes `Clip` records globally by `ClipItem.id`; `container` currently means History or a Pinboard UUID. Do not overload it with a stack UUID without an explicit Mac+iOS schema/apply-path design.
 - [ ] If stack sync is later approved, add explicit `PasteStack`/`PasteStackEntry` records with ordering, conflict, tombstone/delete, migration, and two-device convergence tests.
 - [ ] Keep stacks entirely out of `CloudSyncService` for the device-local 2.1.0 release. Do not partially upload entries as ordinary clips.
-- [ ] A device-local 2.1.0 release must use a separate store under local `Application Support/Pesty-Alvie`, or explicitly omit all Stack fields/assets from the main iCloud Drive snapshot. “Not in CloudKit” alone is insufficient because direct builds may place the main `store.json` in iCloud Drive.
+- [ ] A device-local 2.1.0 release must use a separate store under local `Application Support/Pesty`, or explicitly omit all Stack fields/assets from the main iCloud Drive snapshot. “Not in CloudKit” alone is insufficient because direct builds may place the main `store.json` in iCloud Drive.
 - [ ] Remove old helper logic that updates/deletes across collections by equal UUID (`containsHistoryItemID`-style assumptions).
 
 ### 12C — Persistence and asset ownership
@@ -737,7 +737,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Version local persistence, decode missing/old fields safely, write atomically, and recover gracefully from corrupt files or missing assets.
 - [ ] Before exposing the UI, verify and import Stage 6's quarantine/index into the final Stack store without changing its new IDs, provenance, privacy default, or cloned ownership. Require an explicit safe resolution for unmatched entries; never infer provenance from content alone.
 - [ ] If upgrading a checkout that lacks the Stage 6 manifest, run that same minimal privacy migration gate first. Final import remains transactional/resumable; a move or encode failure must roll back without deleting the quarantine entry or its only asset.
-- [ ] Persist in Pesty-Alvie-specific storage with `0700` directories and `0600` files where applicable.
+- [ ] Persist in Pesty-specific storage with `0700` directories and `0600` files where applicable.
 - [ ] Clone an image/payload into stack ownership when an entry is created. Never share the History filename as if the stack owns it.
 - [ ] Delete only the owning entry's asset after a successful model/persistence transaction.
 - [ ] Orphan cleanup must first prove that no persisted History, Pinboard, or Stack record references the file.
@@ -853,22 +853,22 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 ### 15A — iOS companion contract
 
-- [x] Product, target, project, scheme, test host, bundle IDs, CloudKit entitlement constant, and visible names are Pesty-Alvie-specific.
+- [x] Product, target, project, scheme, test host, bundle IDs, CloudKit entitlement constant, and visible names are Pesty-specific.
 - [x] `PRODUCT_MODULE_NAME=Pesty` is retained so existing `@testable import Pesty` and model names compile.
 - [x] Generic iOS Simulator build-for-testing and the existing three tests pass.
 - [x] Implement live library sync rather than a readiness-only companion, and label simulator builds accurately as local-only.
 - [x] Consume the exact macOS CloudKit schema and handle per-container UUIDs, conflicts, deletes, images, migration, and durable offline work.
 - [ ] Verify insert/update/delete/conflict/image/order convergence on two physically signed devices after provisioning.
-- [x] Keep the iOS local support directory Pesty-Alvie-specific and update every “iCloud Drive/Pesty” instruction to the actual fork path/container behavior.
-- [x] Fix `iOSApp/Pesty-Alvie/Sync/LibrarySyncing.swift` so CloudKit errors interpolate `error.localizedDescription`; prohibit clipboard content in logs.
-- [ ] Register/provision `iCloud.com.alvst.pesty-alvie` under Alvie's Apple Developer team before physical-device testing; simulator success is not device entitlement proof.
+- [x] Keep the iOS local support directory Pesty-specific and update every “iCloud Drive/Pesty” instruction to the actual fork path/container behavior.
+- [x] Fix `iOSApp/Pesty/Sync/LibrarySyncing.swift` so CloudKit errors interpolate `error.localizedDescription`; prohibit clipboard content in logs.
+- [ ] Register/provision `iCloud.com.alvst.pesty` under the fork maintainer's Apple Developer team before physical-device testing; simulator success is not device entitlement proof.
 
 ### 15B — Signing and packaging
 
 - [ ] Parameterize Developer ID, MAS distribution/installer certificates, Team ID, App Store application identifier, provisioning profile, and notarization API credentials.
 - [x] Do not retain or silently default to Moamen's Team `H3WXHVTP97`, certificates, profiles, or API-key paths.
 - [ ] Direct local ad-hoc builds may use the stable custom designated requirement; document that changing the signature later can require a fresh Accessibility grant.
-- [ ] Produce only `Pesty-Alvie.app`, `Pesty-Alvie.icns`, Pesty-Alvie DMG/ZIP/PKG names, and Pesty-Alvie volume labels.
+- [ ] Produce only `Pesty.app`, `Pesty.icns`, Pesty DMG/ZIP/PKG names, and Pesty volume labels.
 - [ ] Remove upstream Homebrew install text from fork release notes because it installs the other app.
 - [x] Keep signing/notarization workflows manual until valid secrets and App IDs exist. Do not restore a known-failing tag-triggered release.
 
@@ -878,8 +878,8 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] Run the manual matrices in this document on Apple Silicon and the universal/Intel slice where possible.
 - [ ] Verify Accessibility denial/grant/revocation, Login Items, launch at login, pause, sleep/wake, display attach/detach, and target-app termination.
 - [ ] Verify fresh install, upgrade, corrupt settings/store, missing image, Clear History, delete account data, and uninstall/reinstall behavior.
-- [ ] Update README, CONTRIBUTING, changelog, website, privacy, support, About, Settings help, and release notes with actual behavior and Pesty-Alvie screenshots.
-- [ ] Document that Pesty-Alvie starts with separate storage. If Alvie wants an upstream-data snapshot, provide a manual one-time copy procedure that requires both apps to be quit.
+- [ ] Update README, CONTRIBUTING, changelog, website, privacy, support, About, Settings help, and release notes with actual behavior and Pesty screenshots.
+- [ ] Document that Pesty starts with separate storage. If the fork maintainer wants an upstream-data snapshot, provide a manual one-time copy procedure that requires both apps to be quit.
 - [ ] Document network preview default, Paste Stack persistence/sync, Clear History behavior, and the shared system pasteboard accurately.
 - [ ] Do not tag 2.5.0 yet. Carry its clean release candidate into Stage 16, then repeat the affected deletion/sync/release gates.
 
@@ -887,14 +887,14 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 
 - [ ] A clean clone can build without missing untracked entitlements, identity files, generated project inputs, or local-only absolute paths.
 - [ ] The packaged app and iOS build contain no upstream bundle ID, Team ID, storage/temp path, executable name, icon name, or release artifact label.
-- [ ] Pesty and Pesty-Alvie can coexist without sharing defaults/history/storage/login identity; their intentionally shared system pasteboard behavior is documented.
+- [ ] Pesty and Pesty can coexist without sharing defaults/history/storage/login identity; their intentionally shared system pasteboard behavior is documented.
 - [ ] Every shipped feature has tests, user-facing help, accurate privacy behavior, and a recoverable data-erasure path.
 
 ## Stage 16 — Five-minute Undo for deleted items and per-train release gates
 
 **Goal:** make user-initiated item deletion recoverable for exactly five minutes while preserving exact CloudKit deletion semantics after the grace period, then run the relevant subset for each release train: History/Pinboards in 2.0.0, Paste Stacks in 2.1.0, and companion/sync behavior in 2.5.0.
 
-**Origin:** new Pesty-Alvie requirement; no audited upstream PR implements this contract.
+**Origin:** new Pesty requirement; no audited upstream PR implements this contract.
 
 ### 16A — Scope and user contract
 
@@ -909,7 +909,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 ### 16B — Persisted soft-deletion journal
 
 - [ ] Reuse Stage 6's exact preflight/ownership and hard-delete transaction rather than creating a second deletion engine. Manual item delete journals first; expiry invokes the existing hard-delete finalizer.
-- [ ] Add a local, Pesty-Alvie-specific pending-deletion journal under `Application Support/Pesty-Alvie`, written atomically with owner-only directory/file permissions.
+- [ ] Add a local, Pesty-specific pending-deletion journal under `Application Support/Pesty`, written atomically with owner-only directory/file permissions.
 - [ ] A `PendingDeletionBatch` records a stable batch ID, concrete `ClipLocation`/container and item IDs, original indices/order, original primary/selection state, record revision, payload snapshot or durable reference, linked cascade members, owned/shared asset references, exact CloudKit record IDs, creation time, and expiry deadline.
 - [ ] On delete, preflight the complete batch and ownership graph, then atomically hide/remove it from active local collections and add it to the journal. Do not destroy payloads or assets during the grace period.
 - [ ] The grace period is **300 seconds** from the successful local delete transaction—not from confirmation opening, animation completion, or app relaunch.
@@ -969,7 +969,7 @@ These values describe the current Pesty-Alvie prototype and the intended visual 
 - [ ] No CloudKit tombstone is emitted during that window; after expiry, exact tombstones are queued durably and retried without resurrecting data.
 - [ ] The right-side Undo control appears only while useful, remains accessible and collision-free, and vanishes when no valid batch exists.
 - [ ] Immediate privacy/maintenance deletions remain accurately labeled and behave as documented.
-- [ ] The final packaged Pesty-Alvie release passes every prior stage gate plus the new soft-delete/Undo matrix.
+- [ ] The final packaged Pesty release passes every prior stage gate plus the new soft-delete/Undo matrix.
 
 ---
 
@@ -979,7 +979,7 @@ Screenshots and GIFs in old PRs show product intent; they are **not** approval t
 
 | Feature | Reference | What to inspect | Guardrail |
 |---|---|---|---|
-| Current overall bar | [`docs/assets/demo.gif`](docs/assets/demo.gif), [`screenshot-strip.png`](docs/assets/screenshot-strip.png) | Card proportions, bottom-docked bar, rapid keyboard scanning | Re-capture with Pesty-Alvie branding and current selection/spacing. |
+| Current overall bar | [`docs/assets/demo.gif`](docs/assets/demo.gif), [`screenshot-strip.png`](docs/assets/screenshot-strip.png) | Card proportions, bottom-docked bar, rapid keyboard scanning | Re-capture with Pesty branding and current selection/spacing. |
 | Live resize | [#5](https://github.com/momenbasel/pesty/pull/5) | Small centered drag affordance and live bar-height feedback | Rebuild on #63/#64; never animate/stage the window below a display. |
 | Settings sidebar | [#6](https://github.com/momenbasel/pesty/pull/6) | Native sidebar grouping and pane hierarchy | Preserve every current control and MAS CloudKit section. |
 | Local/inline previews | [#8](https://github.com/momenbasel/pesty/pull/8), [#28](https://github.com/momenbasel/pesty/pull/28), [#45](https://github.com/momenbasel/pesty/pull/45) | Content treatment, floating/compact panel, relationship to selected card | Local first, owner-only files, non-key, zero network by default. |
@@ -988,7 +988,7 @@ Screenshots and GIFs in old PRs show product intent; they are **not** approval t
 | Pinboard color/rename | [#11](https://github.com/momenbasel/pesty/pull/11), [#54](https://github.com/momenbasel/pesty/pull/54), [#58](https://github.com/momenbasel/pesty/pull/58) | Swatch submenu, inline field, tab reorder | #58 supersedes #11; first keystroke and native responder behavior are acceptance tests. |
 | Pause controls | [#12](https://github.com/momenbasel/pesty/pull/12), merged [#39](https://github.com/momenbasel/pesty/pull/39) | Menu label/icon and discoverability | One merged pause state only; ellipsis item is optional polish. |
 | Copy feedback | [#13](https://github.com/momenbasel/pesty/pull/13), [#61](https://github.com/momenbasel/pesty/pull/61) | Compact non-key confirmation | Show only after a verified write; preserve true source attribution. |
-| Delete Undo | New Pesty-Alvie Stage 16 requirement | Native trailing **Undo Delete** button, optional batch count/countdown, visible only during the five-minute grace period | Keep it on the right side of the top action row, accessible at narrow widths, and out of the card strip. |
+| Delete Undo | New Pesty Stage 16 requirement | Native trailing **Undo Delete** button, optional batch count/countdown, visible only during the five-minute grace period | Keep it on the right side of the top action row, accessible at narrow widths, and out of the card strip. |
 | Liquid Glass | Keep/Revise [#14](https://github.com/momenbasel/pesty/pull/14), reference-only closed [#62](https://github.com/momenbasel/pesty/pull/62) | Material, edge integration, modern appearance | Update #14 last; pin Xcode 26.3 in CI/release, rebase on current main, use top-only corner geometry, one tint, one shadow, and old-OS fallback. |
 | Card hierarchy/spacing | Keep/Revise [#15](https://github.com/momenbasel/pesty/pull/15), Keep/Revise [#41](https://github.com/momenbasel/pesty/pull/41), closed [#52](https://github.com/momenbasel/pesty/pull/52) | #15 hierarchy; #41's two padding changes and full-strip images | Land #41 padding in Stage 3; update #15 afterward with split chrome/card palettes, visible inner stroke and `6 pt` ring, no `.scrollClipDisabled()`, and preserved #63/#64. |
 | Expanding search | Keep/Revise [#37](https://github.com/momenbasel/pesty/pull/37) | Head truncation and content-driven growth from about `22 pt` to a `700 pt` cap | No GeometryReader/binary jump/ineffective reserve; preserve the clear button's accessibility label. |
@@ -1013,7 +1013,7 @@ Status is live-audited through 2026-08-10 PDT / 2026-08-11 UTC. **Keep/Revise** 
 |---:|---|---|
 | [#1](https://github.com/momenbasel/pesty/pull/1) | Closed, unmerged; **drop old PR**. Stale fixed right-side preview, superseded by later detached/Quick Look designs. | Preview intent only; use Stages 10–11 and newer #28/#45 references. Do not reopen someone else's stale branch. |
 | [#2](https://github.com/momenbasel/pesty/pull/2) | Closed, unmerged; author self-closed a huge draft with unrelated architecture. | Nothing wholesale. Later focused PRs are the source material. |
-| [#3](https://github.com/momenbasel/pesty/pull/3) | **Merged.** Stable designated-requirement signing. | Preserve in Pesty-Alvie identity/signing baseline. |
+| [#3](https://github.com/momenbasel/pesty/pull/3) | **Merged.** Stable designated-requirement signing. | Preserve in Pesty identity/signing baseline. |
 | [#4](https://github.com/momenbasel/pesty/pull/4) | Closed, unmerged; superseded by later reliable handoff work. | Physical-modifier release and process-target paste in Stage 2 via #49-style implementation. |
 | [#5](https://github.com/momenbasel/pesty/pull/5) | Closed for staleness, not merit; maintainer explicitly invited re-cut. | Stage 3 live resize handle on #63/#64. |
 | [#6](https://github.com/momenbasel/pesty/pull/6) | Closed, unmerged; sidebar welcomed, old patch deleted MAS CloudKit UI. | Stage 3 focused sidebar preserving all current controls. |
@@ -1029,7 +1029,7 @@ Status is live-audited through 2026-08-10 PDT / 2026-08-11 UTC. **Keep/Revise** 
 | [#16](https://github.com/momenbasel/pesty/pull/16) | **Open — Keep/Revise; blocked on tests.** Feature/provider shape accepted; timed dismissal rejected ([comment](https://github.com/momenbasel/pesty/pull/16#issuecomment-5247489680)). | Update after Stage 1; use #59 as tests/reference without replacing #16. |
 | [#17](https://github.com/momenbasel/pesty/pull/17) | **Open — Keep/Revise; blocked.** Read path wanted; hardcoded origin/untrusted marker/pairing/exclusion issues block merge ([comment](https://github.com/momenbasel/pesty/pull/17#issuecomment-5247499190)). | Correct/rebase #17 as Stage 5 attribution only; #61 remains separate `CopyResult`/toast reference. |
 | [#18](https://github.com/momenbasel/pesty/pull/18) | **Open — Keep/Revise; blocked on trigger rewrite/tests.** Bug confirmed; selected-ID trigger usually does not fire and can poison the next selection ([comment](https://github.com/momenbasel/pesty/pull/18#issuecomment-5247495036)). | Early candidate after foundations: presentation token/scroll state, preserved inset, same-ID/rapid-reopen tests. |
-| [#19](https://github.com/momenbasel/pesty/pull/19) | **Open — Keep/Revise; blocked on repeat-safe exact deletion.** Intent wanted; repeat/current delete semantics unsafe ([comment](https://github.com/momenbasel/pesty/pull/19#issuecomment-5247448060)). | Maintainer minimum: repeat guard; also add cooldown, adjacent selection, container scope, docs/tests. Pesty-Alvie's stricter local release policy adds Stage 16 Undo. Not superseded by #57. |
+| [#19](https://github.com/momenbasel/pesty/pull/19) | **Open — Keep/Revise; blocked on repeat-safe exact deletion.** Intent wanted; repeat/current delete semantics unsafe ([comment](https://github.com/momenbasel/pesty/pull/19#issuecomment-5247448060)). | Maintainer minimum: repeat guard; also add cooldown, adjacent selection, container scope, docs/tests. Pesty's stricter local release policy adds Stage 16 Undo. Not superseded by #57. |
 | [#20](https://github.com/momenbasel/pesty/pull/20) | **Open — Keep/Revise; blocked on #42 infrastructure.** Idea accepted; default chord broken by character parsing ([comment](https://github.com/momenbasel/pesty/pull/20#issuecomment-5247494782)). | KeyCode digits, distinct modifier choices, useful file/plain-text semantics, raw flags, and layout tests. |
 | [#21](https://github.com/momenbasel/pesty/pull/21) | **Open — Keep/Revise; blocked on retention/sync redesign.** Current-main compile failure plus unsafe cross-device CloudKit deletion semantics ([comment](https://github.com/momenbasel/pesty/pull/21#issuecomment-5247449956)). | Keep open and rewrite after choosing the sync contract; preserve validated migration intent, apply-on-release confirmation, bounded `Forever`, and two-device tests. |
 | [#22](https://github.com/momenbasel/pesty/pull/22) | **Open — Keep open; blocked on #42.** Guard/default correct alone; stale destination, escape/panel/trigger semantics make it unsafe ([comment](https://github.com/momenbasel/pesty/pull/22#issuecomment-5247494930)). | After #42 `pasteTarget`: update destination on app switch, guarantee dismissal, define level/Cmd-Tab/Settings behavior, preserve #64 and suppression. |
@@ -1088,18 +1088,18 @@ Status is live-audited through 2026-08-10 PDT / 2026-08-11 UTC. **Keep/Revise** 
 - **Merge an existing open head as-is:** none.
 - **Drop or never revive independently:** #1, #2, #4, #10, #11, #12, #13, #26, #46, #48, #52, #57.
 - **Best early focused work:** independent #36 wording; #50 test target; #42 key-monitor and `pasteTarget` foundations; minimal native main menu; revised #38 launch/reopen behavior; revised #18, #20, #37, #22, and #41; revised #17; then #40 scoped-delete foundation, #24's tiny race, #5, #6, #34+#56, #54, and #58 Pinboard-only.
-- **Medium/high-risk work after foundations:** update open #16 using #59 tests/reference; finish revised #21 retention; finish Stage 7 editor/context in #42; finish Stage 8 multi-select in #40; #14 last among visual/open feature work after toolchain approval; final Stage 16 Undo and #19 integration remain the release-ending step by Pesty-Alvie policy.
+- **Medium/high-risk work after foundations:** update open #16 using #59 tests/reference; finish revised #21 retention; finish Stage 7 editor/context in #42; finish Stage 8 multi-select in #40; #14 last among visual/open feature work after toolchain approval; final Stage 16 Undo and #19 integration remain the release-ending step by Pesty policy.
 - **Previews last and split:** #8, #28, #45+#46, #47, #51; link networking remains separate/default-off.
 - **Paste Stack as the 2.1.0 feature release:** #9, #29–#31, #33, #43–#44, #48, #53, #55.
 - **Conditional/ask before investing:** #32, #35, #62 and optional duplicated pause/visual residue.
 
-## Optional maintainer-coordination comment for Alvie to post
+## Optional maintainer-coordination comment for the fork maintainer to post
 
-Do not post this automatically. If Alvie wants upstream prioritization after preserving the fork, one concise comment is better than reopening old PRs individually:
+Do not post this automatically. If the fork maintainer wants upstream prioritization after preserving the fork, one concise comment is better than reopening old PRs individually:
 
-> Thanks for the detailed review. I plan to keep every live PR open and implement all of the requested features, while revising each current head to address its review blockers. I will not propose any existing head as-is. After the #50 test-target foundation, my proposed order begins with #42 key-monitor scoping, #42 reliable `pasteTarget`, the minimal native main menu, then revised #38 launch/reopen behavior: onboarding stays, login/background startup remains hidden, and only an explicit foreground launch or reopen may show the bar. I understand the reopen part is accepted while foreground-launch presentation needs re-discussion. #40 deletion/multi-select, #21 retention, and #42 full context editing all remain required after their foundations, and Pesty-Alvie's five-minute Undo remains the final release gate. Does that dependency order match what you would most like reviewed?
+> Thanks for the detailed review. I plan to keep every live PR open and implement all of the requested features, while revising each current head to address its review blockers. I will not propose any existing head as-is. After the #50 test-target foundation, my proposed order begins with #42 key-monitor scoping, #42 reliable `pasteTarget`, the minimal native main menu, then revised #38 launch/reopen behavior: onboarding stays, login/background startup remains hidden, and only an explicit foreground launch or reopen may show the bar. I understand the reopen part is accepted while foreground-launch presentation needs re-discussion. #40 deletion/multi-select, #21 retention, and #42 full context editing all remain required after their foundations, and Pesty's five-minute Undo remains the final release gate. Does that dependency order match what you would most like reviewed?
 
-Before posting, update the list for anything that has since merged or changed. Post only under Alvie's account and only with Alvie's explicit confirmation.
+Before posting, update the list for anything that has since merged or changed. Post only under the fork maintainer's account and only with the fork maintainer's explicit confirmation.
 
 ---
 
@@ -1178,7 +1178,7 @@ Automated tests are necessary but cannot prove window focus, cross-display anima
 
 - [ ] The dependency stage is complete and its tests are green.
 - [ ] The implementation follows current-main #63/#64, per-container UUID, sync, and MAS/direct boundaries.
-- [ ] Pesty-Alvie identity and storage isolation remain intact.
+- [ ] Pesty identity and storage isolation remain intact.
 - [ ] Unit/integration tests cover the happy path, cancellation/failure, migration, and the specific bug that motivated the work.
 - [ ] `swift test`, `swift build`, `swift build -Xswiftc -DMAS`, and `git diff --check` pass.
 - [ ] UI work has before/after Debug Demo evidence using the sizing and visual matrix.
@@ -1186,8 +1186,8 @@ Automated tests are necessary but cannot prove window focus, cross-display anima
 - [ ] Privacy/security review covers pasteboard validation, files/permissions, deletion ownership, logging, and network behavior.
 - [ ] Documentation/help/privacy/release notes match the actual behavior.
 - [ ] No unrelated changes, stale cumulative commits, generated secrets, upstream signing identity, or local absolute paths are included.
-- [ ] The working tree and any checkpoint/commit are shown clearly to Alvie; no GitHub write occurs without explicit approval.
+- [ ] The working tree and any checkpoint/commit are shown clearly to the fork maintainer; no GitHub write occurs without explicit approval.
 
 ## First instruction for the next coding agent
 
-Start with **Stage 0 only**. Inspect the live repository again, report anything that changed since this audit, and propose the exact recoverable checkpoint plus clean-current-main integration method. Do not begin feature implementation, comment on a PR, or normalize the dirty tree until Alvie approves that preservation step.
+Start with **Stage 0 only**. Inspect the live repository again, report anything that changed since this audit, and propose the exact recoverable checkpoint plus clean-current-main integration method. Do not begin feature implementation, comment on a PR, or normalize the dirty tree until the fork maintainer approves that preservation step.

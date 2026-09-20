@@ -24,7 +24,7 @@ enum FeedbackSound {
 
     /// Returns whether playback actually started, so a caller — or a test —
     /// can tell silence apart from success.
-    private static let log = Logger(subsystem: "com.alvst.pesty-alvie", category: "Sound")
+    private static let log = Logger(subsystem: "com.alvst.pesty", category: "Sound")
 
     @discardableResult
     static func play(_ name: NSSound.Name) -> Bool {

@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import os.log
 
-private let clipDragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
+private let clipDragLog = Logger(subsystem: "com.alvst.pesty", category: "PinboardDrag")
 
 struct BarView: View {
     private static let stripStartID = "pesty.clip-strip.start"
@@ -11,6 +11,11 @@ struct BarView: View {
     let searchBridge: BarSearchFieldBridge
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    #if MAS
+    @Bindable private var cloudSync = CloudSyncService.shared
+    #else
+    @State private var isRefreshingICloudDrive = false
+    #endif
     private var monitor: ClipboardMonitor { AppController.shared.monitor }
     private var sequence: PasteSequence { AppController.shared.pasteSequence }
     private var showsStackDeck: Bool {
@@ -180,11 +185,11 @@ struct BarView: View {
                     resizeStartScreenY = nil
                 }
         )
-        .help("Drag to resize the Pesty-Alvie bar")
+        .help("Drag to resize the Pesty bar")
         // The drag gesture is invisible to VoiceOver; expose the handle as an
         // adjustable element so the bar height is controllable without a mouse.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Resize the Pesty-Alvie bar")
+        .accessibilityLabel("Resize the Pesty bar")
         .accessibilityValue("\(Int(settings.barHeight)) points tall")
         .accessibilityAdjustableAction { direction in
             let step: Double = 20
@@ -209,29 +214,48 @@ struct BarView: View {
 
     private var syncButton: some View {
         Button {
-            toggleSync()
+            refreshSync()
         } label: {
-            Image(systemName: syncIsEnabled ? "checkmark.icloud.fill" : "arrow.triangle.2.circlepath")
+            Image(systemName: syncIsRefreshing ? "arrow.triangle.2.circlepath" : "checkmark.icloud.fill")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(syncIsEnabled ? Theme.selection : Theme.chromeTextMuted)
+                .foregroundStyle(Theme.selection)
+                .frame(width: 18, height: 18)
         }
         .buttonStyle(.plain)
-        .help(syncIsEnabled ? "iCloud sync on" : "Turn on iCloud sync")
+        .disabled(syncIsRefreshing)
+        .help(syncIsRefreshing ? "Syncing with iCloud…" : "Sync now")
     }
 
     private var syncIsEnabled: Bool {
+        guard !ClipboardStore.isDemo else { return false }
         #if MAS
-        settings.cloudKitSync
+        return settings.cloudKitSync
         #else
-        settings.iCloudSync
+        return settings.iCloudSync
         #endif
     }
 
-    private func toggleSync() {
+    private var syncIsRefreshing: Bool {
         #if MAS
-        AppController.shared.toggleCloudKitSync()
+        cloudSync.status == "Syncing…"
         #else
-        AppController.shared.toggleICloudSync()
+        isRefreshingICloudDrive
+        #endif
+    }
+
+    private func refreshSync() {
+        #if MAS
+        cloudSync.refreshNow()
+        #else
+        guard !isRefreshingICloudDrive else { return }
+        isRefreshingICloudDrive = true
+        store.refreshICloudSync()
+        // iCloud Drive performs the network transfer itself. Keep visible
+        // feedback long enough for the click to register without pretending
+        // that this process can know when Apple's upload has completed.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            isRefreshingICloudDrive = false
+        }
         #endif
     }
 
@@ -252,12 +276,17 @@ struct BarView: View {
 
     private var searchIndicator: some View {
         HStack(spacing: searchIsActive ? 6 : 0) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(searchHasKeyboardFocus
-                    ? Theme.searchFocusRing
-                    : (searchIsActive ? Theme.chromeText : Theme.chromeTextMuted))
-                .accessibilityHidden(true)
+            Button { AppController.shared.beginBarSearch() } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(searchHasKeyboardFocus
+                        ? Theme.searchFocusRing
+                        : (searchIsActive ? Theme.chromeText : Theme.chromeTextMuted))
+                    .frame(width: 24, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Search clips")
+            .help("Search clips")
 
             // Keep this native field mounted even in the compact state. The
             // key monitor can focus it synchronously and return the same first
@@ -321,23 +350,41 @@ struct BarView: View {
 
     private var moreMenu: some View {
         Menu {
+            Button { AppController.shared.newTextItem() } label: {
+                Label("New Text Item", systemImage: "square.and.pencil")
+            }
+            .keyboardShortcut("n", modifiers: .command)
             Button { AppController.shared.showSettings() } label: {
                 Label("Settings…", systemImage: "gearshape")
             }
+            .keyboardShortcut(",", modifiers: .command)
+            Menu {
+                Button { AppController.shared.showHelp() } label: {
+                    Label("Pesty Help", systemImage: "book.closed")
+                }
+                Button { AppController.shared.reportIssue() } label: {
+                    Label("Report an Issue…", systemImage: "exclamationmark.bubble")
+                }
+            } label: {
+                Label("Help", systemImage: "questionmark.circle")
+            }
+            Divider()
             Button { AppController.shared.togglePestyPause() } label: {
-                Label(monitor.isPaused ? "Resume Pesty-Alvie" : "Pause Pesty-Alvie",
+                Label(monitor.isPaused ? "Resume Pesty" : "Pause Pesty",
                       systemImage: monitor.isPaused ? "play.fill" : "pause.fill")
             }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
             Button { store.clearHistory() } label: {
                 Label("Clear History", systemImage: "trash")
             }
             Divider()
             Button { AppController.shared.showAbout() } label: {
-                Label("About Pesty-Alvie", systemImage: "info.circle")
+                Label("About Pesty", systemImage: "info.circle")
             }
             Button { NSApp.terminate(nil) } label: {
-                Label("Quit Pesty-Alvie", systemImage: "power")
+                Label("Quit Pesty", systemImage: "power")
             }
+            .keyboardShortcut("q", modifiers: .command)
         } label: {
             Image(systemName: monitor.isPaused ? "pause.fill" : "ellipsis")
                 .font(.system(size: 15, weight: .semibold))

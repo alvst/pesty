@@ -2,7 +2,7 @@ import AppKit
 @preconcurrency import QuickLookUI
 import os.log
 
-private let qlLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "QuickLook")
+private let qlLog = Logger(subsystem: "com.alvst.pesty", category: "QuickLook")
 
 @MainActor
 final class QuickLookService: NSObject, @preconcurrency QLPreviewPanelDataSource {

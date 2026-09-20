@@ -28,10 +28,10 @@ jobs:
 
       - name: Verify shared CloudKit contract and metadata
         run: |
-          cmp Sources/Pesty/Sync/CloudKitSchema.swift iOSApp/Pesty-Alvie/Sync/CloudKitSchema.swift
-          plutil -lint iOSApp/Pesty-Alvie/Resources/Info.plist
-          plutil -lint iOSApp/Pesty-Alvie/Resources/Pesty-Alvie.entitlements
-          plutil -lint packaging/Pesty-Alvie-MAS.entitlements
+          cmp Sources/Pesty/Sync/CloudKitSchema.swift iOSApp/Pesty/Sync/CloudKitSchema.swift
+          plutil -lint iOSApp/Pesty/Resources/Info.plist
+          plutil -lint iOSApp/Pesty/Resources/Pesty.entitlements
+          plutil -lint packaging/Pesty-MAS.entitlements
 
       - name: Test macOS app
         run: swift test
@@ -43,21 +43,21 @@ jobs:
         working-directory: iOSApp
         run: |
           xcodebuild test \
-            -project Pesty-Alvie.xcodeproj \
-            -scheme Pesty-Alvie \
+            -project Pesty.xcodeproj \
+            -scheme Pesty \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
-            -derivedDataPath /tmp/PestyAlvieCI \
+            -derivedDataPath /tmp/PestyCI \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Build physical-device CloudKit code path
         working-directory: iOSApp
         run: |
           xcodebuild build \
-            -project Pesty-Alvie.xcodeproj \
-            -scheme Pesty-Alvie \
+            -project Pesty.xcodeproj \
+            -scheme Pesty \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath /tmp/PestyAlvieDeviceCI \
+            -derivedDataPath /tmp/PestyDeviceCI \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Build app bundle

@@ -30,9 +30,9 @@ enum LegacyLibraryImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingStore:
-            return "The selected folder does not contain a Pesty-Alvie store.json file."
+            return "The selected folder does not contain a Pesty store.json file."
         case .unreadableStore:
-            return "The selected Pesty-Alvie library could not be read."
+            return "The selected Pesty library could not be read."
         }
     }
 }
@@ -139,7 +139,7 @@ final class ClipboardStore {
         let pixelsBackfilled = backfillImageFilePixels(at: .now)
         if tombstonesApplied || historyChanged || deletionsChanged || pixelsBackfilled { saveNow() }
         resolveBundledLegacyLibraryMigration(hadStoreAtLaunch: hadStoreAtLaunch)
-        if Settings.shared.iCloudSync { startWatching() }
+        if Settings.shared.iCloudSync && !ClipboardStore.isDemo { startWatching() }
     }
 
 #if DEBUG
@@ -331,6 +331,40 @@ final class ClipboardStore {
         if source == .history && searchText.isEmpty {
             selectedID = item.id
         }
+        scheduleSave()
+
+        return item
+    }
+
+    /// Inserts a text item the user deliberately authored. Unlike clipboard
+    /// capture, creating the same text twice should create two editable cards.
+    @discardableResult
+    func addCreatedTextItem(
+        _ text: String,
+        richTextData: Data?,
+        title: String?
+    ) -> ClipItem? {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let type: ClipType = richTextData != nil ? .richText : (isWebLink(text) ? .link : .text)
+        let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let item = ClipItem(
+            type: type,
+            text: text,
+            rtfData: richTextData,
+            customTitle: trimmedTitle?.isEmpty == false ? trimmedTitle : nil
+        )
+        searchText = ""
+        barInputMode = .cards
+        if case .pinboard(let boardID) = source,
+           let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) {
+            pinboards[boardIndex].items.insert(item, at: 0)
+            pinboards[boardIndex].touch()
+        } else {
+            history.insert(item, at: 0)
+            _ = applyHistoryPolicyNow()
+            source = .history
+        }
+        selectedID = item.id
         scheduleSave()
         return item
     }
@@ -568,6 +602,30 @@ final class ClipboardStore {
         guard ClipboardStore.isDemo else { return }
         history = newHistory
         pinboards = newPinboards
+        selectFirst()
+        saveNow()
+    }
+
+    /// Merges clips from a foreign clipboard manager without touching its files.
+    func mergeImportedLibrary(history importedHistory: [ClipItem], pinboards importedPinboards: [Pinboard]) {
+        for item in importedHistory where !history.contains(where: { $0.sameContent(as: item) }) {
+            history.append(item)
+        }
+        for imported in importedPinboards {
+            var board = imported
+            if let existing = pinboards.firstIndex(where: { $0.name == board.name }) {
+                for item in board.items where !pinboards[existing].items.contains(where: { $0.sameContent(as: item) }) {
+                    pinboards[existing].items.append(item)
+                }
+                pinboards[existing].touch()
+            } else {
+                board.sortIndex = pinboards.count
+                pinboards.append(board)
+            }
+        }
+        history.sort { ($0.lastUsedAt ?? $0.createdAt) > ($1.lastUsedAt ?? $1.createdAt) }
+        normalizePinboardOrder(touchChanges: false)
+        applyHistoryPolicyNow()
         selectFirst()
         saveNow()
     }
@@ -1397,7 +1455,7 @@ final class ClipboardStore {
     private var bundledLegacyLibraryURL: URL {
         ClipboardStore.localBase
             .deletingLastPathComponent()
-            .appendingPathComponent("Pesty-Alvie Legacy Import", isDirectory: true)
+            .appendingPathComponent("Pesty Legacy Import", isDirectory: true)
     }
 
     private func resolveBundledLegacyLibraryMigration(hadStoreAtLaunch: Bool) {
@@ -1707,6 +1765,7 @@ final class ClipboardStore {
     }
 
     func setICloudSync(_ enabled: Bool) {
+        guard !ClipboardStore.isDemo else { return }
         stopWatching()
         let target = (enabled ? ClipboardStore.iCloudBase : ClipboardStore.localBase) ?? ClipboardStore.localBase
         let newImages = target.appendingPathComponent("images", isDirectory: true)
@@ -1728,6 +1787,25 @@ final class ClipboardStore {
         }
         prepareDirectories()
         if enabled { startWatching() }
+    }
+
+    /// Pulls any iCloud Drive snapshot already delivered to this Mac into the
+    /// in-memory library, then writes the merged result back so iCloud Drive
+    /// has a fresh change to upload. Enabling and disabling sync remains a
+    /// Settings action; the bar's cloud button only requests this refresh.
+    func refreshICloudSync() {
+        guard !ClipboardStore.isDemo,
+              Settings.shared.iCloudSync,
+              let data = try? Data(contentsOf: storeURL),
+              let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        if data == lastSavedData {
+            saveNow()
+        } else {
+            mergeExternal(snapshot)
+        }
     }
 
     private func copyImages(from src: URL, to dst: URL) {

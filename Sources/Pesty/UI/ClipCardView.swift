@@ -30,6 +30,7 @@ struct ClipCardView: View {
     /// Supplying a stack entry preserves the normal card appearance while the
     /// Paste Stack owns selection and paste behavior.
     let pasteStackEntry: PasteStackEntry?
+    @Environment(\.colorScheme) private var colorScheme
 
     init(item: ClipItem,
          index: Int,
@@ -54,10 +55,13 @@ struct ClipCardView: View {
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
     private var extensionResults: ExtensionResultStore { ExtensionResultStore.shared }
+    private var iconAppearance: SourceIconOverrides.IconAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
     private var headerColor: Color {
         let color = extensionResults.headerColorHex(for: item.id)
             .flatMap(Color.init(hex:))
-            ?? SourceColor.color(for: item.sourceBundleID)
+            ?? SourceColor.color(for: item.sourceBundleID, appearance: iconAppearance)
         return SourceColor.readableHeaderColor(color)
     }
 
@@ -181,7 +185,7 @@ struct ClipCardView: View {
     /// card's own rounded rectangle — the icon frames the corner instead of
     /// sitting fully inside a tile.
     private var enlargedAppIcon: some View {
-        let icon = AppIconProvider.trimmedIcon(forBundleID: item.sourceBundleID)
+        let icon = AppIconProvider.trimmedIcon(forBundleID: item.sourceBundleID, appearance: iconAppearance)
         let aspect = icon.size.height > 0 ? icon.size.width / icon.size.height : 1
         return Image(nsImage: icon)
             .resizable()
@@ -224,7 +228,7 @@ struct ClipCardView: View {
             )
             .frame(width: 56, height: 56)
             .overlay(
-                Image(nsImage: AppIconProvider.icon(forBundleID: item.sourceBundleID))
+                Image(nsImage: AppIconProvider.icon(forBundleID: item.sourceBundleID, appearance: iconAppearance))
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 48, height: 48)
@@ -318,8 +322,8 @@ struct ClipCardView: View {
                             titleOverride: titleOverride)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         case .richText:
-            RichTextContent(rtfData: item.rtfData, fallback: item.cardPreviewText, lineLimit: 10)
-                .foregroundStyle(Theme.textPrimary.opacity(0.9))
+            RichTextContent(rtfData: item.rtfData, fallback: item.cardPreviewText,
+                            lineLimit: 10, surface: .card)
         case .text:
             // Bounded on purpose: `lineLimit` caps what is drawn, but Text
             // still lays out everything it is handed.

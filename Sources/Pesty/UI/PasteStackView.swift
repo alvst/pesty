@@ -214,6 +214,14 @@ struct PasteStackContentView: View {
                 }
                 Spacer()
                 Button {
+                    AppController.shared.showPasteStackPopup()
+                } label: {
+                    Label("Show Popup", systemImage: "macwindow")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open the floating Paste Stack window")
+                Button {
                     settings.stackPasteInReverse.toggle()
                 } label: {
                     Image(systemName: settings.stackPasteInReverse

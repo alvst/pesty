@@ -2,11 +2,81 @@ import AppKit
 import SwiftUI
 import WebKit
 
+/// Display-only color correction. Never write this attributed string back to
+/// the clip: its original colors still belong on the pasteboard and in RTF.
+enum RichTextPreview {
+    enum Surface {
+        case card
+        case inline
+        case window
+
+        var background: NSColor {
+            switch self {
+            // These are the darkest possible composites of each white fill,
+            // even over a black desktop. Readable dark ink also works over
+            // every lighter backdrop without having to sample the screen.
+            case .card: NSColor(srgbRed: 0.94, green: 0.94, blue: 0.94, alpha: 1)
+            case .inline: NSColor(srgbRed: 0.58, green: 0.58, blue: 0.58, alpha: 1)
+            case .window: .windowBackgroundColor
+            }
+        }
+    }
+
+    static func readable(_ source: NSAttributedString,
+                         on background: NSColor,
+                         appearance: NSAppearance) -> NSAttributedString {
+        let preview = NSMutableAttributedString(attributedString: source)
+        appearance.performAsCurrentDrawingAppearance {
+            let surface = Color(nsColor: background)
+            source.enumerateAttributes(in: NSRange(location: 0, length: source.length)) { attributes, range, _ in
+                let runSurface: Color
+                if let highlight = attributes[.backgroundColor] as? NSColor {
+                    runSurface = Contrast.composite(Color(nsColor: highlight), over: surface)
+                    // Flatten translucent highlights so the corrected ink and
+                    // the highlight are measured against the same background.
+                    preview.addAttribute(.backgroundColor, value: NSColor(runSurface), range: range)
+                } else {
+                    runSurface = surface
+                }
+                let original = (attributes[.foregroundColor] as? NSColor)
+                    .map { Color(nsColor: $0) }
+                    ?? Contrast.foreground(on: runSurface)
+                let ink = readableColor(original, on: runSurface)
+                preview.addAttribute(.foregroundColor, value: NSColor(ink), range: range)
+                // Explicit decoration colors can disappear independently of
+                // the text. Missing colors naturally follow the corrected ink.
+                for key: NSAttributedString.Key in [.underlineColor, .strikethroughColor, .strokeColor] {
+                    if let color = attributes[key] as? NSColor {
+                        preview.addAttribute(key,
+                                             value: NSColor(readableColor(Color(nsColor: color), on: runSurface)),
+                                             range: range)
+                    }
+                }
+            }
+        }
+        return preview
+    }
+
+    private static func readableColor(_ original: Color, on surface: Color) -> Color {
+        if Contrast.meets(Contrast.aaText, original, on: surface, over: surface) { return original }
+        // Increasing alpha may be necessary before changing a faint color's
+        // brightness; Contrast.adjust intentionally preserves its input alpha.
+        let opaque = Color(nsColor: NSColor(original).withAlphaComponent(1))
+        let adjusted = Contrast.adjust(opaque, on: surface, over: surface)
+        if Contrast.meets(Contrast.aaText, adjusted, on: surface, over: surface) { return adjusted }
+        // Mid-gray surfaces may leave too little room in one direction. Pick
+        // the better extreme rather than returning a still-illegible color.
+        return Contrast.foreground(on: surface, light: .white, dark: .black)
+    }
+}
+
 struct RichTextContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     let rtfData: Data?
     let fallback: String
     var font: Font = .system(size: 13)
     var lineLimit: Int? = nil
+    var surface: RichTextPreview.Surface = .window
 
     var body: some View {
         Group {
@@ -14,6 +84,7 @@ struct RichTextContent: View {
                 Text(richText)
             } else {
                 Text(fallback)
+                    .foregroundStyle(surface == .window ? Color.primary : Theme.textPrimary)
             }
         }
         .font(font)
@@ -26,17 +97,19 @@ struct RichTextContent: View {
               let value = try? NSAttributedString(data: rtfData,
                                                   options: [.documentType: NSAttributedString.DocumentType.rtf],
                                                   documentAttributes: nil) else { return nil }
-        return AttributedString(value)
+        let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)!
+        return AttributedString(RichTextPreview.readable(value, on: surface.background, appearance: appearance))
     }
 }
 
 struct LinkPreviewContent: View {
     let text: String
     let compact: Bool
+    @Bindable private var settings = Settings.shared
     private let previews = LinkPreviewStore.shared
 
     private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    private var preview: LinkPreview? { previews.preview(for: url) }
+    private var preview: LinkPreview? { settings.generateLinkPreviews ? previews.preview(for: url) : nil }
     private var host: String { url?.host ?? text }
 
     var body: some View {
@@ -54,7 +127,9 @@ struct LinkPreviewContent: View {
             }
             Spacer(minLength: 0)
         }
-        .onAppear { previews.load(for: url) }
+        .onAppear {
+            if settings.generateLinkPreviews { previews.load(for: url) }
+        }
     }
 
     @ViewBuilder
@@ -82,6 +157,7 @@ struct LinkPreviewContent: View {
 struct LinkCardPreview: View {
     let text: String
     let titleOverride: String?
+    @Bindable private var settings = Settings.shared
     private let previews = LinkPreviewStore.shared
 
     init(text: String, titleOverride: String? = nil) {
@@ -90,7 +166,7 @@ struct LinkCardPreview: View {
     }
 
     private var url: URL? { URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    private var preview: LinkPreview? { previews.preview(for: url) }
+    private var preview: LinkPreview? { settings.generateLinkPreviews ? previews.preview(for: url) : nil }
     private var host: String { url?.host ?? text }
     private var title: String {
         if let titleOverride = titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -109,7 +185,9 @@ struct LinkCardPreview: View {
             compactPreview
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .onAppear { previews.load(for: url) }
+        .onAppear {
+            if settings.generateLinkPreviews { previews.load(for: url) }
+        }
     }
 
     private var richPreview: some View {
@@ -349,8 +427,8 @@ struct SelectedClipPreviewView: View {
             } else { missingPreview("photo") }
         case .richText:
             ScrollView {
-                RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                    .foregroundStyle(Theme.chromeText)
+                RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "",
+                                font: .system(size: 15), surface: .inline)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }

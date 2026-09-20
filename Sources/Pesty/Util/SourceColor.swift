@@ -3,11 +3,27 @@ import SwiftUI
 
 @MainActor
 enum SourceColor {
-    // Keep the default appearance aligned with Pesty's established card design:
-    // a card takes its color from the app that produced it.  The original color
-    // theme experiment used a stored palette for this option, which meant merely
-    // upgrading could unexpectedly recolor every existing card.
+    // Default is the newer icon-derived treatment. Classic retains Pasty's
+    // original stable palette so existing users can get the familiar look.
     private static let sourceAppFallback = Color(red: 0.02, green: 0.48, blue: 1.0)
+    private static let classicPalette: [Color] = [
+        Color(red: 0.85, green: 0.66, blue: 0.22),
+        Color(red: 0.34, green: 0.56, blue: 0.82),
+        Color(red: 0.72, green: 0.38, blue: 0.58),
+        Color(red: 0.27, green: 0.62, blue: 0.55),
+        Color(red: 0.80, green: 0.40, blue: 0.34),
+        Color(red: 0.45, green: 0.40, blue: 0.74),
+        Color(red: 0.49, green: 0.62, blue: 0.30),
+        Color(red: 0.84, green: 0.52, blue: 0.27),
+        Color(red: 0.30, green: 0.49, blue: 0.74),
+        Color(red: 0.62, green: 0.42, blue: 0.30),
+        Color(red: 0.74, green: 0.36, blue: 0.42),
+        Color(red: 0.40, green: 0.55, blue: 0.62)
+    ]
+    private static let classicMapKey = "appColorMap"
+    private static var classicMap: [String: Int] = {
+        UserDefaults.standard.dictionary(forKey: classicMapKey) as? [String: Int] ?? [:]
+    }()
     private static let accentVariants: [AccentVariant] = [
         AccentVariant(hueOffset: -0.055, saturationOffset:  0.08, brightnessOffset: -0.34),
         AccentVariant(hueOffset:  0.040, saturationOffset: -0.08, brightnessOffset: -0.27),
@@ -24,12 +40,18 @@ enum SourceColor {
     private static var sourceAppCache: [String: Color] = [:]
     private static var vibrantCache: [String: Color] = [:]
 
-    static func color(for bundleID: String?) -> Color {
+    static func invalidate(bundleID: String) {
+        sourceAppCache.keys.filter { $0.hasPrefix("\(bundleID)|") }.forEach { sourceAppCache.removeValue(forKey: $0) }
+        vibrantCache.keys.filter { $0.hasPrefix("\(bundleID)|") }.forEach { vibrantCache.removeValue(forKey: $0) }
+    }
+
+    static func color(for bundleID: String?, appearance: SourceIconOverrides.IconAppearance? = nil) -> Color {
+        let appearance = appearance ?? SourceIconOverrides.shared.currentAppearance
         return switch Settings.shared.clipColorTheme {
         case .default:
-            vibrantColor(for: bundleID)
+            vibrantColor(for: bundleID, appearance: appearance)
         case .classic:
-            sourceAppColor(for: bundleID)
+            classicColor(for: bundleID)
         case .accentShades:
             accentShade(
                 for: bundleID?.isEmpty == false ? bundleID! : "unknown",
@@ -49,30 +71,51 @@ enum SourceColor {
         accentVariants.map { accentShade(variant: $0, accentHex: accentHex) }
     }
 
-    private static func sourceAppColor(for bundleID: String?) -> Color {
+    private static func classicColor(for bundleID: String?) -> Color {
+        guard let bundleID, !bundleID.isEmpty else { return classicPalette[0] }
+        if let index = classicMap[bundleID] {
+            return classicPalette[index % classicPalette.count]
+        }
+
+        let index = classicMap.count % classicPalette.count
+        classicMap[bundleID] = index
+        UserDefaults.standard.set(classicMap, forKey: classicMapKey)
+        return classicPalette[index]
+    }
+
+    private static func sourceAppColor(for bundleID: String?, appearance: SourceIconOverrides.IconAppearance) -> Color {
         guard let bundleID, !bundleID.isEmpty else { return sourceAppFallback }
-        if let color = sourceAppCache[bundleID] { return color }
+        let cacheKey = "\(bundleID)|\(appearance.rawValue)"
+        if let color = sourceAppCache[cacheKey] { return color }
 
-        let color = dominantColor(in: AppIconProvider.icon(forBundleID: bundleID)) ?? sourceAppFallback
-        sourceAppCache[bundleID] = color
+        let color = dominantColor(in: AppIconProvider.icon(forBundleID: bundleID, appearance: appearance)) ?? sourceAppFallback
+        sourceAppCache[cacheKey] = color
         return color
     }
 
-    private static func vibrantColor(for bundleID: String?) -> Color {
+    private static func vibrantColor(for bundleID: String?, appearance: SourceIconOverrides.IconAppearance) -> Color {
         guard let bundleID, !bundleID.isEmpty else { return vibrantColor(from: sourceAppFallback) }
-        if let color = vibrantCache[bundleID] { return color }
+        let cacheKey = "\(bundleID)|\(appearance.rawValue)"
+        if let color = vibrantCache[cacheKey] { return color }
 
-        let color = vibrantColor(from: sourceAppColor(for: bundleID))
-        vibrantCache[bundleID] = color
+        let color = vibrantColor(from: sourceAppColor(for: bundleID, appearance: appearance))
+        vibrantCache[cacheKey] = color
         return color
     }
 
-    private static func vibrantColor(from color: Color) -> Color {
+    static func vibrantColor(from color: Color) -> Color {
         guard let nsColor = NSColor(color).usingColorSpace(.sRGB) else { return color }
         var hue: CGFloat = 0
         var saturation: CGFloat = 0
         var brightness: CGFloat = 0
         nsColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+
+        // Monochrome app icons should stay monochrome. Raising a neutral
+        // color's saturation invents an unrelated hue instead of reflecting
+        // the icon that produced the clip.
+        if saturation < 0.16 {
+            return Color(white: min(0.42, max(0.10, Double(brightness) * 0.90)))
+        }
 
         // Make the vibrant option visibly distinct while keeping headers dark
         // enough for their white labels to remain readable.
@@ -123,7 +166,7 @@ enum SourceColor {
         let brightnessOffset: Double
     }
 
-    private static func dominantColor(in icon: NSImage) -> Color? {
+    static func dominantColor(in icon: NSImage) -> Color? {
         let size = 40
         let thumbnail = NSImage(size: NSSize(width: size, height: size))
         thumbnail.lockFocus()
@@ -142,7 +185,9 @@ enum SourceColor {
         var green = 0.0
         var blue = 0.0
         var weight = 0.0
-        var darkWeight = 0.0
+        var neutralBrightness = 0.0
+        var neutralWeight = 0.0
+        var chromaWeight = 0.0
 
         for x in 0..<size {
             for y in 0..<size {
@@ -151,10 +196,13 @@ enum SourceColor {
                 guard alpha > 0.35 else { continue }
                 let maximum = max(color.redComponent, color.greenComponent, color.blueComponent)
                 let minimum = min(color.redComponent, color.greenComponent, color.blueComponent)
-                let saturation = maximum == 0 ? 0 : (maximum - minimum) / maximum
+                let chroma = maximum - minimum
+                let saturation = maximum == 0 ? 0 : chroma / maximum
                 let brightness = maximum
 
-                if brightness < 0.45 { darkWeight += alpha }
+                neutralBrightness += Double(brightness * alpha)
+                neutralWeight += Double(alpha)
+                chromaWeight += Double(chroma * alpha)
                 guard saturation > 0.16, brightness > 0.14 else { continue }
                 let pixelWeight = alpha * saturation * (0.45 + 0.55 * brightness)
                 red += Double(color.redComponent) * pixelWeight
@@ -164,10 +212,15 @@ enum SourceColor {
             }
         }
 
-        if weight == 0 {
-            // Paste's very dark sources read as an intentional navy, which gives the bright
-            // card palette a useful anchor without turning every source into washed-out blue.
-            return darkWeight > 0 ? Color(red: 0.025, green: 0.075, blue: 0.24) : sourceAppFallback
+        guard neutralWeight > 0 else { return nil }
+        let averageChroma = chromaWeight / neutralWeight
+        if weight == 0 || averageChroma < 0.04 {
+            // Preserve monochrome identity: mostly-black icons become nearly
+            // black, while icons with more white become lighter graphite. Use
+            // overall chroma so a subtly tinted shadow cannot recolor the icon.
+            let averageBrightness = neutralBrightness / neutralWeight
+            let gray = 0.12 + 0.30 * averageBrightness
+            return Color(white: gray)
         }
 
         let main = NSColor(deviceRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)

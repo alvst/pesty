@@ -7,6 +7,8 @@ struct HotkeyRecorderView: View {
     @Binding private var modifiers: Int
     @State private var recording = false
     @State private var monitor: Any?
+    @State private var previousKeyCode = 0
+    @State private var previousModifiers = 0
 
     init(keyCode: Binding<Int>, modifiers: Binding<Int>) {
         _keyCode = keyCode
@@ -33,6 +35,8 @@ struct HotkeyRecorderView: View {
     }
 
     private func start() {
+        previousKeyCode = keyCode
+        previousModifiers = modifiers
         recording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             guard event.type == .keyDown else { return event }
@@ -42,7 +46,17 @@ struct HotkeyRecorderView: View {
             }
             keyCode = Int(event.keyCode)
             modifiers = mods
-            stop()
+            // Carbon can reject a combination without producing any visible
+            // error. Give the user their working shortcut back instead of
+            // persisting a shortcut that silently does nothing.
+            DispatchQueue.main.async {
+                if !HotKeyCenter.shared.isMainHotKeyRegistered {
+                    keyCode = previousKeyCode
+                    modifiers = previousModifiers
+                    NSSound.beep()
+                }
+                stop()
+            }
             return nil
         }
     }

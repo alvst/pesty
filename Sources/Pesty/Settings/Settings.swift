@@ -11,14 +11,14 @@ enum ClipPreviewStyle: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .nativeQuickLook: "Native Quick Look"
-        case .inlinePesty: "Inline Pesty-Alvie preview"
+        case .inlinePesty: "Inline Pesty preview"
         }
     }
 
     var detail: String {
         switch self {
         case .nativeQuickLook: "Open a macOS Quick Look panel with Space."
-        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty-Alvie."
+        case .inlinePesty: "Show a rich preview with link titles and favicons inside Pesty."
         }
     }
 }
@@ -247,11 +247,16 @@ final class Settings {
         static let launchAtLogin = "launchAtLogin"
         static let hideOnClickOutside = "hideOnClickOutside"
         static let pasteDirectly = "pasteDirectly"
+        static let alwaysPastePlainText = "alwaysPastePlainText"
+        static let showDuringScreenSharing = "showDuringScreenSharing"
         static let playSound = "playSound"
         static let playSoundOnCopy = "playSoundOnCopy"
         static let pauseClipboardCaptureDuringSleep = "pauseClipboardCaptureDuringSleep"
         static let promoteOnPaste = "promoteOnPaste"
         static let ignoreConcealed = "ignoreConcealed"
+        static let ignoreConfidential = "ignoreConfidential"
+        static let ignoreTransient = "ignoreTransient"
+        static let generateLinkPreviews = "generateLinkPreviews"
         static let deletePermanently = "deletePermanently"
         static let ignoredSourceAppBundleIDs = "ignoredSourceAppBundleIDs"
         static let barHeight = "barHeight"
@@ -273,7 +278,7 @@ final class Settings {
     var historyLimit: Int {
         didSet {
             guard isLoaded else { return }
-            if historyLimit < 20 { historyLimit = 20; return }
+            if historyLimit < 10 { historyLimit = 10; return }
             d.set(historyLimit, forKey: Keys.historyLimit)
             ClipboardStore.shared.applyHistoryPolicy()
         }
@@ -283,7 +288,9 @@ final class Settings {
         didSet {
             guard isLoaded else { return }
             d.set(historyRetentionMode.rawValue, forKey: Keys.historyRetentionMode)
-            ClipboardStore.shared.applyHistoryPolicy()
+            // Changing modes is a preference change, not a deletion request.
+            // The newly selected policy is applied by normal capture/cleanup
+            // flows, so switching modes never removes existing history here.
         }
     }
 
@@ -364,11 +371,27 @@ final class Settings {
     }
 
     var hideOnClickOutside: Bool {
-        didSet { guard isLoaded else { return }; d.set(hideOnClickOutside, forKey: Keys.hideOnClickOutside) }
+        didSet {
+            guard isLoaded else { return }
+            d.set(hideOnClickOutside, forKey: Keys.hideOnClickOutside)
+            AppController.shared.updateOutsideClickShield()
+        }
     }
 
     var pasteDirectly: Bool {
         didSet { guard isLoaded else { return }; d.set(pasteDirectly, forKey: Keys.pasteDirectly) }
+    }
+
+    var alwaysPastePlainText: Bool {
+        didSet { guard isLoaded else { return }; d.set(alwaysPastePlainText, forKey: Keys.alwaysPastePlainText) }
+    }
+
+    var showDuringScreenSharing: Bool {
+        didSet {
+            guard isLoaded else { return }
+            d.set(showDuringScreenSharing, forKey: Keys.showDuringScreenSharing)
+            AppController.shared.updateScreenSharingVisibility()
+        }
     }
 
     var playSound: Bool {
@@ -380,7 +403,7 @@ final class Settings {
     }
 
     /// When enabled, clipboard changes made while the Mac is asleep (usually
-    /// because its lid is closed) are not imported into Pesty-Alvie.
+    /// because its lid is closed) are not imported into Pesty.
     var pauseClipboardCaptureDuringSleep: Bool {
         didSet { guard isLoaded else { return }; d.set(pauseClipboardCaptureDuringSleep, forKey: Keys.pauseClipboardCaptureDuringSleep) }
     }
@@ -391,6 +414,18 @@ final class Settings {
 
     var ignoreConcealed: Bool {
         didSet { guard isLoaded else { return }; d.set(ignoreConcealed, forKey: Keys.ignoreConcealed) }
+    }
+
+    var ignoreConfidential: Bool {
+        didSet { guard isLoaded else { return }; d.set(ignoreConfidential, forKey: Keys.ignoreConfidential) }
+    }
+
+    var ignoreTransient: Bool {
+        didSet { guard isLoaded else { return }; d.set(ignoreTransient, forKey: Keys.ignoreTransient) }
+    }
+
+    var generateLinkPreviews: Bool {
+        didSet { guard isLoaded else { return }; d.set(generateLinkPreviews, forKey: Keys.generateLinkPreviews) }
     }
 
     /// Skips the five-minute Undo window entirely: deleted clips are purged
@@ -485,8 +520,8 @@ final class Settings {
             Keys.historyRetentionMode: HistoryRetentionMode.itemCount.rawValue,
             Keys.historyRetention: HistoryRetention.month.rawValue,
             Keys.hotkeyKeyCode: kVK_ANSI_V,
-            // Keep the personal build's global shortcuts distinct so upstream
-            // Pesty can run at the same time without Carbon registration clashes.
+            // Keep the fork's default shortcuts distinct to avoid Carbon
+            // registration clashes with other clipboard managers.
             Keys.hotkeyModifiers: cmdKey | controlKey,
             Keys.sequenceHotkeyKeyCode: kVK_ANSI_V,
             Keys.sequenceHotkeyModifiers: cmdKey | controlKey | optionKey,
@@ -499,11 +534,16 @@ final class Settings {
             Keys.launchAtLogin: false,
             Keys.hideOnClickOutside: true,
             Keys.pasteDirectly: true,
+            Keys.alwaysPastePlainText: false,
+            Keys.showDuringScreenSharing: true,
             Keys.playSound: false,
             Keys.playSoundOnCopy: true,
             Keys.pauseClipboardCaptureDuringSleep: false,
             Keys.promoteOnPaste: true,
             Keys.ignoreConcealed: true,
+            Keys.ignoreConfidential: true,
+            Keys.ignoreTransient: true,
+            Keys.generateLinkPreviews: true,
             Keys.deletePermanently: false,
             Keys.ignoredSourceAppBundleIDs: [],
             Keys.barHeight: 430.0,
@@ -537,11 +577,16 @@ final class Settings {
         launchAtLogin = d.bool(forKey: Keys.launchAtLogin)
         hideOnClickOutside = d.bool(forKey: Keys.hideOnClickOutside)
         pasteDirectly = d.bool(forKey: Keys.pasteDirectly)
+        alwaysPastePlainText = d.bool(forKey: Keys.alwaysPastePlainText)
+        showDuringScreenSharing = d.bool(forKey: Keys.showDuringScreenSharing)
         playSound = d.bool(forKey: Keys.playSound)
         playSoundOnCopy = d.bool(forKey: Keys.playSoundOnCopy)
         pauseClipboardCaptureDuringSleep = d.bool(forKey: Keys.pauseClipboardCaptureDuringSleep)
         promoteOnPaste = d.bool(forKey: Keys.promoteOnPaste)
         ignoreConcealed = d.bool(forKey: Keys.ignoreConcealed)
+        ignoreConfidential = d.bool(forKey: Keys.ignoreConfidential)
+        ignoreTransient = d.bool(forKey: Keys.ignoreTransient)
+        generateLinkPreviews = d.bool(forKey: Keys.generateLinkPreviews)
         deletePermanently = d.bool(forKey: Keys.deletePermanently)
         ignoredSourceAppBundleIDs = (d.stringArray(forKey: Keys.ignoredSourceAppBundleIDs) ?? [])
             .filter { !$0.isEmpty }

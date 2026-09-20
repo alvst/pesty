@@ -1,4 +1,4 @@
-# Pesty-Alvie 2.5 Companion for iPhone and iPad
+# Pesty 2.5 Companion for iPhone and iPad
 
 This is the in-development iOS 17+ SwiftUI companion for the planned 2.5.0
 release. It has the same private CloudKit record contract as the sandboxed
@@ -20,11 +20,14 @@ released companion.
 - Offline changes and change tokens persisted with `CKSyncEngine`.
 - Local clip creation, photo import, search, type filtering, Pinboards,
   copy-back, and sharing.
-- A manual `store.json` importer for a Pesty-Alvie library exported through iCloud
+- A manual `store.json` importer for a Pesty library exported through iCloud
   Drive. It repairs legacy shared IDs into stable, per-Pinboard copies.
 - Five-minute local Undo for clip deletions. CloudKit keeps the last active
   record during the grace period and sends the hard delete only after expiry.
 - Owner-only local persistence, bounded CloudKit assets, and local-cache erase.
+  Library files are encrypted and unavailable until the first unlock after a
+  restart, then remain available to background sync when the phone locks again. Older files
+  receive the same protection policy without rewriting their contents.
 
 ## Sync boundary
 
@@ -43,10 +46,10 @@ shared project. Copy `Config/Signing.local.xcconfig.example` to
 project. The local file is ignored by Git and applies to every app and
 extension target.
 
-Open `Pesty-Alvie.xcodeproj` in Xcode 26.3 and use automatic signing. In the
+Open `Pesty.xcodeproj` in Xcode 26.3 and use automatic signing. In the
 Apple Developer portal, register the
-`com.alvst.pesty-alvie.companion` App ID, enable iCloud/CloudKit and push
-notifications, and assign `iCloud.com.alvst.pesty-alvie`. The sandboxed Mac App
+`com.alvst.pesty.companion` App ID, enable iCloud/CloudKit and push
+notifications, and assign `iCloud.com.alvst.pesty`. The sandboxed Mac App
 ID must be assigned the same container. After validating the Development
 environment on two devices, deploy its schema to Production in CloudKit
 Console before distributing either app.
@@ -55,10 +58,10 @@ Console before distributing either app.
 cd iOSApp
 xcodegen generate --spec project.yml
 xcodebuild test \
-  -project Pesty-Alvie.xcodeproj \
-  -scheme Pesty-Alvie \
+  -project Pesty.xcodeproj \
+  -scheme Pesty \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -derivedDataPath /tmp/Pesty-AlvieTestData \
+  -derivedDataPath /tmp/PestyTestData \
   CODE_SIGNING_ALLOWED=NO
 ```
 

@@ -1,6 +1,6 @@
-# Contributing to Pesty-Alvie
+# Contributing to Pesty
 
-Thanks for your interest. Pesty-Alvie is a small, native macOS app with no third-party dependencies, so it's easy to get into.
+Thanks for your interest. Pesty is a small, native macOS app with no third-party dependencies, so it's easy to get into.
 
 ## Prerequisites
 
@@ -13,8 +13,8 @@ Thanks for your interest. Pesty-Alvie is a small, native macOS app with no third
 git clone https://github.com/alvst/pesty.git
 cd pesty
 swift build                    # compile
-swift run Pesty-Alvie          # run in place
-swift run Pesty-Alvie --demo   # run with sample clips and the strip open (for UI work)
+swift run Pesty          # run in place
+swift run Pesty --demo   # run with sample clips and the strip open (for UI work)
 swift test                     # macOS unit tests
 swift build -Xswiftc -DMAS     # sandboxed/CloudKit compile check
 ```
@@ -23,7 +23,7 @@ To build a distributable bundle:
 
 ```bash
 VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
-open packaging/Pesty-Alvie.app
+open packaging/Pesty.app
 ```
 
 ## Architecture

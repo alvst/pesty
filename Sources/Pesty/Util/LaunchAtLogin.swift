@@ -14,7 +14,7 @@ enum LaunchAtLogin {
                 }
             }
         } catch {
-            NSLog("Pesty-Alvie: LaunchAtLogin toggle failed: \(error.localizedDescription)")
+            NSLog("Pesty: LaunchAtLogin toggle failed: \(error.localizedDescription)")
         }
     }
 

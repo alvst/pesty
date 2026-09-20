@@ -113,7 +113,7 @@ enum PasteService {
     }
 
     private static func markPestyAsSource(on pasteboard: NSPasteboard) {
-        // Use Pesty-Alvie's packaged identifier rather than the host process identifier,
+        // Use Pesty's packaged identifier rather than the host process identifier,
         // which is absent when running from SwiftPM and would not resolve an icon.
         pasteboard.setString(sourceBundleID, forType: sourceType)
     }

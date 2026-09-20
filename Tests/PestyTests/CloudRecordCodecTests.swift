@@ -11,7 +11,7 @@ final class CloudRecordCodecTests: XCTestCase {
             text: "Hello",
             rtfData: Data("rtf".utf8),
             imageHash: "abc123",
-            fileURLs: ["file:///Users/alvie/report.pdf"],
+            fileURLs: ["file://$HOME/report.pdf"],
             colorHex: "#AABBCC",
             sourceBundleID: "com.apple.Notes",
             sourceAppName: "Notes",

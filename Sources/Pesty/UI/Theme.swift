@@ -52,8 +52,14 @@ enum Theme {
     static let fileIconSize: CGFloat = 104
     static let enlargedIconRise: CGFloat = enlargedIconSize - enlargedHeaderHeight - enlargedIconDrop
 
-    static let cardBody = Color.white.opacity(0.94)
-    static let cardBorder = Color.black.opacity(0.12)
+    // Clip cards are opaque surfaces, but their surface and ink still follow
+    // the system appearance so dark mode does not leave a bright white tile.
+    static let cardBody = appearanceColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.94),
+        dark: NSColor(calibratedWhite: 0.12, alpha: 0.96))
+    static let cardBorder = appearanceColor(
+        light: NSColor.black.withAlphaComponent(0.12),
+        dark: NSColor.white.withAlphaComponent(0.16))
     // The focus color needs to remain unmistakable against both bright and
     // saturated clip headers. Use the system's vivid blue rather than a muted
     // tint so keyboard navigation is effortless to follow.
@@ -62,13 +68,15 @@ enum Theme {
 
     // MARK: - Card ink
     //
-    // A clip card is an opaque near-white surface (`cardBody`) no matter what
-    // the appearance is, so its text stays fixed dark. These are deliberately
-    // *not* appearance-aware — flipping them would make cards unreadable.
-
-    static let textPrimary = Color.black.opacity(0.82)
-    static let textSecondary = Color.black.opacity(0.52)
-    static let textTertiary = Color.black.opacity(0.34)
+    static let textPrimary = appearanceColor(
+        light: NSColor.black.withAlphaComponent(0.82),
+        dark: NSColor.white.withAlphaComponent(0.88))
+    static let textSecondary = appearanceColor(
+        light: NSColor.black.withAlphaComponent(0.52),
+        dark: NSColor.white.withAlphaComponent(0.62))
+    static let textTertiary = appearanceColor(
+        light: NSColor.black.withAlphaComponent(0.34),
+        dark: NSColor.white.withAlphaComponent(0.42))
 
     static let headerText = Color.white
     static let headerSubText = Color.white.opacity(0.78)
@@ -135,6 +143,7 @@ enum Theme {
     static let pillBG = chrome { $0.pillBG }
     static let pillSelected = chrome { $0.pillSelected }
     static let pillStroke = chrome { $0.pillStroke }
+    static let pillOutline = chrome { Contrast.composite($0.pillStroke, over: $0.surface) }
     static let searchFocusFill = selection.opacity(0.14)
     static let searchFocusRing = chrome { searchFocusRing(for: $0) }
 
@@ -177,6 +186,12 @@ enum Theme {
         Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return NSColor(resolve(isDark ? darkChrome : lightChrome))
+        })
+    }
+
+    private static func appearanceColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         })
     }
 }

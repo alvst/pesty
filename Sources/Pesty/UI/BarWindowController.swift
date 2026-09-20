@@ -23,11 +23,10 @@ final class BarPanel: NSPanel {
 }
 
 @MainActor
-final class BarWindowController: NSWindowController, NSWindowDelegate {
+final class BarWindowController: NSWindowController {
 
     private static let slideDuration: TimeInterval = 0.18
     private static let slideOvershoot: CGFloat = 16
-    private var isPresenting = false
     private var isDismissing = false
     private var transitionID = 0
     private let searchBridge = BarSearchFieldBridge()
@@ -42,9 +41,8 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     init() {
         let panel = BarPanel(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 360),
-            // A non-activating panel can take key events without taking the
-            // previous app's first responder away. That keeps a focused Safari
-            // field ready for the eventual paste after the global shortcut.
+            // Take keyboard focus without changing the active application's
+            // menu bar or disturbing the eventual paste destination.
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
@@ -53,7 +51,10 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        // Focus changes are not outside clicks. AppController's actual-click
+        // handling owns automatic dismissal, including during presentation.
         panel.hidesOnDeactivate = false
+        panel.sharingType = Settings.shared.showDuringScreenSharing ? .readOnly : .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovable = false
         let content = NSHostingView(rootView: BarView(searchBridge: searchBridge))
@@ -68,39 +69,44 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
             panel.contentView = content
         }
         super.init(window: panel)
-        panel.delegate = self
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
 
     func show() {
         guard let panel = window else { return }
+        searchBridge.resetForPresentation()
         transitionID &+= 1
-        let showTransitionID = transitionID
         isDismissing = false
-        isPresenting = true
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
-            ?? NSScreen.main ?? NSScreen.screens.first else { isPresenting = false; return }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: {
+            NSMouseInRect(mouse, $0.frame, false)
+        }) ?? NSScreen.screens.min {
+            distanceSquared(from: mouse, to: $0.frame) < distanceSquared(from: mouse, to: $1.frame)
+        }
+        guard let screen else { return }
         let vf = screen.visibleFrame
-        let height = CGFloat(Settings.shared.barHeight)
+        let height = min(CGFloat(Settings.shared.barHeight), vf.height)
         let onScreen = NSRect(x: vf.minX, y: vf.minY, width: vf.width, height: height)
         let offScreen = belowScreenFrame(for: onScreen)
 
-        // Make the non-activating panel key before it starts moving, so arrow
-        // navigation remains immediate while the entire bar slides in as one
-        // surface.
+        // A show can race a dismissal when the user summons the bar again
+        // during the slide-out. Stop the old implicit animation before
+        // staging the new display's frame, otherwise AppKit interpolates from
+        // the previous screen and visibly flies the bar across displays.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            panel.animator().setFrame(panel.frame, display: true)
+        }
+        // Make the panel key before it starts moving, so arrow navigation is
+        // available immediately while the entire bar slides in as one surface.
         panel.setFrame(offScreen, display: false)
         panel.makeKeyAndOrderFront(nil)
-        NSAnimationContext.runAnimationGroup({ context in
+        NSAnimationContext.runAnimationGroup { context in
             context.duration = Self.slideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(onScreen, display: true)
-        }, completionHandler: { [weak self] in
-            DispatchQueue.main.async {
-                guard let self, self.transitionID == showTransitionID else { return }
-                self.isPresenting = false
-            }
-        })
+        }
     }
 
     func bringToFront() {
@@ -122,7 +128,6 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     func hide(immediately: Bool = false) {
         guard let panel = window, panel.isVisible, !isDismissing else { return }
-        isPresenting = false
         isDismissing = true
         transitionID &+= 1
         let hideTransitionID = transitionID
@@ -167,21 +172,10 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
                height: frame.height)
     }
 
-    func windowDidResignKey(_ notification: Notification) {
-        guard Settings.shared.hideOnClickOutside,
-              !isPresenting,
-              !AppController.shared.suppressAutoHide,
-              !AppController.shared.isRestoringEditorFocus else { return }
-        // Key focus briefly moves to Quick Look or the Paste Stack tray while
-        // both remain companion surfaces to the bar. Defer one run loop so the
-        // new key window is known before deciding whether focus really left Pesty.
-        DispatchQueue.main.async {
-            guard !AppController.shared.suppressAutoHide,
-                  !AppController.shared.isRestoringEditorFocus else { return }
-            guard QuickLookService.shared.isVisible || NSApp.keyWindow is PasteStackPanel else {
-                AppController.shared.hideBar()
-                return
-            }
-        }
+    private func distanceSquared(from point: NSPoint, to rect: NSRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, max(0, point.x - rect.maxX))
+        let dy = max(rect.minY - point.y, max(0, point.y - rect.maxY))
+        return dx * dx + dy * dy
     }
+
 }

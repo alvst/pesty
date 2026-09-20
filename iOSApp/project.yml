@@ -1,4 +1,4 @@
-name: Pesty-Alvie
+name: Pesty
 options:
   bundleIdPrefix: com.alvst
   deploymentTarget:
@@ -15,11 +15,11 @@ configFiles:
   Debug: Config/Signing.xcconfig
   Release: Config/Signing.xcconfig
 targets:
-  Pesty-Alvie:
+  Pesty:
     type: application
     platform: iOS
     sources:
-      - path: Pesty-Alvie
+      - path: Pesty
         excludes:
           - Tests
     dependencies:
@@ -29,11 +29,11 @@ targets:
         embed: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion
-        PRODUCT_NAME: Pesty-Alvie
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion
+        PRODUCT_NAME: Pesty
         PRODUCT_MODULE_NAME: Pesty
-        INFOPLIST_FILE: Pesty-Alvie/Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Pesty-Alvie/Resources/Pesty-Alvie.entitlements
+        INFOPLIST_FILE: Pesty/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Pesty/Resources/Pesty.entitlements
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "2.5.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -51,15 +51,16 @@ targets:
     platform: iOS
     sources:
       - path: PestyWidget
-      - path: Pesty-Alvie/Domain/ClipKind.swift
-      - path: Pesty-Alvie/Domain/PestyClip.swift
-      - path: Pesty-Alvie/Domain/PestyBoard.swift
-      - path: Pesty-Alvie/Domain/PestyLibrary.swift
-      - path: Pesty-Alvie/Store/LocalLibraryPersistence.swift
-      - path: Pesty-Alvie/UI/PestyPalette.swift
+      - path: Pesty/Domain/ClipKind.swift
+      - path: Pesty/Domain/PestyClip.swift
+      - path: Pesty/Domain/PestyBoard.swift
+      - path: Pesty/Domain/PestyLibrary.swift
+      - path: Pesty/Store/LocalLibraryPersistence.swift
+      - path: Pesty/Store/LocalFileProtection.swift
+      - path: Pesty/UI/PestyPalette.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.widget
         PRODUCT_NAME: PestyWidget
         PRODUCT_MODULE_NAME: PestyWidget
         INFOPLIST_FILE: PestyWidget/Info.plist
@@ -74,15 +75,16 @@ targets:
     platform: iOS
     sources:
       - path: PestyShareExtension
-      - path: Pesty-Alvie/Domain/ClipKind.swift
-      - path: Pesty-Alvie/Domain/PestyClip.swift
-      - path: Pesty-Alvie/Domain/PestyBoard.swift
-      - path: Pesty-Alvie/Domain/PestyLibrary.swift
-      - path: Pesty-Alvie/Store/LocalLibraryPersistence.swift
-      - path: Pesty-Alvie/Store/LocalAssetPersistence.swift
+      - path: Pesty/Domain/ClipKind.swift
+      - path: Pesty/Domain/PestyClip.swift
+      - path: Pesty/Domain/PestyBoard.swift
+      - path: Pesty/Domain/PestyLibrary.swift
+      - path: Pesty/Store/LocalLibraryPersistence.swift
+      - path: Pesty/Store/LocalFileProtection.swift
+      - path: Pesty/Store/LocalAssetPersistence.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.share
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.share
         PRODUCT_NAME: PestyShareExtension
         PRODUCT_MODULE_NAME: PestyShareExtension
         INFOPLIST_FILE: PestyShareExtension/Info.plist
@@ -92,40 +94,40 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
-  Pesty-AlvieTests:
+  PestyTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: Pesty-Alvie/Tests
+      - path: Pesty/Tests
     dependencies:
-      - target: Pesty-Alvie
+      - target: Pesty
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie.companion.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.tests
         MARKETING_VERSION: "2.5.0"
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty-Alvie.app/Pesty-Alvie"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty.app/Pesty"
         BUNDLE_LOADER: "$(TEST_HOST)"
-  Pesty-Alvie-Mac:
+  Pesty-Mac:
     type: application
     platform: macOS
-    productName: Pesty-Alvie
+    productName: Pesty
     sources:
       - path: ../Sources/Pesty
         name: Pesty-Mac
-      - path: Pesty-Alvie-Mac/Resources/container-migration.plist
+      - path: Pesty-Mac/Resources/container-migration.plist
         buildPhase: resources
       # Track the compiled icon: current iconutil releases cannot reliably
       # rebuild an iconset produced by older toolchains.
-      - path: ../packaging/Pesty-Alvie.icns
+      - path: ../packaging/Pesty.icns
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty-alvie
-        PRODUCT_NAME: Pesty-Alvie
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty
+        PRODUCT_NAME: Pesty
         PRODUCT_MODULE_NAME: Pesty
-        INFOPLIST_FILE: Pesty-Alvie-Mac/Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Pesty-Alvie-Mac/Resources/Pesty-Alvie-Mac.entitlements
+        INFOPLIST_FILE: Pesty-Mac/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Pesty-Mac/Resources/Pesty-Mac.entitlements
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "2.0.0"
         GENERATE_INFOPLIST_FILE: NO
@@ -133,27 +135,27 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAS"
 schemes:
-  Pesty-Alvie:
+  Pesty:
     build:
       targets:
-        Pesty-Alvie: all
-        Pesty-AlvieTests: [test]
+        Pesty: all
+        PestyTests: [test]
     test:
       targets:
-        - Pesty-AlvieTests
+        - PestyTests
   # Screenshot build: launches with --demo so the library is the fixed seed
   # from DemoLibrary, never the real one.
-  Pesty-Alvie Demo:
+  Pesty Demo:
     build:
       targets:
-        Pesty-Alvie: all
+        Pesty: all
     run:
       config: Debug
       commandLineArguments:
         "--demo": true
-  Pesty-Alvie Mac Development:
+  Pesty Mac Development:
     build:
       targets:
-        Pesty-Alvie-Mac: all
+        Pesty-Mac: all
     run:
       config: Debug

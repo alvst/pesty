@@ -17,7 +17,7 @@ final class ShareViewController: UIViewController {
         view.backgroundColor = .systemGroupedBackground
         spinner.startAnimating()
 
-        statusLabel.text = "Saving to Pesty-Alvie…"
+        statusLabel.text = "Saving to Pesty…"
         statusLabel.font = .preferredFont(forTextStyle: .headline)
         statusLabel.textAlignment = .center
         statusLabel.numberOfLines = 0
@@ -60,7 +60,7 @@ final class ShareViewController: UIViewController {
             WidgetCenter.shared.reloadAllTimelines()
             spinner.stopAnimating()
             spinner.isHidden = true
-            statusLabel.text = clips.count == 1 ? "Saved to Pesty-Alvie" : "Saved \(clips.count) clips to Pesty-Alvie"
+            statusLabel.text = clips.count == 1 ? "Saved to Pesty" : "Saved \(clips.count) clips to Pesty"
             cancelButton.setTitle("Done", for: .normal)
             cancelButton.removeTarget(self, action: #selector(cancel), for: .touchUpInside)
             cancelButton.addTarget(self, action: #selector(done), for: .touchUpInside)
@@ -204,7 +204,7 @@ private enum ShareError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable: "The shared item is no longer available."
-        case .unsupported: "Pesty-Alvie could not find text, a link, an image, or a file to save."
+        case .unsupported: "Pesty could not find text, a link, an image, or a file to save."
         }
     }
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pesty-Alvie — Privacy Notes</title>
+<title>Pesty — Privacy Notes</title>
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1d1d1f; line-height: 1.6; }
   h1 { font-size: 28px; } h2 { font-size: 20px; margin-top: 32px; }
@@ -12,33 +12,33 @@
 </style>
 </head>
 <body>
-<h1>Pesty-Alvie Privacy Notes</h1>
+<h1>Pesty Privacy Notes</h1>
 <p><em>Last updated: 10 August 2026</em></p>
 
-<p>Pesty-Alvie is Alvie's personal, co-installable build of the open-source Pesty clipboard manager for macOS.</p>
+<p>Pesty is an independently maintained fork of the open-source Pesty clipboard manager for macOS.</p>
 
-<h2>What Pesty-Alvie stores</h2>
-<p>Pesty-Alvie keeps a history of what you copy so you can paste it again. This history — text, links, images, files, and colors — is stored in its separate <code>~/Library/Application Support/Pesty-Alvie</code> folder (or its app sandbox container), with restrictive file permissions.</p>
+<h2>What Pesty stores</h2>
+<p>Pesty keeps a history of what you copy so you can paste it again. This history — text, links, images, files, and colors — is stored in its separate <code>~/Library/Application Support/Pesty</code> folder (or its app sandbox container), with restrictive file permissions.</p>
 
-<h2>What Pesty-Alvie does not do</h2>
+<h2>What Pesty does not do</h2>
 <ul>
-  <li>Pesty-Alvie does <strong>not</strong> sell your data or send clipboard history to the developer.</li>
-  <li>Pesty-Alvie has no analytics, telemetry, accounts, or ads.</li>
+  <li>Pesty does <strong>not</strong> sell your data or send clipboard history to the developer.</li>
+  <li>Pesty has no analytics, telemetry, accounts, or ads.</li>
   <li>Clips marked as concealed by password managers are ignored and never stored.</li>
 </ul>
 
 <h2>Network behavior</h2>
-<p>Clipboard data is not uploaded to a Pesty-Alvie server. Inline previews for links can request page metadata, images, and icons from the copied website. Avoid inline link previews for sensitive URLs. Optional iCloud sync uses Apple's services as described below.</p>
+<p>Clipboard data is not uploaded to a Pesty server. Inline previews for links can request page metadata, images, and icons from the copied website. Avoid inline link previews for sensitive URLs. Optional iCloud sync uses Apple's services as described below.</p>
 
 <h2>iCloud sync (optional)</h2>
-<p>If you enable iCloud sync, your clipboard history is stored in your own <code>iCloud Drive/Pesty-Alvie</code> folder so it can sync between your Macs through Apple's iCloud. This data stays within your personal Apple account; the developer does not receive it. Sync is off by default.</p>
+<p>If you enable iCloud sync, your clipboard history is stored in your own <code>iCloud Drive/Pesty</code> folder so it can sync between your Macs through Apple's iCloud. This data stays within your personal Apple account; the developer does not receive it. Sync is off by default.</p>
 
 <h2>Permissions</h2>
-<p>The local Pesty-Alvie build can optionally use Accessibility permission to paste the selected clip into the app you were using. Its separate signed identity, <code>com.alvst.pesty-alvie</code>, creates a separate System Settings entry and requires a fresh grant.</p>
+<p>The local Pesty build can optionally use Accessibility permission to paste the selected clip into the app you were using. Its separate signed identity, <code>com.alvst.pesty</code>, creates a separate System Settings entry and requires a fresh grant.</p>
 
 <h2>Contact &amp; Support</h2>
-<p>Questions or need help? Visit the <a href="support.html">support page</a> or open an issue in the <a href="https://github.com/alvst/pesty/issues">Pesty-Alvie fork</a>. Upstream Pesty remains available at <a href="https://github.com/momenbasel/pesty">momenbasel/pesty</a>.</p>
+<p>Questions or need help? Visit the <a href="support.html">support page</a> or open an issue in the <a href="https://github.com/alvst/pesty/issues">Pesty fork</a>. Upstream Pesty remains available at <a href="https://github.com/momenbasel/pesty">momenbasel/pesty</a>.</p>
 
-<footer>Pesty-Alvie is based on Pesty and remains under the MIT License · <a href="index.html">Home</a> · <a href="support.html">Support</a></footer>
+<footer>Pesty is based on Pesty and remains under the MIT License · <a href="index.html">Home</a> · <a href="support.html">Support</a></footer>
 </body>
 </html>

@@ -28,7 +28,7 @@ final class ExtensionHost {
     ]
 
     private let queue = DispatchQueue(
-        label: "com.alvst.pesty-alvie.extension-host",
+        label: "com.alvst.pesty.extension-host",
         qos: .utility
     )
     private let queueKey = DispatchSpecificKey<UInt8>()
@@ -639,7 +639,7 @@ final class ExtensionHost {
 
     private func startWorker(named suffix: String, operation: @escaping () -> Void) {
         let worker = Thread(block: operation)
-        worker.name = "com.alvst.pesty-alvie.\(suffix)"
+        worker.name = "com.alvst.pesty.\(suffix)"
         worker.qualityOfService = .utility
         worker.start()
     }

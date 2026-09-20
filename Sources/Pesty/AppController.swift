@@ -4,7 +4,19 @@ import Carbon.HIToolbox
 @preconcurrency import QuickLookUI
 import os.log
 
-private let dragLog = Logger(subsystem: "com.alvst.pesty-alvie", category: "PinboardDrag")
+private let dragLog = Logger(subsystem: "com.alvst.pesty", category: "PinboardDrag")
+
+private final class SettingsWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.charactersIgnoringModifiers?.lowercased() == "w",
+           modifiers == [.command] {
+            close()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
 
 extension Notification.Name {
     /// Posted when a drag that started in the bar ends (drop, abandon, or
@@ -91,6 +103,26 @@ enum QuickPasteShortcut {
     }
 }
 
+enum CommandTabShortcut {
+    nonisolated static func matches(
+        keyCode: Int,
+        modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        guard keyCode == kVK_Tab else { return false }
+        let flags = PinboardJump.normalized(modifiers)
+        return flags == [.command] || flags == [.command, .shift]
+    }
+}
+
+enum AppLaunchPresentationPolicy {
+    /// A cold start should introduce the Paste Bar once, on the first-ever
+    /// launch. Later background/login starts stay unobtrusive; an intentional
+    /// reopen is handled separately by `applicationShouldHandleReopen`.
+    nonisolated static func shouldShowInitialBar(hasOnboarded: Bool) -> Bool {
+        !hasOnboarded
+    }
+}
+
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate {
     static let shared = AppController()
@@ -102,6 +134,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private var barController: BarWindowController?
     private var statusItem: NSStatusItem?
+    private var openMenuItem: NSMenuItem?
     private var pauseMenuItem: NSMenuItem?
     private var settingsWindow: NSWindow?
     private var pasteStackController: PasteStackWindowController?
@@ -109,16 +142,20 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
     private var previewedItemID: UUID?
     private var keyMonitor: Any?
+    private var outsideClickMonitor: Any?
     private var dragOutTimer: Timer?
     private var isReopenPresentationPending = false
     private var editorFocusRestore: EditorFocusRestore?
     private let copyToast = CopyToastController()
     private let barHeightGhost = BarHeightGhostController()
+    private let outsideClickShield = BarOutsideClickShield()
 
     private(set) var previousApp: NSRunningApplication?
     private(set) var lastActiveApp: NSRunningApplication?
 
-    var suppressAutoHide = false
+    var suppressAutoHide = false {
+        didSet { updateOutsideClickShield() }
+    }
 
     /// True for as long as the clip editor owns the screen. Editing suppresses
     /// auto-hide so the bar survives the editor taking focus, but the bar must
@@ -137,6 +174,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     var isRestoringEditorFocus: Bool { editorFocusRestore != nil }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard enforceSingleInstance() else { return }
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
 
@@ -149,11 +187,14 @@ final class AppController: NSObject, NSApplicationDelegate {
             name: .pestyShowExtensionSettings,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(updateOutsideClickShield),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
 
         monitor.start()
 
         #if MAS
-        if Settings.shared.cloudKitSync {
+        if !ClipboardStore.isDemo && Settings.shared.cloudKitSync {
             NSApp.registerForRemoteNotifications()
             CloudSyncService.shared.start()
             if ClipboardStore.isSandboxed,
@@ -167,6 +208,9 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         HotKeyCenter.shared.onTrigger = { [weak self] in self?.handleGlobalShortcut() }
         HotKeyCenter.shared.onSequenceTrigger = { [weak self] in self?.pasteNextInSequence() }
+        HotKeyCenter.shared.onRegistrationChanged = { [weak self] in
+            self?.updateHotkeyStatusUI()
+        }
         HotKeyCenter.shared.start()
 
         QuickLookService.shared.onSelectionChange = { [weak self] id in
@@ -189,22 +233,22 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Pesty's only primary surface is the Paste Bar. Present it for a
-        // normal application launch as well as for a subsequent app reopen.
-        // The bar is non-activating, so this still preserves the front app's
-        // selected input for a later paste.
-        if !Settings.shared.onboarded { Settings.shared.onboarded = true }
-        // Read the modifier now, not after the delay: ⌥ is typically released
-        // as soon as the app starts to appear.
-        let openSettings = Self.isOptionHeld
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.presentBarForApplicationOpen(openingSettings: openSettings)
+        let shouldShowInitialBar = AppLaunchPresentationPolicy.shouldShowInitialBar(
+            hasOnboarded: Settings.shared.onboarded
+        )
+        if shouldShowInitialBar {
+            // Persist the first-run transition before yielding the run loop so
+            // duplicate application-open events cannot schedule it twice.
+            Settings.shared.onboarded = true
+            DispatchQueue.main.async { [weak self] in
+                self?.presentBarForApplicationOpen()
+            }
         }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
-        // Finder, Spotlight, and an “Open Pesty-Alvie” shortcut send a reopen event
+        // Finder, Spotlight, and an “Open Pesty” shortcut send a reopen event
         // when this accessory app is already running. The bar may still be an
         // NSPanel while it animates below the screen, so do not use AppKit's
         // broad window-visibility signal to decide whether to show it.
@@ -228,16 +272,10 @@ final class AppController: NSObject, NSApplicationDelegate {
                 finishEditorFocusRestore(after: 0.1)
                 return
             }
-            // Command-Tab and app switching do not reliably make our borderless
-            // panel resign key. Treat activation of another app as an explicit
-            // dismissal so the bar never stays above the newly active app.
-            // While the editor is open, auto-hide is suppressed on purpose —
-            // but that suppression is about the editor's own focus, not about
-            // the user switching to a different app. Leaving for another app
-            // should still drop the bar.
-            if barController?.window?.isVisible == true, !suppressAutoHide || isEditorOpen {
-                hideBar()
-            }
+            // Activation is not an outside click. A nonactivating bar can
+            // remain key while another app is active; transient activation
+            // notifications must not dismiss it. Actual mouse events and
+            // explicit actions (including Command-Tab) handle dismissal.
         }
     }
 
@@ -251,31 +289,60 @@ final class AppController: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateStatusItemIcon(item)
         let menu = NSMenu()
-        let open = menu.addItem(withTitle: "Open Pesty-Alvie   \(Settings.shared.hotkeyDisplay)",
+        let open = menu.addItem(withTitle: "Open Pesty",
                                 action: #selector(menuOpen), keyEquivalent: "")
         open.target = self
+        openMenuItem = open
         open.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
+        if let key = HotKeyCenter.menuKeyEquivalent(for: Settings.shared.hotkeyKeyCode) {
+            open.keyEquivalent = key
+            open.keyEquivalentModifierMask = HotKeyCenter.menuModifierMask(
+                for: Settings.shared.hotkeyModifiers
+            )
+        }
         menu.addItem(.separator())
+        let newText = menu.addItem(withTitle: "New Text Item",
+                                   action: #selector(menuNewTextItem), keyEquivalent: "n")
+        newText.target = self
+        newText.keyEquivalentModifierMask = [.command]
+        newText.image = NSImage(systemSymbolName: "square.and.pencil",
+                                accessibilityDescription: nil)
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
         settings.target = self
+        settings.keyEquivalentModifierMask = [.command]
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
-        let pause = menu.addItem(withTitle: "Pause Pesty-Alvie", action: #selector(menuTogglePause), keyEquivalent: "")
+        let help = menu.addItem(withTitle: "Help", action: nil, keyEquivalent: "")
+        help.image = NSImage(systemSymbolName: "questionmark.circle",
+                             accessibilityDescription: nil)
+        let helpMenu = NSMenu(title: "Help")
+        let guide = helpMenu.addItem(withTitle: "Pesty Help",
+                                     action: #selector(menuHelp), keyEquivalent: "")
+        guide.target = self
+        let report = helpMenu.addItem(withTitle: "Report an Issue…",
+                                      action: #selector(menuReportIssue), keyEquivalent: "")
+        report.target = self
+        help.submenu = helpMenu
+        menu.addItem(.separator())
+        let pause = menu.addItem(withTitle: "Pause Pesty",
+                                 action: #selector(menuTogglePause), keyEquivalent: "p")
         pause.target = self
+        pause.keyEquivalentModifierMask = [.command, .shift]
         pause.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
         pauseMenuItem = pause
         let clear = menu.addItem(withTitle: "Clear History", action: #selector(menuClear), keyEquivalent: "")
         clear.target = self
         clear.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
         menu.addItem(.separator())
-        let about = menu.addItem(withTitle: "About Pesty-Alvie", action: #selector(menuAbout), keyEquivalent: "")
+        let about = menu.addItem(withTitle: "About Pesty", action: #selector(menuAbout), keyEquivalent: "")
         about.target = self
         about.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
-        let quit = menu.addItem(withTitle: "Quit Pesty-Alvie", action: #selector(menuQuit), keyEquivalent: "q")
+        let quit = menu.addItem(withTitle: "Quit Pesty", action: #selector(menuQuit), keyEquivalent: "q")
         quit.target = self
         quit.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         item.menu = menu
         statusItem = item
         updatePauseMenuItem()
+        updateHotkeyStatusUI()
     }
 
     func setMenuBarIconVisible(_ visible: Bool) {
@@ -289,6 +356,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuOpen() { showBar() }
+    @objc private func menuNewTextItem() { newTextItem() }
     @objc private func menuSettings() { showSettings() }
     @objc private func showExtensionSettingsFromNotification() {
         showSettings(initialSection: .extensions)
@@ -297,6 +365,16 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func menuTogglePause() { togglePestyPause() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
     @objc private func menuAbout() { showAbout() }
+    @objc private func menuHelp() { showHelp() }
+    @objc private func menuReportIssue() { reportIssue() }
+
+    func showHelp() { openSupportURL("https://github.com/alvst/pesty") }
+    func reportIssue() { openSupportURL("https://github.com/alvst/pesty/issues") }
+
+    private func openSupportURL(_ address: String) {
+        guard let url = URL(string: address) else { return }
+        NSWorkspace.shared.open(url)
+    }
 
     func togglePestyPause() {
         monitor.togglePause()
@@ -306,13 +384,44 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func updatePauseMenuItem() {
         let paused = monitor.isPaused
-        pauseMenuItem?.title = paused ? "Resume Pesty-Alvie" : "Pause Pesty-Alvie"
+        pauseMenuItem?.title = paused ? "Resume Pesty" : "Pause Pesty"
         pauseMenuItem?.image = NSImage(systemSymbolName: paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
     }
 
     private func updateStatusItemIcon(_ item: NSStatusItem) {
-        item.button?.image = NSImage(systemSymbolName: monitor.isPaused ? "pause.circle" : "doc.on.clipboard", accessibilityDescription: AppIdentity.displayName)
+        let symbol: String
+        if monitor.isPaused {
+            symbol = "pause.circle"
+        } else if !HotKeyCenter.shared.isMainHotKeyRegistered {
+            symbol = "exclamationmark.triangle"
+        } else {
+            symbol = "doc.on.clipboard"
+        }
+        item.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: AppIdentity.displayName)
         item.button?.image?.isTemplate = true
+    }
+
+    private func updateHotkeyStatusUI() {
+        if !HotKeyCenter.shared.isMainHotKeyRegistered {
+            openMenuItem?.title = "Open Pesty (shortcut unavailable)"
+            openMenuItem?.image = NSImage(systemSymbolName: "exclamationmark.triangle",
+                                          accessibilityDescription: "Shortcut unavailable")
+        } else {
+            openMenuItem?.title = "Open Pesty"
+            openMenuItem?.image = NSImage(systemSymbolName: "doc.on.clipboard",
+                                          accessibilityDescription: nil)
+        }
+        if let statusItem { updateStatusItemIcon(statusItem) }
+    }
+
+    private func enforceSingleInstance() -> Bool {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return true }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        guard let existing = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { $0.processIdentifier != currentPID }) else { return true }
+        existing.activate(options: [.activateAllWindows])
+        NSApp.terminate(nil)
+        return false
     }
 
     func showAbout() {
@@ -327,6 +436,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func toggleICloudSync() {
+        guard !ClipboardStore.isDemo else { return }
         let enabling = !Settings.shared.iCloudSync
         if enabling && !ClipboardStore.shared.iCloudAvailable {
             let alert = NSAlert()
@@ -341,6 +451,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     #if MAS
     func toggleCloudKitSync() {
+        guard !ClipboardStore.isDemo else { return }
         if Settings.shared.cloudKitSync {
             Settings.shared.cloudKitSync = false
             CloudSyncService.shared.stop()
@@ -367,8 +478,8 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func offerLegacyLibraryMigration() {
         let alert = NSAlert()
-        alert.messageText = "Include Existing Pesty-Alvie History?"
-        alert.informativeText = "If you used the direct-download Mac app, choose its Pesty-Alvie library folder so that history joins iCloud sync. Nothing in this library is overwritten."
+        alert.messageText = "Include Existing Pesty History?"
+        alert.informativeText = "If you used the direct-download Mac app, choose its Pesty library folder so that history joins iCloud sync. Nothing in this library is overwritten."
         alert.addButton(withTitle: "Choose Existing Library…")
         alert.addButton(withTitle: "Sync This Library Only")
         alert.addButton(withTitle: "Cancel")
@@ -385,15 +496,15 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func chooseAndImportLegacyLibrary() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Existing Pesty-Alvie Library"
-        panel.message = "Select the Pesty-Alvie folder that contains store.json and the images folder."
+        panel.title = "Choose Existing Pesty Library"
+        panel.message = "Select the Pesty folder that contains store.json and the images folder."
         panel.prompt = "Choose Library"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.resolvesAliases = true
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Pesty-Alvie", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Pesty", isDirectory: true)
         guard panel.runModal() == .OK, let directory = panel.url else { return }
 
         let scoped = directory.startAccessingSecurityScopedResource()
@@ -508,6 +619,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.applyHistoryPolicy()
         // Pick up a copy the timer has not seen yet, so the bar opens on it.
         monitor.pollNow()
+#if MAS
+        // And anything another device sent since the last push arrived.
+        if Settings.shared.cloudKitSync { CloudSyncService.shared.fetchIfStale() }
+#endif
         store.prepareForBarPresentation()
         store.inlinePreviewVisible = false
         inlinePreviewController?.hide()
@@ -608,6 +723,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         barController?.resize(to: CGFloat(height))
     }
 
+    func updateScreenSharingVisibility() {
+        let sharingType: NSWindow.SharingType = Settings.shared.showDuringScreenSharing ? .readOnly : .none
+        [barController?.window, pasteStackController?.window, inlinePreviewController?.window, previewWindow]
+            .compactMap { $0 }
+            .forEach { $0.sharingType = sharingType }
+    }
+
     func pasteSelected(format: PasteFormat = .original) {
         // A copy made just before summoning the bar may not have been polled
         // yet; capturing it now moves the selection onto it, so Return pastes
@@ -639,7 +761,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         // Release the non-activating panel before sending the paste event to
         // the source app. Escape/click dismissal keeps its slide-out motion.
         hideBar(immediately: true)
-        PasteService.paste(item, into: target, monitor: monitor, format: format)
+        let effectiveFormat = format == .original && Settings.shared.alwaysPastePlainText
+            ? .plainText : format
+        PasteService.paste(item, into: target, monitor: monitor, format: effectiveFormat)
         if Settings.shared.promoteOnPaste {
             store.promoteCopiedItem(item)
         }
@@ -751,7 +875,15 @@ final class AppController: NSObject, NSApplicationDelegate {
         for item in items { store.delete(item, permanently: permanently) }
     }
 
-    func editItem(_ item: ClipItem, launchWritingTools: Bool = false) {
+    func newTextItem() {
+        editItem(ClipItem(type: .text, text: ""), creatingNewItem: true)
+    }
+
+    func editItem(
+        _ item: ClipItem,
+        launchWritingTools: Bool = false,
+        creatingNewItem: Bool = false
+    ) {
         // The Paste Bar's local monitor owns navigation and type-to-search.
         // Suspend it while the editor is first responder so typing and native
         // Writing Tools never get interpreted as bar commands.
@@ -809,19 +941,28 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let edit else { return }
 
         var changed = false
+        var newlyCreatedItem: ClipItem?
         switch edit {
         case let .text(text, richTextData, title, bodyChanged):
-            if bodyChanged {
+            if creatingNewItem {
+                newlyCreatedItem = store.addCreatedTextItem(
+                    text,
+                    richTextData: richTextData,
+                    title: title
+                )
+                changed = newlyCreatedItem != nil
+            } else if bodyChanged {
                 changed = store.updateTextContent(text, richTextData: richTextData, for: item)
             }
-            if title != item.customTitle {
+            if !creatingNewItem, title != item.customTitle {
                 store.setTitle(title, for: item)
                 changed = true
             }
         case let .color(hex):
             changed = store.updateColorContent(hex, for: item)
         }
-        guard changed, let updatedItem = store.item(withID: item.id) else { return }
+        guard changed,
+              let updatedItem = newlyCreatedItem ?? store.item(withID: item.id) else { return }
 
         // Keep the system clipboard in sync, without treating an in-place edit
         // as a new capture or reordering the item's history position.
@@ -895,7 +1036,10 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func showPreview(for item: ClipItem) {
-        let host = NSHostingController(rootView: ClipPreviewWindowView(item: item))
+        let host = NSHostingController(rootView: ClipPreviewWindowView(item: item) { [weak self] in
+            guard let self, let window = self.previewWindow else { return }
+            ClipPreviewSaver.save(item, in: window, store: self.store)
+        })
         let title = "Preview — \(item.displayTitle)"
         previewedItemID = item.id
 
@@ -1004,6 +1148,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         RunLoop.main.add(timer, forMode: .common)
         dragOutTimer = timer
+        updateOutsideClickShield()
     }
 
     private func pollDrag(_ timer: Timer, hidesBarWhenLeaving: Bool) {
@@ -1013,6 +1158,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         if NSEvent.pressedMouseButtons == 0 {
             timer.invalidate()
             dragOutTimer = nil
+            updateOutsideClickShield()
             NotificationCenter.default.post(name: .pestyDragSessionEnded, object: nil)
             return
         }
@@ -1093,7 +1239,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         defer { suppressAutoHide = false }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "Pesty-Alvie can\u{2019}t paste directly"
+        alert.messageText = "Pesty can\u{2019}t paste directly"
         alert.informativeText = "The clip was copied, but macOS is blocking the automatic \u{2318}V because Accessibility permission isn\u{2019}t granted (a rebuilt app needs re-granting). Paste manually with \u{2318}V, or grant access in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "OK")
@@ -1116,9 +1262,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "Clip copied — manual paste required"
         #if DEBUG
-        alert.informativeText = "The Xcode ⌘R build runs in the App Sandbox, so macOS does not allow it to send ⌘V to another app. Pesty-Alvie copied the highlighted clip successfully; press ⌘V in the destination to paste it. The normal direct build pastes automatically."
+        alert.informativeText = "The Xcode ⌘R build runs in the App Sandbox, so macOS does not allow it to send ⌘V to another app. Pesty copied the highlighted clip successfully; press ⌘V in the destination to paste it. The normal direct build pastes automatically."
         #else
-        alert.informativeText = "This sandboxed build cannot send ⌘V to another app. Pesty-Alvie copied the highlighted clip successfully; press ⌘V in the destination to paste it."
+        alert.informativeText = "This sandboxed build cannot send ⌘V to another app. Pesty copied the highlighted clip successfully; press ⌘V in the destination to paste it."
         #endif
         alert.addButton(withTitle: "Continue")
         alert.runModal()
@@ -1159,6 +1305,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         suppressAutoHide = true
         pasteStackController?.show()
         DispatchQueue.main.async { [weak self] in self?.suppressAutoHide = false }
+    }
+
+    /// Reopens the floating collector from the full Paste Stack tab without
+    /// changing whether the active stack is collecting or paused.
+    func showPasteStackPopup() {
+        guard Settings.shared.pasteStacksEnabled else { return }
+        showPasteStack()
+        hideBar()
     }
 
     func showPasteStackTab(stackID: UUID? = nil) {
@@ -1216,6 +1370,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         store.barInputMode = .cards
     }
 
+    func beginBarSearch() {
+        store.barInputMode = .search
+        _ = barController?.focusSearchAtEnd()
+    }
+
     func clearBarSearch() {
         let hadQuery = !store.searchText.isEmpty
         barController?.resignSearch()
@@ -1225,7 +1384,9 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func cancelBarSearchOrHide() {
-        if !store.searchText.isEmpty {
+        if store.barInputMode == .search
+            || barController?.searchOwnsFirstResponder == true
+            || !store.searchText.isEmpty {
             clearBarSearch()
         } else {
             hideBar()
@@ -1336,10 +1497,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         // opened the bar.
         let target = pasteTargetApp()
         hideBar(immediately: true)
+        let effectiveFormat = format == .original && Settings.shared.alwaysPastePlainText
+            ? .plainText : format
         PasteService.paste(entry.item,
                            into: target,
                            monitor: monitor,
-                           format: format,
+                           format: effectiveFormat,
                            imageOverride: entry.imagePreview)
     }
 
@@ -1398,8 +1561,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         let view = SettingsView(initialSection: initialSection)
         let host = NSHostingController(rootView: view)
-        let win = NSWindow(contentViewController: host)
-        win.title = "Pesty-Alvie Settings"
+        let win = SettingsWindow(contentViewController: host)
+        win.title = "Pesty Settings"
         win.styleMask = [.titled, .closable, .miniaturizable]
         win.setContentSize(NSSize(width: 760, height: 680))
         win.center()
@@ -1476,13 +1639,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         // it empty keeps Edit's key equivalents working without claiming any.
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
+        let newTextItem = NSMenuItem(title: "New Text Item",
+                                     action: #selector(menuNewTextItem),
+                                     keyEquivalent: "n")
+        newTextItem.keyEquivalentModifierMask = [.command]
+        newTextItem.target = self
+        appMenu.addItem(newTextItem)
         let settingsItem = NSMenuItem(title: "Settings…",
                                       action: #selector(menuSettings),
                                       keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
         appMenu.addItem(settingsItem)
-        let pauseItem = NSMenuItem(title: "Pause Pesty-Alvie",
+        let pauseItem = NSMenuItem(title: "Pause Pesty",
                                    action: #selector(menuTogglePause),
                                    keyEquivalent: "p")
         pauseItem.keyEquivalentModifierMask = [.command, .shift]
@@ -1500,10 +1669,41 @@ final class AppController: NSObject, NSApplicationDelegate {
             guard let self else { return event }
             return self.handleKey(event)
         }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self,
+                      Settings.shared.hideOnClickOutside,
+                      self.barController?.isPresented == true,
+                      !self.suppressAutoHide,
+                      !self.isRestoringEditorFocus else { return }
+                self.hideBar()
+            }
+        }
+        updateOutsideClickShield()
     }
 
     private func stopKeyMonitor() {
+        outsideClickShield.hide()
         if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
+        if let m = outsideClickMonitor {
+            NSEvent.removeMonitor(m)
+            outsideClickMonitor = nil
+        }
+    }
+
+    @objc func updateOutsideClickShield() {
+        guard keyMonitor != nil,
+              Settings.shared.hideOnClickOutside,
+              barController?.isPresented == true,
+              !suppressAutoHide,
+              !isRestoringEditorFocus,
+              !isDragSessionActive else {
+            outsideClickShield.hide()
+            return
+        }
+        outsideClickShield.show { [weak self] in self?.hideBar() }
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
@@ -1528,19 +1728,34 @@ final class AppController: NSObject, NSApplicationDelegate {
             return event
         }
 
-        // Native context menus, the clip editor, previews, and Settings own
-        // their responder chains. The Paste Bar monitor only handles keys that
-        // actually arrive at its floating panel.
-        guard event.window === barController?.window else { return event }
-
         let code = Int(event.keyCode)
         let flags = event.modifierFlags
         let cmd = flags.contains(.command)
 
+        guard event.window === barController?.window else { return event }
+
         let searchHasFocus = barController?.searchOwnsFirstResponder == true
+
+        // A non-activating panel owns the bar's key events while the previous
+        // app remains active. That unusual split means a physical Command-Tab
+        // reaches Pesty instead of the system app switcher. Drop the panel and
+        // repost the same hardware event after removing our local monitor so
+        // macOS can perform its ordinary forward/backward app switch.
+        if CommandTabShortcut.matches(keyCode: code, modifiers: flags) {
+            forwardCommandTab(event)
+            return nil
+        }
 
         // Application-level commands must work even when the search field or
         // another bar control currently owns first responder.
+        if code == kVK_ANSI_N,
+           cmd,
+           !flags.contains(.shift),
+           !flags.contains(.option),
+           !flags.contains(.control) {
+            newTextItem()
+            return nil
+        }
         if code == kVK_ANSI_Comma,
            cmd,
            !flags.contains(.shift),
@@ -1710,6 +1925,12 @@ final class AppController: NSObject, NSApplicationDelegate {
             return nil
         }
         return event
+    }
+
+    private func forwardCommandTab(_ event: NSEvent) {
+        let commandTabEvent = event.cgEvent
+        hideBar(immediately: true)
+        commandTabEvent?.post(tap: .cghidEventTap)
     }
 
     /// `extending` is ⇧-arrow. The Paste Stack keeps its own single-selection

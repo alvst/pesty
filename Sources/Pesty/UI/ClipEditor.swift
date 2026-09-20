@@ -45,9 +45,48 @@ enum ClipEditor {
     private static func showUnsupportedEditor(for item: ClipItem) {
         let alert = NSAlert()
         alert.messageText = "This clip can't be edited"
-        alert.informativeText = "Pesty-Alvie can edit text, rich text, links, and colors. \(item.type.label) clips are kept as-is."
+        alert.informativeText = "Pesty can edit text, rich text, links, and colors. \(item.type.label) clips are kept as-is."
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+}
+
+@MainActor
+enum ClipEditorToolbar {
+    static let buttonWidth: CGFloat = 38
+    static let buttonHeight: CGFloat = 32
+
+    static func button(symbol: String,
+                       label: String,
+                       tooltip: String,
+                       target: AnyObject?,
+                       action: Selector?,
+                       key: String = "",
+                       toggles: Bool = false) -> NSButton {
+        let button = NSButton()
+        button.bezelStyle = .rounded
+        button.setButtonType(toggles ? .pushOnPushOff : .momentaryPushIn)
+        // Leave the bezel and content tints to AppKit, as with the adjacent
+        // Formatting popup. Custom bezel colors plus attributed label ink
+        // produced black-on-dark controls in the editor's sheet material.
+        let configuration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        button.image?.isTemplate = true
+        button.title = ""
+        button.imagePosition = .imageOnly
+        button.target = target
+        button.action = action
+        button.toolTip = tooltip
+        button.setAccessibilityLabel(label)
+        if tooltip != label { button.setAccessibilityHelp(tooltip) }
+        if !key.isEmpty {
+            button.keyEquivalent = key
+            button.keyEquivalentModifierMask = .command
+        }
+        button.widthAnchor.constraint(equalToConstant: buttonWidth).isActive = true
+        button.heightAnchor.constraint(equalToConstant: buttonHeight).isActive = true
+        return button
     }
 }
 
@@ -234,24 +273,16 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
             ]
         )
 
-        let bold = toolbarTextButton("B", label: "Bold", tooltip: "Bold (⌘B)",
-                                     action: #selector(toggleBold),
-                                     key: "b",
-                                     font: .systemFont(ofSize: 17, weight: .bold))
-        let italic = toolbarTextButton(
-            "I", label: "Italic", tooltip: "Italic (⌘I)",
-            action: #selector(toggleItalic), key: "i",
-            font: NSFontManager.shared.convert(
-                .systemFont(ofSize: 17, weight: .semibold), toHaveTrait: .italicFontMask
-            )
-        )
-        let underline = toolbarTextButton("U", label: "Underline", tooltip: "Underline (⌘U)",
-                                          action: #selector(toggleUnderline), key: "u",
-                                          underline: true)
-        let strikethrough = toolbarTextButton("S", label: "Strikethrough",
-                                              tooltip: "Strikethrough",
-                                              action: #selector(toggleStrikethrough),
-                                              strikethrough: true)
+        let bold = toolbarSymbolButton(symbol: "bold", label: "Bold", tooltip: "Bold (⌘B)",
+                                       action: #selector(toggleBold), key: "b", toggles: true)
+        let italic = toolbarSymbolButton(symbol: "italic", label: "Italic", tooltip: "Italic (⌘I)",
+                                         action: #selector(toggleItalic), key: "i", toggles: true)
+        let underline = toolbarSymbolButton(symbol: "underline", label: "Underline",
+                                            tooltip: "Underline (⌘U)",
+                                            action: #selector(toggleUnderline), key: "u", toggles: true)
+        let strikethrough = toolbarSymbolButton(symbol: "strikethrough", label: "Strikethrough",
+                                                tooltip: "Strikethrough",
+                                                action: #selector(toggleStrikethrough), toggles: true)
         boldButton = bold
         italicButton = italic
         underlineButton = underline
@@ -374,44 +405,14 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         return NSWritingToolsCoordinator.isWritingToolsAvailable
     }
 
-    private func toolbarTextButton(_ title: String,
-                                   label: String,
-                                   tooltip: String,
-                                   action: Selector,
-                                   key: String = "",
-                                   font: NSFont = .systemFont(ofSize: 17, weight: .semibold),
-                                   underline: Bool = false,
-                                   strikethrough: Bool = false) -> NSButton {
-        let button = configuredToolbarButton(label: label, tooltip: tooltip, action: action)
-        button.setButtonType(.pushOnPushOff)
-        // Rich-text formatting is expected on ⌘B/⌘I/⌘U. These live on the
-        // buttons rather than in the main menu because they are this editor's
-        // own actions, not responder-chain ones.
-        if !key.isEmpty {
-            button.keyEquivalent = key
-            button.keyEquivalentModifierMask = .command
-        }
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.labelColor
-        ]
-        if underline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
-        if strikethrough { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-        button.attributedTitle = NSAttributedString(string: title, attributes: attributes)
-        return button
-    }
-
     private func toolbarSymbolButton(symbol: String,
                                      label: String,
                                      tooltip: String,
-                                     action: Selector) -> NSButton {
-        let button = configuredToolbarButton(label: label, tooltip: tooltip, action: action)
-        let configuration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration)
-        button.image?.isTemplate = true
-        button.imagePosition = .imageOnly
-        return button
+                                     action: Selector,
+                                     key: String = "",
+                                     toggles: Bool = false) -> NSButton {
+        ClipEditorToolbar.button(symbol: symbol, label: label, tooltip: tooltip,
+                                 target: self, action: action, key: key, toggles: toggles)
     }
 
     /// Keeps the common character styles one click away while grouping the
@@ -470,8 +471,8 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         button.imagePosition = .imageOnly
         button.toolTip = "More Formatting"
         button.setAccessibilityLabel("More Formatting")
-        button.widthAnchor.constraint(equalToConstant: 42).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        button.widthAnchor.constraint(equalToConstant: ClipEditorToolbar.buttonWidth).isActive = true
+        button.heightAnchor.constraint(equalToConstant: ClipEditorToolbar.buttonHeight).isActive = true
         return button
     }
 
@@ -490,23 +491,6 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
             .withSymbolConfiguration(configuration)
         image?.isTemplate = true
         return image
-    }
-
-    private func configuredToolbarButton(label: String,
-                                         tooltip: String,
-                                         action: Selector) -> NSButton {
-        let button = NSButton()
-        button.bezelStyle = .rounded
-        button.bezelColor = .controlBackgroundColor
-        button.contentTintColor = .labelColor
-        button.target = self
-        button.action = action
-        button.toolTip = tooltip
-        button.setAccessibilityLabel(label)
-        if tooltip != label { button.setAccessibilityHelp(tooltip) }
-        button.widthAnchor.constraint(equalToConstant: 38).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
-        return button
     }
 
     private func flexibleSpacer() -> NSView {

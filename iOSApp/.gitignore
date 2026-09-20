@@ -1,10 +1,10 @@
 # The generated project is part of this standalone app. The root ignore rule
 # excludes Xcode projects, so keep this one visible to Git.
-!Pesty-Alvie.xcodeproj/
-!Pesty-Alvie.xcodeproj/**
+!Pesty.xcodeproj/
+!Pesty.xcodeproj/**
 
 # Keep the generated shared project, but never commit per-user Xcode state.
-Pesty-Alvie.xcodeproj/**/xcuserdata/
+Pesty.xcodeproj/**/xcuserdata/
 
 # Signing teams belong to each contributor's local Xcode account.
 Config/Signing.local.xcconfig

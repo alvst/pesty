@@ -169,7 +169,7 @@ pesty.register({
 
 This heuristic looks for a long, whitespace-free value with several character
 classes and many distinct characters. It can produce false positives. More
-importantly, it labels a clip only **after Pesty-Alvie has stored it**; an
+importantly, it labels a clip only **after Pesty has stored it**; an
 extension cannot block capture or turn ordinary content into concealed data.
 
 ```javascript
@@ -274,7 +274,7 @@ pesty.register({
 
 ## Titles
 
-Use `title: function (clip)` to replace Pesty-Alvie's generated display title.
+Use `title: function (clip)` to replace Pesty's generated display title.
 Return a display string or `null`; it is trimmed, stripped of controls and
 newlines, and capped at 60 characters. The first usable result in descending
 `weight` order wins, but a title explicitly set by the user always takes
@@ -327,7 +327,7 @@ pesty.register({
 
 Use `transform: function (clip)` to produce explicit paste or copy output.
 Return a string or `null`; content is preserved exactly but rejected above
-1,048,576 UTF-16 code units. A transform never runs automatically: Pesty-Alvie
+1,048,576 UTF-16 code units. A transform never runs automatically: Pesty
 adds **Paste via Extension Name**, and a `copyTransformed` menu item can expose
 the same hook as a copy action. An exception, timeout, non-string, over-limit
 value, `null`, `undefined`, or empty string is a no-op that leaves the
@@ -463,7 +463,7 @@ pesty.register({
 ```
 
 The reveal verb does not run extension JavaScript to discover paths;
-Pesty-Alvie validates and reveals the file URLs already stored on the clip.
+Pesty validates and reveals the file URLs already stored on the clip.
 Because a manifest still needs at least one hook, this example also supplies a
 file label:
 
@@ -582,7 +582,7 @@ pesty.register({
 
 ## Configurable extensions
 
-Declare up to eight `config` fields. Pesty-Alvie validates and stores their
+Declare up to eight `config` fields. Pesty validates and stores their
 values, renders controls in the Extensions pane, and exposes the effective
 values through the global `config` object while a hook is running. Never read
 `config` at script top level: it does not exist during installation validation.
@@ -767,7 +767,7 @@ pesty.register({
 
 ## Testing your extension
 
-Installing a pasted script is the first validation pass. Pesty-Alvie evaluates
+Installing a pasted script is the first validation pass. Pesty evaluates
 the top level with the 0.5-second load budget and rejects missing or duplicate
 `pesty.register` calls, malformed manifest fields, non-function hooks, and
 unsupported API versions before saving anything.
@@ -782,7 +782,7 @@ Script exception messages shown by the app are capped at 200 characters. Five
 consecutive exception failures produce a quarantine warning and disable the
 row; a timeout does so immediately. Fix or reinstall the source as needed, then
 switch the row on again to clear the quarantine and retry. The warning states
-whether the extension timed out or failed repeatedly. Pesty-Alvie also posts
+whether the extension timed out or failed repeatedly. Pesty also posts
 one matching local notification when quarantine begins; macOS asks permission
 only when the first such alert is needed, so test both the allowed and denied
 permission paths without expecting a prompt at launch.

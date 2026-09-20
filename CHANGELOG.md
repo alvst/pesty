@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to Pesty-Alvie are documented here. The format is based on
+All notable changes to Pesty are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Pesty-Alvie uses separate release trains for the Mac app and its later
+Pesty uses separate release trains for the Mac app and its later
 companions:
 
 - **2.0.0** is the next macOS release. It does not include Paste Stacks or any
@@ -46,7 +46,7 @@ companions:
 - Clip-card headers now show a user-set custom title ahead of extension labels
   and built-in type labels.
 - Renamed the personal fork's app, executable, bundle, icon, packaging, and
-  documentation identity to Pesty-Alvie.
+  documentation identity to Pesty.
 - Separated preferences, local and iCloud Drive storage, preview temp folders,
   pasteboard source attribution, login-item identity, Accessibility identity,
   and default global shortcuts from upstream Pesty.
@@ -60,7 +60,7 @@ companions:
 ### Planned for 2.5.0 (iPhone and iPad)
 
 #### Changed
-- Renamed the iOS companion product and project to Pesty-Alvie with separate
+- Renamed the iOS companion product and project to Pesty with separate
   app, test, and CloudKit identifiers.
 
 #### Added

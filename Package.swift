@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pesty-Alvie",
+    name: "Pesty",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Pesty-Alvie", targets: ["Pesty"])
+        .executable(name: "Pesty", targets: ["Pesty"])
     ],
     targets: [
         .executableTarget(

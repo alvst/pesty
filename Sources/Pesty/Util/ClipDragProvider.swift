@@ -5,7 +5,7 @@ extension UTType {
     /// In-process drag payload carrying a clip's ID, so drop targets inside
     /// the bar (like the Pinboard tabs) can act on the real ClipItem while
     /// other apps only ever see the content representations.
-    static let pestyClipID = UTType(exportedAs: "com.alvst.pesty-alvie.clip-id")
+    static let pestyClipID = UTType(exportedAs: "com.alvst.pesty.clip-id")
 }
 
 @MainActor

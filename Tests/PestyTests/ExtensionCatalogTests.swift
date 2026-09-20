@@ -22,8 +22,8 @@ final class ExtensionCatalogTests: XCTestCase {
     func testFreshCatalogSeedsBundledExtensionsDisabled() throws {
         let catalog = ExtensionCatalog(directory: directory)
         let expectedIDs: Set<String> = [
-            "com.alvst.pesty-alvie.token-count",
-            "com.alvst.pesty-alvie.json-detector"
+            "com.alvst.pesty.token-count",
+            "com.alvst.pesty.json-detector"
         ]
 
         XCTAssertEqual(Set(catalog.extensions.map(\.id)), expectedIDs)
@@ -141,8 +141,8 @@ final class ExtensionCatalogTests: XCTestCase {
 
     func testUninstalledBundledExtensionsAreNotReseeded() {
         let catalog = ExtensionCatalog(directory: directory)
-        catalog.uninstall(id: "com.alvst.pesty-alvie.token-count")
-        catalog.uninstall(id: "com.alvst.pesty-alvie.json-detector")
+        catalog.uninstall(id: "com.alvst.pesty.token-count")
+        catalog.uninstall(id: "com.alvst.pesty.json-detector")
 
         let reloaded = ExtensionCatalog(directory: directory)
 
@@ -169,24 +169,24 @@ final class ExtensionCatalogTests: XCTestCase {
 
         let catalog = ExtensionCatalog(directory: directory, host: host)
 
-        XCTAssertEqual(catalog.extensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
+        XCTAssertEqual(catalog.extensions.map(\.id), ["com.alvst.pesty.token-count"])
         XCTAssertFalse(catalog.extensions.contains {
-            $0.id == "com.alvst.pesty-alvie.json-detector"
+            $0.id == "com.alvst.pesty.json-detector"
         })
     }
 
     func testSetEnabledPersistsAcrossReload() {
         let catalog = ExtensionCatalog(directory: directory)
-        catalog.setEnabled(true, id: "com.alvst.pesty-alvie.token-count")
+        catalog.setEnabled(true, id: "com.alvst.pesty.token-count")
 
         let reloaded = ExtensionCatalog(directory: directory)
 
         XCTAssertTrue(
             reloaded.extensions.first {
-                $0.id == "com.alvst.pesty-alvie.token-count"
+                $0.id == "com.alvst.pesty.token-count"
             }?.enabled == true
         )
-        XCTAssertEqual(reloaded.enabledExtensions.map(\.id), ["com.alvst.pesty-alvie.token-count"])
+        XCTAssertEqual(reloaded.enabledExtensions.map(\.id), ["com.alvst.pesty.token-count"])
     }
 
     func testTransformExtensionsFilterByEnabledHookAndClipType() throws {

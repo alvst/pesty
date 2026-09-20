@@ -4,6 +4,7 @@ import SwiftUI
 /// Preview always opens this independently focusable, read-only surface.
 struct ClipPreviewWindowView: View {
     let item: ClipItem
+    let onSave: () -> Void
     private var store: ClipboardStore { ClipboardStore.shared }
 
     var body: some View {
@@ -17,14 +18,32 @@ struct ClipPreviewWindowView: View {
                     Text(item.displayTitle)
                         .font(.headline)
                         .lineLimit(2)
-                    Text(item.type.label)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(item.type.label)
+                        Text("·")
+                        Text(item.createdAt.clipRelativeLong)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(item.createdAt.clipRelativeLong)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let openTitle = InlinePreviewExternalOpener.primaryActionTitle(for: item) {
+                    Button {
+                        InlinePreviewExternalOpener.openPrimary(item)
+                    } label: {
+                        Label("Open", systemImage: "arrow.up.forward.square")
+                    }
+                    .keyboardShortcut("o", modifiers: .command)
+                    .help("\(openTitle) (⌘O)")
+                    .accessibilityLabel(openTitle)
+                    .fixedSize()
+                }
+                Button(action: onSave) {
+                    Label("Save…", systemImage: "square.and.arrow.down")
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .help("Save a copy to a file (⌘S)")
+                .fixedSize()
             }
 
             Divider()
@@ -36,6 +55,7 @@ struct ClipPreviewWindowView: View {
         }
         .padding(20)
         .frame(minWidth: 420, minHeight: 280)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -82,7 +102,6 @@ struct ClipPreviewWindowView: View {
             }
         case .richText:
             RichTextContent(rtfData: item.rtfData, fallback: item.text ?? "", font: .system(size: 15))
-                .foregroundStyle(Theme.chromeText)
                 .textSelection(.enabled)
         case .link:
             VStack(alignment: .leading, spacing: 14) {
@@ -112,5 +131,61 @@ struct ClipPreviewWindowView: View {
 
     private var filePreviewImage: NSImage? {
         store.loadPreviewImage(for: item)
+    }
+}
+
+/// Presents save sheets on the preview that owns the action, even if another
+/// Pesty window has since taken keyboard focus.
+@MainActor
+enum ClipPreviewSaver {
+    static func save(_ item: ClipItem, in window: NSWindow, store: ClipboardStore) {
+        guard window.attachedSheet == nil else { return }
+        do {
+            let exports = try ClipPreviewExport.prepare(for: item, store: store)
+            NSApp.activate(ignoringOtherApps: true)
+            save(exports[...], in: window)
+        } catch {
+            show(error, in: window)
+        }
+    }
+
+    private static func save(_ exports: ArraySlice<ClipPreviewExport>, in window: NSWindow) {
+        guard let export = exports.first else { return }
+        let panel = NSSavePanel()
+        panel.title = "Save a Copy"
+        panel.nameFieldStringValue = export.suggestedFileName
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        if exports.count > 1 {
+            panel.message = "Choose where to save “\(export.suggestedFileName)”. Each file will be saved separately."
+        }
+        if let type = export.contentType {
+            panel.allowedContentTypes = [type]
+            panel.allowsOtherFileTypes = false
+        }
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let destination = panel.url else { return }
+            let accessed = destination.startAccessingSecurityScopedResource()
+            defer { if accessed { destination.stopAccessingSecurityScopedResource() } }
+            do {
+                try export.write(to: destination)
+                // Let the completed sheet leave the window before presenting
+                // the next one for a clip containing several files.
+                DispatchQueue.main.async {
+                    save(exports.dropFirst(), in: window)
+                }
+            } catch {
+                DispatchQueue.main.async { show(error, in: window) }
+            }
+        }
+    }
+
+    private static func show(_ error: Error, in window: NSWindow) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Couldn’t Save Clip"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
     }
 }

@@ -1,13 +1,13 @@
-# Pesty-Alvie extensions
+# Pesty extensions
 
-Pesty-Alvie extensions are JavaScript snippets that derive clip-card decorations,
+Pesty extensions are JavaScript snippets that derive clip-card decorations,
 Pinboard suggestions, and searchable keywords or provide explicit
 transformed-paste and safe menu actions. API 1 supports nine hooks: `badge`,
 `subtitle`, `icon`, `color`, `title`, `label`, `suggestPinboard`, `keywords`, and
 `transform`.
 Extensions cannot mutate stored clips, paste automatically, run commands, or
 observe clipboard history. They may declare a small bounded set of settings
-that the user controls in Pesty-Alvie's Extensions pane.
+that the user controls in Pesty's Extensions pane.
 
 Extensions are currently available only in the Mac app.
 
@@ -35,7 +35,7 @@ keyword-index evaluation each use a separate context. Extension work runs off
 the main thread.
 
 This is a deliberately narrow host surface, not a hardened sandbox for
-untrusted code. Pasted scripts still execute inside the Pesty-Alvie process.
+untrusted code. Pasted scripts still execute inside the Pesty process.
 Extensions are off by default; install and enable only code that you have read
 and trust.
 
@@ -60,18 +60,18 @@ Any load or hook timeout immediately quarantines and persistently disables the
 installed extension. Re-enabling the extension in Settings clears its
 quarantine and persisted auto-disable state.
 
-The first time an extension enters quarantine, Pesty-Alvie persists the
+The first time an extension enters quarantine, Pesty persists the
 auto-disable before posting a local notification that names the extension and
 states whether it timed out or failed repeatedly. macOS asks for notification
 permission only when the first quarantine alert is needed, never just because
-Pesty-Alvie launched. If permission is denied, the extension still stays
+Pesty launched. If permission is denied, the extension still stays
 disabled and its reason remains visible in Settings. Re-enabling and later
 quarantining the extension can post a new alert.
 
 JavaScriptCore's public API cannot terminate a script that is already running.
-On timeout, Pesty-Alvie stops waiting, abandons the worker thread, and disables
+On timeout, Pesty stops waiting, abandons the worker thread, and disables
 the extension. The script may continue consuming that thread and CPU until it
-returns or Pesty-Alvie exits. This is a known limitation of API 1.
+returns or Pesty exits. This is a known limitation of API 1.
 
 ## API 1 contract
 
@@ -100,7 +100,7 @@ The registration fields are:
 - `id`: the extension's stable identifier.
 - `name`: the display name shown in Settings and extension-provided menus.
 - `version`: the extension author's version string.
-- `api`: the Pesty-Alvie extension API version. API 1 requires the integer
+- `api`: the Pesty extension API version. API 1 requires the integer
   `1`.
 - `weight`: an optional finite number used to prioritize card decorations.
   It defaults to `0` and is clamped to `-1000...1000`.
@@ -124,7 +124,7 @@ The clip object passed to every hook has this shape:
 }
 ```
 
-Pesty-Alvie checks `types` before loading the script for a clip. A type mismatch
+Pesty checks `types` before loading the script for a clip. A type mismatch
 short-circuits the evaluation before any extension JavaScript executes.
 
 ### Per-extension configuration
@@ -248,7 +248,7 @@ function pestyJSONInfo(clip) {
 }
 
 pesty.register({
-  id: "com.alvst.pesty-alvie.json-detector",
+  id: "com.alvst.pesty.json-detector",
   name: "JSON",
   version: "1.0",
   api: 1,
@@ -276,7 +276,7 @@ the same stable ID to adopt its `keywords` hook.
 
 ## Keyword search indexing
 
-Pesty-Alvie evaluates `keywords` away from card rendering. A background sweep
+Pesty evaluates `keywords` away from card rendering. A background sweep
 visits missing clip/extension pairs in chunks of at most 25, pauses briefly
 between chunks, and stops when no work remains. It starts after launch, after a
 store save adds clips, and after an extension is enabled or invalidated. Only
@@ -392,17 +392,17 @@ Open **Settings → Extensions** to manage extensions.
 3. Use **Uninstall** to remove an extension. Its script text is deleted, so
    keep your own copy if you may need it again.
 
-Pesty-Alvie checks the registration shape and execution limits, but it does not
+Pesty checks the registration shape and execution limits, but it does not
 review what pasted code does. Pasting a script is an explicit trust decision.
 
 ## Bundled example: Token Count
 
-Token Count ships with Pesty-Alvie and is seeded off by default. It estimates
+Token Count ships with Pesty and is seeded off by default. It estimates
 token count from text length and demonstrates a badge-only API 1 extension:
 
 ```javascript
 pesty.register({
-  id: "com.alvst.pesty-alvie.token-count",
+  id: "com.alvst.pesty.token-count",
   name: "Token Count",
   version: "1.0",
   api: 1,

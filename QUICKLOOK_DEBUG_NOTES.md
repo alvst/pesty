@@ -1,4 +1,4 @@
-# Quick Look navigation bug in Pesty-Alvie — debugging notes
+# Quick Look navigation bug in Pesty — debugging notes
 
 Written after a long session where a Quick Look dismiss/selection-sync port
 was attempted, found broken specifically in this app, and reverted
@@ -7,7 +7,7 @@ pick the investigation back up in a fresh thread.
 
 ## Symptoms (as reported, verbatim intent preserved)
 
-All observed in **Pesty-Alvie** (`/Users/alvie/Downloads/pesty-main`, branch
+All observed in **Pesty** (`$HOME/Downloads/pesty-main`, branch
 `context-menu-structure`), using the real signed `.app` bundle with the
 user's actual settings (custom global hotkey: **⌘⌃V**, not the default):
 
@@ -35,8 +35,8 @@ Left/Right navigation and Space-to-dismiss while it's open — **works
 correctly** in the baseline build meant for upstream `momenbasel/pesty`:
 
 - Worktree: `/private/tmp/pesty-pr-quicklook` (may no longer exist if
-  cleaned up — branch is `alvie/pr-quicklook` in
-  `/Users/alvie/Downloads/pesty-main-2`)
+  cleaned up — branch is `fork/pr-quicklook` in
+  `$HOME/Downloads/pesty-main-2`)
 - That build's `AppController.swift` and `Util/QuickLookService.swift` are
   a much simpler, from-scratch implementation (this app has no Paste
   Stacks, no Settings-driven inline-preview alternative, etc.), so it's
@@ -90,7 +90,7 @@ private func handleKey(_ event: NSEvent) -> NSEvent? {
 ```
 
 **Important lesson learned mid-investigation:** the first two attempts at
-capturing this launched `.build/debug/Pesty-Alvie` directly (an unsigned raw
+capturing this launched `.build/debug/Pesty` directly (an unsigned raw
 binary, not inside the `.app` bundle). That does **not** carry the app's
 real bundle identity, so `UserDefaults.standard` reads/writes a different
 domain than the real app — the custom hotkey, and possibly other settings,
@@ -100,9 +100,9 @@ embedded binary directly** to get real settings while still capturing
 stdout/stderr, e.g.:
 
 ```zsh
-cd /Users/alvie/Downloads/pesty-main
+cd $HOME/Downloads/pesty-main
 VERSION=1.2.0 BUILD=1 ./scripts/build_app.sh
-./packaging/Pesty-Alvie.app/Contents/MacOS/Pesty-Alvie > /tmp/pesty-debug.log 2>&1 &
+./packaging/Pesty.app/Contents/MacOS/Pesty > /tmp/pesty-debug.log 2>&1 &
 ```
 
 (`FileHandle.write` was used instead of `print()` specifically because
@@ -161,7 +161,7 @@ between the visible-preview moment and the next logged keystroke.
    those two in isolation (never touching Quick Look) to check if they
    happen regardless. If they're unrelated, they deserve their own
    investigation and shouldn't block re-attempting the Quick Look fix.
-4. **Try `/usr/bin/log stream --level debug --predicate 'process == "Pesty-Alvie"'`**
+4. **Try `/usr/bin/log stream --level debug --predicate 'process == "Pesty"'`**
    instead of manual stdout redirection — the established reliable method
    used successfully elsewhere in this project for exactly this kind of
    AppKit-timing bug (see the "Pin context-menu silent failure" fix from

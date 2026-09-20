@@ -1,7 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// Opens inline-preview clips in a chosen native app without exposing Pesty's
+/// Opens preview clips in a chosen native app without exposing Pesty's
 /// managed history files to edits made by that app.
 @MainActor
 enum InlinePreviewExternalOpener {
@@ -124,22 +124,26 @@ enum InlinePreviewExternalOpener {
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.defaultApplicationBundleID)
     }
 
-    private static func exportedURL(for item: ClipItem) -> URL? {
-        switch item.type {
-        case .link:
-            return linkURL(for: item)
-        case .image:
-            guard let source = ClipboardStore.shared.imageURL(for: item) else { return nil }
-            return copyToTemporaryLocation(source, named: item.displayTitle)
-        case .file:
-            guard let source = imageFileURL(for: item) else { return nil }
-            return copyToTemporaryLocation(source, named: item.displayTitle)
-        case .richText:
-            guard let data = item.rtfData else { return nil }
-            return write(data, named: item.displayTitle, fileExtension: "rtf")
-        case .text:
-            return write(Data((item.text ?? "").utf8), named: item.displayTitle, fileExtension: "txt")
-        case .color:
+    static func exportedURL(for item: ClipItem, store: ClipboardStore? = nil) -> URL? {
+        if item.type == .link { return linkURL(for: item) }
+        guard item.type != .color,
+              item.type != .file || imageFileURL(for: item, store: store) != nil else { return nil }
+
+        // Share Save's lossless export, including cached screenshots and their
+        // actual image formats. External edits only touch this temporary copy.
+        let directory = temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            guard let export = try ClipPreviewExport.prepare(for: item, store: store ?? .shared).first else {
+                return nil
+            }
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            let url = directory.appendingPathComponent(export.suggestedFileName)
+            try export.write(to: url)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
             return nil
         }
     }
@@ -153,53 +157,24 @@ enum InlinePreviewExternalOpener {
         return url
     }
 
-    private static func imageFileURL(for item: ClipItem) -> URL? {
+    private static func imageFileURL(for item: ClipItem, store: ClipboardStore? = nil) -> URL? {
         if item.type == .image {
-            guard let url = ClipboardStore.shared.imageURL(for: item),
+            guard let url = (store ?? .shared).imageURL(for: item),
                   FileManager.default.fileExists(atPath: url.path) else { return nil }
             return url
         }
 
-        guard item.type == .file,
-              item.fileURLs.count == 1,
-              let value = item.fileURLs.first,
-              let url = URL(string: value),
-              url.isFileURL,
-              UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true else { return nil }
-        return url
-    }
-
-    private static func copyToTemporaryLocation(_ source: URL, named title: String) -> URL? {
-        guard let data = try? Data(contentsOf: source) else { return nil }
-        let fileExtension = source.pathExtension.isEmpty ? "png" : source.pathExtension
-        return write(data, named: title, fileExtension: fileExtension)
-    }
-
-    private static func write(_ data: Data, named title: String, fileExtension: String) -> URL? {
-        let fileManager = FileManager.default
-        do {
-            try fileManager.createDirectory(at: temporaryDirectory,
-                                            withIntermediateDirectories: true,
-                                            attributes: [.posixPermissions: 0o700])
-        } catch {
-            return nil
-        }
-
-        let safeTitle = title
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = safeTitle.isEmpty ? "Clip" : String(safeTitle.prefix(80))
-        let url = temporaryDirectory
-            .appendingPathComponent("\(baseName)-\(UUID().uuidString)")
-            .appendingPathExtension(fileExtension)
-        do {
-            try data.write(to: url, options: .atomic)
-            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        guard item.type == .file, item.fileURLs.count == 1 else { return nil }
+        if let value = item.fileURLs.first,
+           let url = URL(string: value), url.isFileURL,
+           UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
             return url
-        } catch {
-            return nil
         }
+        if let cached = (store ?? .shared).imageURL(for: item),
+           FileManager.default.fileExists(atPath: cached.path) {
+            return cached
+        }
+        return nil
     }
 
     private static func open(_ contentURL: URL, withApplication applicationURL: URL) {

@@ -5,16 +5,19 @@ enum AppIconProvider {
     private static let pestyBundleID = AppIdentity.bundleIdentifier
     private static var cache: [String: NSImage] = [:]
 
-    static func icon(forBundleID bundleID: String?) -> NSImage {
+    static func icon(forBundleID bundleID: String?, appearance requestedAppearance: SourceIconOverrides.IconAppearance? = nil) -> NSImage {
+        let appearance = requestedAppearance ?? SourceIconOverrides.shared.currentAppearance
         guard let bundleID else { return generic }
-        if let cached = cache[bundleID] { return cached }
+        if let override = SourceIconOverrides.shared.icon(for: bundleID, appearance: appearance) { return override }
+        let cacheKey = "\(bundleID)|\(appearance.rawValue)"
+        if let cached = cache[cacheKey] { return cached }
         var image = generic
         if bundleID == pestyBundleID || bundleID == Bundle.main.bundleIdentifier {
             image = pestyIcon()
         } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             image = NSWorkspace.shared.icon(forFile: url.path)
         }
-        cache[bundleID] = image
+        cache[cacheKey] = image
         return image
     }
 
@@ -33,7 +36,7 @@ enum AppIconProvider {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let developmentIcon = projectRoot.appending(path: "packaging/Pesty-Alvie.icns")
+        let developmentIcon = projectRoot.appending(path: "packaging/Pesty.icns")
         if let icon = NSImage(contentsOf: developmentIcon) {
             return icon
         }
@@ -48,16 +51,22 @@ enum AppIconProvider {
     /// aligning the raw image's edge to anything leaves a gap the size of that
     /// padding. Cropping to the opaque bounds makes the artwork itself the
     /// thing being positioned.
-    static func trimmedIcon(forBundleID bundleID: String?) -> NSImage {
-        let key = bundleID ?? "__generic__"
+    static func trimmedIcon(forBundleID bundleID: String?, appearance requestedAppearance: SourceIconOverrides.IconAppearance? = nil) -> NSImage {
+        let appearance = requestedAppearance ?? SourceIconOverrides.shared.currentAppearance
+        let key = "\(bundleID ?? "__generic__")|\(appearance.rawValue)"
         if let cached = trimmedCache[key] { return cached }
-        let source = icon(forBundleID: bundleID)
+        let source = icon(forBundleID: bundleID, appearance: appearance)
         let trimmed = trim(source) ?? source
         trimmedCache[key] = trimmed
         return trimmed
     }
 
     private static var trimmedCache: [String: NSImage] = [:]
+
+    static func invalidate(bundleID: String) {
+        cache.keys.filter { $0.hasPrefix("\(bundleID)|") }.forEach { cache.removeValue(forKey: $0) }
+        trimmedCache.keys.filter { $0.hasPrefix("\(bundleID)|") }.forEach { trimmedCache.removeValue(forKey: $0) }
+    }
 
     private static func trim(_ image: NSImage) -> NSImage? {
         // Render at 512px, not at the icon's nominal point size: NSImage picks

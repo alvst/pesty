@@ -4,14 +4,14 @@
 *.xcodeproj
 *.xcuserstate
 DerivedData/
+iOSApp/build/
 
-packaging/Pesty-Alvie.app/
+packaging/Pesty.app/
 packaging/*.dmg
 packaging/*.zip
 packaging/*.icns
-!packaging/Pesty-Alvie.icns
-packaging/icon_1024.png
-packaging/Pesty-Alvie.iconset/
+!packaging/Pesty.icns
+packaging/Pesty.iconset/
 
 *.log
 

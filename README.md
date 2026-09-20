@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="docs/assets/icon.png" width="128" alt="Pesty-Alvie icon" />
+<img src="docs/assets/icon.png" width="128" alt="Pesty icon" />
 
-# Pesty-Alvie
+# Pesty
 
-**Alvie's personal, co-installable build of the open-source [Pesty](https://github.com/momenbasel/pesty) clipboard manager.**
+**This is an independently maintained fork of [momenbasel/pesty](https://github.com/momenbasel/pesty).**
 
 Your clipboard history as a beautiful, color-coded strip that slides up from the bottom of your screen.
 
@@ -12,50 +12,50 @@ Your clipboard history as a beautiful, color-coded strip that slides up from the
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple)
 ![Universal](https://img.shields.io/badge/Universal-Apple%20Silicon%20%2B%20Intel-orange?style=flat-square)
 
-[**Upstream Pesty**](https://github.com/momenbasel/pesty) · [Upstream website](https://www.moamenbasel.com/pesty/) · [Build locally](#build-from-source)
+[**Upstream repository**](https://github.com/momenbasel/pesty) · [Build locally](#build-from-source)
 
-<sub>Pesty-Alvie uses its own bundle ID, storage folders, preview directories, signing requirement, and default global shortcuts so it can coexist with upstream Pesty.</sub>
+<sub>Release plan: macOS 2.0.0 first; the iPhone/iPad companion plus Mac↔iOS sync, widget, and share extension remain planned for 2.5.0.</sub>
 
-<sub>Release plan: macOS 2.0.0 first, Paste Stacks on the upstream-aligned 2.1.0 train, and the iPhone/iPad companion plus Mac↔iOS sync, widget, and share extension in 2.5.0.</sub>
-
-<img src="docs/assets/demo.gif" width="820" alt="Pesty-Alvie clipboard manager demo - color-coded clipboard strip with keyboard navigation on macOS" />
+<img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard manager demo - color-coded clipboard strip with keyboard navigation on macOS" />
 
 ### ⭐ If Pesty helped you, consider starring the [upstream project](https://github.com/momenbasel/pesty).
 
 </div>
 
-## What is Pesty-Alvie?
+## What is Pesty?
 
-Pesty-Alvie keeps a history of everything you copy and lets you get it back instantly. Hit a global hotkey, the strip slides up, you pick a clip with the arrow keys (or `⌘1`–`⌘9`), press `return`, and it pastes straight into whatever app you were in.
+Pesty keeps a history of everything you copy and lets you get it back instantly. Hit a global hotkey, the strip slides up, you pick a clip with the arrow keys (or `⌘1`–`⌘9`), press `return`, and it pastes straight into whatever app you were in.
 
 It is a native reimplementation of the Paste experience, built in **Swift + SwiftUI** with **zero third-party dependencies**.
 
 ## Features
 
-- **Slide-up strip** - full-width, translucent bar that springs up from the bottom of the active screen.
-- **Color-coded cards** - each clip has a header band tinted per source app (consistent per app), with the app icon, type label, when it was copied, a preview, and a footer showing character count and a quick-paste number.
-- **All content types** - plain text, rich text, links, images, files, and colors.
-- **Pinboards** - save clips you reuse into named, color-tagged collections that never expire.
-- **Mac sync** - direct builds can sync Macs through iCloud Drive; sandboxed
-  builds use private CloudKit records. Interoperability with the iPhone/iPad
-  companion arrives with 2.5.0.
-- **Instant search** - start typing to filter your whole history.
-- **Keyboard-first** - arrow keys to move, `return` to paste, `⌘1`–`⌘9` to quick-paste, `⌘⌫` to delete, `esc` to close.
-- **Paste directly** - drops the clip into the app you were using, no manual `⌘V` needed.
-- **Privacy-aware** - ignores clips marked concealed by password managers; history stored with `0600` permissions.
-- **Menu-bar app** - runs quietly as a menu-bar item, optional launch at login.
-- **Native & light** - a single universal `.app`, no Electron, no background web stack.
+- **Slide-up strip** - a full-width, translucent panel that springs up from the bottom of the active screen, with a compact menu-bar companion.
+- **Color-coded cards** - source-app icons, adaptive app-derived colors, type labels, timestamps, previews, character counts, and numbered quick-paste affordances. The new **Default** style adapts to the icon; **Classic** keeps the original fixed palette.
+- **All content types** - plain text, rich text, links, images, files, and colors, with native previews where possible.
+- **Paste Stacks** - collect, reorder, rename, and paste a temporary group of clips, then save or clear the stack.
+- **Pinboards** - save clips into named, color-tagged collections that do not expire; drag to reorder and switch boards from the strip.
+- **Paste-library import** - import an installed Paste SQLite library from Settings, including history, timestamps, source apps, supported payloads, and pinboards. Import is additive and de-duplicates existing clips.
+- **Mac sync** - direct builds can sync Macs through iCloud Drive; sandboxed builds use private CloudKit records. Interoperability with the iPhone/iPad companion remains planned.
+- **Instant search** - start typing to filter history, stacks, and the selected pinboard.
+- **Keyboard-first** - arrow keys move selection, `return` pastes, `⌘1`–`⌘9` quick-paste, `⌘⌫` deletes, and `esc` clears search or closes the strip.
+- **Paste directly or to the clipboard** - paste into the active app through Accessibility, or copy selected clips for manual pasting; an optional “Always paste as Plain Text” mode is available.
+- **Privacy controls** - respect concealed, confidential, and transient pasteboard markers; ignore selected applications; pause capture; control visibility during screen sharing; and keep local history files private.
+- **Link-preview controls** - optionally fetch link metadata and show inline/native previews, with a setting to disable network preview requests.
+- **Custom source icons** - choose separate Light and Dark icons for recognized applications (including custom ChatGPT/Codex icon mappings); system-only sources such as `loginwindow` are hidden.
+- **Appearance settings** - light/dark-aware card surfaces, text, previews, and custom icons, plus Default/Classic color styles and accent shades.
+- **Convenience settings** - configurable global shortcut, launch at login, sound feedback, card/strip sizing, history retention, clear-history controls, and an Extensions area for JavaScript clip actions.
+- **Native & light** - a universal Swift/SwiftUI `.app` with no Electron runtime or background web stack.
 
 ## Install
 
-Build this personal edition from source below. The result is
-`packaging/Pesty-Alvie.app`; it can sit beside `Pesty.app` in Applications.
+Build this fork from source below. The result is `packaging/Pesty.app`.
 
 ## First run
 
-1. Press **`⌃⌘V`** (the personal build's default shortcut) to open the strip.
+1. Press **`⌃⌘V`** (this fork's default shortcut) to open the strip.
 2. Pick a clip and press `return`.
-   - **Direct build:** the first time you paste, macOS asks for **Accessibility** permission - grant it separately to Pesty-Alvie so it can paste directly into other apps. You can change this anytime in **System Settings → Privacy & Security → Accessibility**.
+   - **Direct build:** the first time you paste, macOS asks for **Accessibility** permission - grant it separately to Pesty so it can paste directly into other apps. You can change this anytime in **System Settings → Privacy & Security → Accessibility**.
 
 ## Keyboard shortcuts
 
@@ -66,6 +66,8 @@ Build this personal edition from source below. The result is
 | `return` | Leave search editing; otherwise paste selected clip |
 | `⌘1`–`⌘9` | Quick-paste the Nth clip |
 | `⌘⌫` | Delete selected clip |
+| `⌘S` in Preview | Save a copy of the previewed clip to a file |
+| `⌘O` in Preview | Open the previewed image, text, or link in its configured app |
 | type anything | Search |
 | `esc` | Clear search, then close |
 
@@ -77,10 +79,10 @@ separate iOS 2.5.0 development project are pinned to Xcode 26.3.
 ```bash
 git clone https://github.com/alvst/pesty.git
 cd pesty
-swift run Pesty-Alvie # run in place
+swift run Pesty # run in place
 # or build a distributable .app:
 VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
-open packaging/Pesty-Alvie.app
+open packaging/Pesty.app
 ```
 
 To produce a signed + notarized DMG (needs a Developer ID cert and an App Store Connect API key):
@@ -99,7 +101,7 @@ Sources/Pesty/
   Main.swift            entry point
   AppController.swift   app delegate, hotkey + menu-bar wiring, paste flow
   Models/               ClipItem, ClipType, Pinboard
-  Store/                ClipboardStore (history, pinboards, persistence)
+  Store/                ClipboardStore (history, pinboards, persistence, Paste import)
   Sync/                 shared CloudKit schema, codecs, and MAS sync engine
   Monitor/              ClipboardMonitor (pasteboard polling), PasteService (⌘V injection)
   Hotkey/               HotKeyCenter (Carbon global hotkey)
@@ -111,11 +113,11 @@ packaging/              Info.plist, entitlements, generated artifacts
 iOSApp/                 planned 2.5.0 companion, widget/share targets, and tests
 ```
 
-## Pesty-Alvie vs other Mac clipboard managers
+## Pesty vs other Mac clipboard managers
 
-| | Pesty-Alvie | Paste | Maccy |
+| | Pesty | Paste | Maccy |
 | --- | --- | --- | --- |
-| Price | **Personal build** | Subscription | Free |
+| Price | **Free** | Subscription | Free |
 | Open source | **Yes (MIT)** | No | Yes |
 | Color-coded strip UI | Yes | Yes | No (list) |
 | Pinboards | Yes | Yes | No |
@@ -123,21 +125,21 @@ iOSApp/                 planned 2.5.0 companion, widget/share targets, and tests
 | Native (no Electron) | Yes | Yes | Yes |
 | Signed & notarized | When built with your Developer ID | Yes | Yes |
 
-Pesty-Alvie retains Pesty's native slide-up strip, color-coded cards, pinboards, search, and keyboard-driven pasting while carrying Alvie's personal feature set and a separate application identity.
+This fork retains Pesty's native slide-up strip, color-coded cards, pinboards, search, and keyboard-driven pasting while continuing development independently.
 
 ## FAQ
 
-**Is Pesty-Alvie free?** Yes. It remains covered by Pesty's MIT license.
+**Is Pesty free?** Yes. It remains covered by Pesty's MIT license.
 
-**Can Pesty-Alvie coexist with Pesty?** Yes. It uses a distinct bundle ID, app name, local and iCloud storage folders, temporary directories, signing requirement, and default global shortcuts.
+**How does this relate to upstream Pesty?** It is an independently maintained fork that keeps the Pesty app, package, executable, and repository names for compatibility.
+
+**Can I bring over my Paste library?** Yes. Open **Settings → General → Import from Paste…** and choose the Paste database (the default location is detected automatically when Paste is installed). The importer reads supported history payloads and pinboards without modifying the original database; duplicate clips are skipped.
 
 **Does it keep my clipboard private?** Direct builds store clips locally or in your selected iCloud Drive folder. Sandboxed Mac builds use your private CloudKit database; synchronization with the companion is part of the planned 2.5.0 release. Clipboard contents are not logged; password-manager clips and locally excluded source apps are ignored. Link metadata previews can make network requests.
 
 **What macOS does it need?** macOS 14 (Sonoma) or later, on Apple Silicon or Intel.
 
 > **Keywords:** clipboard manager for Mac, macOS clipboard history, free Paste app alternative, open-source clipboard manager, Maccy alternative, copy-paste history, clipboard pinboards.
-
-🔗 **Upstream website:** [www.moamenbasel.com/pesty](https://www.moamenbasel.com/pesty/)
 
 ## Contributing
 
@@ -149,4 +151,4 @@ PRs welcome - see [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues include 
 
 ## Disclaimer
 
-Pesty-Alvie is a personal derivative of [Pesty](https://github.com/momenbasel/pesty), originally created by Moamen Basel, and remains under the MIT License. Neither project is affiliated with, endorsed by, or connected to Paste or its makers (Wonder Warp / FIPLAB). All trademarks belong to their respective owners.
+This repository is an independently maintained fork of [momenbasel/pesty](https://github.com/momenbasel/pesty), originally created by Moamen Basel, and remains under the MIT License. Neither project is affiliated with, endorsed by, or connected to Paste or its makers (Wonder Warp / FIPLAB). All trademarks belong to their respective owners.

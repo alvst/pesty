@@ -3,9 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-2.0.0}"
-APP="packaging/Pesty-Alvie.app"
-DMG="packaging/Pesty-Alvie-$VERSION.dmg"
-ENTITLEMENTS="packaging/Pesty-Alvie.entitlements"
+APP="packaging/Pesty.app"
+DMG="packaging/Pesty-$VERSION.dmg"
+ENTITLEMENTS="packaging/Pesty.entitlements"
 
 : "${SIGN_IDENTITY:?Set SIGN_IDENTITY to your Developer ID Application identity}"
 : "${ASC_KEY:?Set ASC_KEY to your App Store Connect API key path}"
@@ -18,7 +18,7 @@ echo "==> Codesigning app (hardened runtime)"
 codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" \
-    "$APP/Contents/MacOS/Pesty-Alvie"
+    "$APP/Contents/MacOS/Pesty"
 codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" \
@@ -26,7 +26,7 @@ codesign --force --options runtime --timestamp \
 codesign --verify --strict --verbose=2 "$APP"
 
 echo "==> Notarizing app"
-ZIP="packaging/Pesty-Alvie.zip"
+ZIP="packaging/Pesty.zip"
 rm -f "$ZIP"
 /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"
 xcrun notarytool submit "$ZIP" \
@@ -38,9 +38,9 @@ rm -f "$ZIP"
 echo "==> Building DMG"
 rm -f "$DMG"
 STAGE="$(mktemp -d)"
-cp -R "$APP" "$STAGE/Pesty-Alvie.app"
+cp -R "$APP" "$STAGE/Pesty.app"
 ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "Pesty-Alvie" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -volname "Pesty" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 
 echo "==> Signing + notarizing DMG"

@@ -1372,7 +1372,7 @@ final class ExtensionHostTests: XCTestCase {
     func testBundledTokenCountExtension() {
         let host = ExtensionHost()
         let manifest = ExtensionManifest(
-            id: "com.alvst.pesty-alvie.token-count",
+            id: "com.alvst.pesty.token-count",
             name: "Token Count",
             version: "1.0",
             api: 1,
@@ -1422,7 +1422,7 @@ final class ExtensionHostTests: XCTestCase {
     func testBundledJSONDetectorExtension() {
         let host = ExtensionHost()
         let manifest = ExtensionManifest(
-            id: "com.alvst.pesty-alvie.json-detector",
+            id: "com.alvst.pesty.json-detector",
             name: "JSON",
             version: "1.0",
             api: 1,

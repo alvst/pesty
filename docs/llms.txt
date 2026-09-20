@@ -1,21 +1,21 @@
-# Pesty-Alvie
+# Pesty
 
-> Pesty-Alvie is Alvie's co-installable personal build of the open-source Pesty clipboard manager for macOS.
+> Pesty is an independently maintained fork of the open-source Pesty clipboard manager for macOS.
 
-Pesty-Alvie shows a slide-up strip of color-coded clipboard cards, with pinboards, search, previews, Paste Stacks, and keyboard-driven pasting. It supports text, links, images, files, rich text, and colors. The fork uses a separate macOS bundle identifier, preferences domain, storage folders, temp folders, login item, Accessibility identity, and default shortcuts so it can coexist with upstream Pesty. Clipboard data is not sent to the developer; optional iCloud sync uses the user's Apple account, and inline link previews can contact copied websites for metadata.
+Pesty shows a slide-up strip of color-coded clipboard cards, with pinboards, search, previews, Paste Stacks, and keyboard-driven pasting. It supports text, links, images, files, rich text, and colors. The fork uses a separate macOS bundle identifier, preferences domain, storage folders, temp folders, login item, Accessibility identity, and default shortcuts so it can coexist with upstream Pesty. Clipboard data is not sent to the developer; optional iCloud sync uses the user's Apple account, and inline link previews can contact copied websites for metadata.
 
 ## Install
 - Source: https://github.com/alvst/pesty
 - Build: `bash scripts/build_app.sh`
-- Local app: `packaging/Pesty-Alvie.app`
-- Upstream Homebrew and Mac App Store packages install Pesty, not Pesty-Alvie.
+- Local app: `packaging/Pesty.app`
+- Upstream Homebrew and Mac App Store packages install Pesty, not Pesty.
 
 ## Key facts
 - Category: clipboard manager / productivity utility for macOS
 - Requirements: macOS 14 (Sonoma) or later; Apple Silicon + Intel
-- Identity: `com.alvst.pesty-alvie`
+- Identity: `com.alvst.pesty`
 - Default shortcut: Control-Command-V
-- Local storage: `~/Library/Application Support/Pesty-Alvie`
+- Local storage: `~/Library/Application Support/Pesty`
 - License: MIT; original Pesty by Moamen Basel and contributors
 
 ## Links

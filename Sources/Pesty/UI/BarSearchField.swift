@@ -1,26 +1,50 @@
 import AppKit
 import SwiftUI
 
+/// Search becomes a keyboard target only through an explicit search action or
+/// a click. SwiftUI may update the previous expanded view while reopening the
+/// panel, so visibility alone cannot decide initial keyboard ownership.
+final class BarSearchTextField: NSTextField {
+    var allowsKeyboardFocus = false
+
+    override var acceptsFirstResponder: Bool {
+        allowsKeyboardFocus && super.acceptsFirstResponder
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        allowsKeyboardFocus = true
+        super.mouseDown(with: event)
+    }
+}
+
 /// Keeps the Paste Bar's native search field reachable while SwiftUI renders
 /// it at a compact width. The local key monitor can therefore transfer first
 /// responder synchronously and let the triggering key reach AppKit normally.
 @MainActor
 final class BarSearchFieldBridge {
-    weak var field: NSTextField?
+    weak var field: BarSearchTextField?
 
-    func install(_ field: NSTextField) {
+    func install(_ field: BarSearchTextField) {
         self.field = field
     }
 
-    func uninstall(_ field: NSTextField) {
+    func uninstall(_ field: BarSearchTextField) {
         if self.field === field { self.field = nil }
     }
 
     @discardableResult
     func focusAtEnd() -> Bool {
         guard let field,
-              let window = field.window,
-              window.makeFirstResponder(field) else { return false }
+              let window = field.window else { return false }
+        // Type-to-search arrives before SwiftUI expands the compact field.
+        // Allow focus synchronously so the first character reaches AppKit's
+        // field editor in this same event dispatch.
+        let allowedKeyboardFocus = field.allowsKeyboardFocus
+        field.allowsKeyboardFocus = true
+        guard window.makeFirstResponder(field) else {
+            field.allowsKeyboardFocus = allowedKeyboardFocus
+            return false
+        }
         if let editor = field.currentEditor() as? NSTextView {
             editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
         }
@@ -33,6 +57,12 @@ final class BarSearchFieldBridge {
               let editor = field.currentEditor(),
               window.firstResponder === editor else { return }
         window.makeFirstResponder(nil)
+    }
+
+    func resetForPresentation() {
+        // Keep this independent of SwiftUI's previous expanded layout.
+        field?.allowsKeyboardFocus = false
+        resign()
     }
 
     func ownsFirstResponder(in window: NSWindow?) -> Bool {
@@ -55,8 +85,8 @@ struct NativeBarSearchField: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+    func makeNSView(context: Context) -> BarSearchTextField {
+        let field = BarSearchTextField()
         field.delegate = context.coordinator
         field.isBordered = false
         field.drawsBackground = false
@@ -75,7 +105,7 @@ struct NativeBarSearchField: NSViewRepresentable {
         return field
     }
 
-    func updateNSView(_ field: NSTextField, context: Context) {
+    func updateNSView(_ field: BarSearchTextField, context: Context) {
         context.coordinator.parent = self
         bridge.install(field)
         // Keep an already-active field editor in sync when macOS changes the
@@ -86,7 +116,7 @@ struct NativeBarSearchField: NSViewRepresentable {
         if field.stringValue != text { field.stringValue = text }
     }
 
-    static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) {
+    static func dismantleNSView(_ field: BarSearchTextField, coordinator: Coordinator) {
         coordinator.parent.bridge.uninstall(field)
         field.delegate = nil
     }
