@@ -30,7 +30,7 @@ enum DemoLibrary {
         var history: [PestyClip] = [
             clip(.text, "The quickest way to paste is to press Return on the highlighted card.",
                  app: "Notes", bundle: "com.apple.Notes", ago: 12),
-            clip(.link, "https://github.com/momenbasel/pesty",
+            clip(.link, "https://github.com/alvst/pesty",
                  app: "Safari", bundle: "com.apple.Safari", ago: 90),
             clip(.text, "func paste(_ item: ClipItem) {\n    pasteboard.clearContents()\n    pasteboard.setString(item.text, forType: .string)\n}",
                  app: "Xcode", bundle: "com.apple.dt.Xcode", ago: 340),
