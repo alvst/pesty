@@ -316,15 +316,21 @@ struct PinboardTabs: View {
         Menu {
             ForEach(PinboardColorOption.all) { color in
                 Button { store.setPinboardColor(board.id, to: color.hex) } label: {
-                    HStack {
-                        Circle().fill(Color(hex: color.hex) ?? .accentColor)
-                            .frame(width: 12, height: 12)
-                        Text(color.name)
-                        if board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame {
-                            Image(systemName: "checkmark")
+                    Label {
+                        HStack {
+                            Text(color.name)
+                            if board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame {
+                                Image(systemName: "checkmark")
+                            }
                         }
+                    } icon: {
+                        Image(systemName: "circle.fill")
+                            .foregroundStyle(Color(hex: color.hex) ?? .accentColor)
                     }
                 }
+                .help(board.colorHex.caseInsensitiveCompare(color.hex) == .orderedSame
+                      ? "Current color"
+                      : "Set pinboard color to \(color.name.lowercased())")
             }
         } label: {
             Label("Color", systemImage: "paintpalette")
@@ -504,13 +510,13 @@ private struct PinboardColorOption: Identifiable {
     var id: String { hex }
 
     static let all = [
-        Self(name: "Red", hex: "#FF3B5C"),
+        Self(name: "Red", hex: "#E53935"),
         Self(name: "Orange", hex: "#FF8A2B"),
         Self(name: "Yellow", hex: "#F5B700"),
         Self(name: "Green", hex: "#34C759"),
         Self(name: "Blue", hex: "#0A84FF"),
         Self(name: "Purple", hex: "#BF3BE0"),
-        Self(name: "Pink", hex: "#FF2D55"),
+        Self(name: "Pink", hex: "#E91E63"),
         Self(name: "Gray", hex: "#98989F")
     ]
 }

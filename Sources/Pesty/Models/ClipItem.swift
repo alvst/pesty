@@ -205,7 +205,12 @@ struct ClipItem: Identifiable, Codable, Equatable {
         case .file:
             return fileURLs == other.fileURLs
         default:
-            return text == other.text
+            guard text == other.text else { return false }
+            if imageHash != nil || other.imageHash != nil {
+                if let h = imageHash, let oh = other.imageHash { return h == oh }
+                return imageFileName == other.imageFileName
+            }
+            return true
         }
     }
 }

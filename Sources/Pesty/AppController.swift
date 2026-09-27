@@ -272,10 +272,14 @@ final class AppController: NSObject, NSApplicationDelegate {
                 finishEditorFocusRestore(after: 0.1)
                 return
             }
-            // Activation is not an outside click. A nonactivating bar can
-            // remain key while another app is active; transient activation
-            // notifications must not dismiss it. Actual mouse events and
-            // explicit actions (including Command-Tab) handle dismissal.
+            // Command-Tab is handled by macOS's app switcher before Pesty's
+            // local key monitor can reliably observe it. The selected app's
+            // activation is the dependable dismissal signal for the
+            // non-activating bar. Keep it up while the editor deliberately
+            // yields focus to restore the original app.
+            if barController?.isPresented == true, !suppressAutoHide {
+                hideBar()
+            }
         }
     }
 
@@ -1716,6 +1720,18 @@ final class AppController: NSObject, NSApplicationDelegate {
             return event
         }
 
+        // The non-activating bar can receive Command-Tab while Quick Look is
+        // key, or while AppKit reports a different owning window for the
+        // event. The key monitor is only installed while the bar is shown, so
+        // handle this global bar dismissal before those window-specific paths.
+        if CommandTabShortcut.matches(
+            keyCode: Int(event.keyCode),
+            modifiers: event.modifierFlags
+        ) {
+            forwardCommandTab(event)
+            return nil
+        }
+
         // While Quick Look is key its native arrows/Space/Esc run untouched,
         // but clipboard shortcuts still belong to the bar's selection — the
         // panel's own responder chain has no idea what "Copy" means here.
@@ -1735,16 +1751,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard event.window === barController?.window else { return event }
 
         let searchHasFocus = barController?.searchOwnsFirstResponder == true
-
-        // A non-activating panel owns the bar's key events while the previous
-        // app remains active. That unusual split means a physical Command-Tab
-        // reaches Pesty instead of the system app switcher. Drop the panel and
-        // repost the same hardware event after removing our local monitor so
-        // macOS can perform its ordinary forward/backward app switch.
-        if CommandTabShortcut.matches(keyCode: code, modifiers: flags) {
-            forwardCommandTab(event)
-            return nil
-        }
 
         // Application-level commands must work even when the search field or
         // another bar control currently owns first responder.

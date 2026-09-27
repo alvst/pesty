@@ -46,6 +46,20 @@ enum ClipboardWriter {
             return
         }
 
+        // Keep an image attached to a text clip as a second pasteboard type.
+        if clip.kind != .image, clip.kind != .file,
+           let imageURL = LocalAssetPersistence.url(for: clip.imageAssetID),
+           let image = UIImage(contentsOfFile: imageURL.path),
+           let imageData = image.pngData() {
+            var item: [String: Any] = [UTType.png.identifier: imageData]
+            if clip.kind == .richText, let rtf = clip.richTextData {
+                item[UTType.rtf.identifier] = rtf
+            }
+            if let text = clip.text { item[UTType.utf8PlainText.identifier] = text }
+            UIPasteboard.general.setItems([item], options: [.localOnly: false])
+            return
+        }
+
         if clip.kind == .link,
            let text = clip.text,
            let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -75,6 +89,7 @@ enum ClipboardWriter {
 enum ClipboardReader {
     enum Payload {
         case image(Data)
+        case textAndImage(Data, text: String, kind: ClipKind, richText: Data?)
         case richText(Data, plainText: String?)
         case text(String, kind: ClipKind)
     }
@@ -110,18 +125,35 @@ enum ClipboardReader {
     }
 
     static func read(from pasteboard: UIPasteboard = .general) throws -> Payload {
-        if let data = try imageData(from: pasteboard) {
-            return .image(data)
-        }
-
-        if let rtf = pasteboard.data(forPasteboardType: UTType.rtf.identifier),
-           rtf.count <= CKSchema.maximumTextBytes {
-            let plainText = try? NSAttributedString(
-                data: rtf,
+        let rtf = pasteboard.data(forPasteboardType: UTType.rtf.identifier)
+        let rtfText: String? = rtf.flatMap { data in
+            guard data.count <= CKSchema.maximumTextBytes else { return nil }
+            return try? NSAttributedString(
+                data: data,
                 options: [.documentType: NSAttributedString.DocumentType.rtf],
                 documentAttributes: nil
             ).string
-            return .richText(rtf, plainText: plainText)
+        }
+        let text = pasteboard.string
+        if let data = try imageData(from: pasteboard) {
+            let retainedRTF = rtf.flatMap { $0.count <= CKSchema.maximumTextBytes ? $0 : nil }
+            if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .textAndImage(
+                    data,
+                    text: text,
+                    kind: retainedRTF == nil ? kind(for: text) : .richText,
+                    richText: retainedRTF
+                )
+            }
+            if let retainedRTF, let rtfText {
+                return .textAndImage(data, text: rtfText, kind: .richText, richText: retainedRTF)
+            }
+            return .image(data)
+        }
+
+        if let rtf,
+           rtf.count <= CKSchema.maximumTextBytes {
+            return .richText(rtf, plainText: rtfText)
         }
 
         if pasteboard.hasURLs, let url = pasteboard.url, !url.isFileURL {

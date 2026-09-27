@@ -8,6 +8,26 @@ struct RichClipPreview: View {
     var compact = true
 
     var body: some View {
+        if clip.kind != .image,
+           let url = LocalAssetPersistence.url(for: clip.imageAssetID),
+           let image = UIImage(contentsOfFile: url.path) {
+            VStack(alignment: .leading, spacing: 0) {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.medium)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, minHeight: compact ? 110 : 160, maxHeight: compact ? 210 : 420)
+                    .background(Checkerboard())
+                    .accessibilityLabel("Attached image")
+                clipContent
+            }
+        } else {
+            clipContent
+        }
+    }
+
+    @ViewBuilder
+    private var clipContent: some View {
         switch clip.kind {
         case .link:
             if let url = clip.webURL {

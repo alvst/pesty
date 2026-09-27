@@ -36,6 +36,7 @@ enum AppIconProvider {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+            .deletingLastPathComponent()
         let developmentIcon = projectRoot.appending(path: "packaging/Pesty.icns")
         if let icon = NSImage(contentsOf: developmentIcon) {
             return icon

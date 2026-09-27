@@ -108,6 +108,12 @@ enum PasteService {
         case .text, .link:
             if let t = item.text { pasteboard.setString(t, forType: .string) }
         }
+        // Preserve an image attached to a text/rich-text clip as another
+        // pasteboard representation, so apps that accept both can receive it.
+        if item.type != .image,
+           let image = imageOverride ?? ClipboardStore.shared.loadImage(for: item) {
+            pasteboard.writeObjects([image])
+        }
         markPestyAsSource(on: pasteboard)
         return pasteboard.changeCount
     }

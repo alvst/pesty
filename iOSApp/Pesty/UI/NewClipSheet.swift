@@ -37,21 +37,7 @@ struct NewClipSheet: View {
                 }
 
                 Section("Content") {
-                    if kind == .image {
-                        PhotosPicker(selection: $photoSelection, matching: .images) {
-                            Label(
-                                imageData == nil ? "Choose Photo" : "Choose Another Photo",
-                                systemImage: "photo.on.rectangle"
-                            )
-                        }
-                        if let imageData, let image = UIImage(data: imageData) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 260)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                    } else if kind == .color {
+                    if kind == .color {
                         TextField("#RRGGBB", text: $colorHex)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
@@ -70,6 +56,28 @@ struct NewClipSheet: View {
                     }
                 }
 
+                if kind != .color && kind != .file {
+                    Section("Image attachment") {
+                        PhotosPicker(selection: $photoSelection, matching: .images) {
+                            Label(
+                                imageData == nil ? "Choose Photo" : "Choose Another Photo",
+                                systemImage: "photo.on.rectangle"
+                            )
+                        }
+                        if let imageData, let image = UIImage(data: imageData) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 260)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            Button("Remove Photo", role: .destructive) {
+                                imageData = nil
+                                photoSelection = nil
+                            }
+                        }
+                    }
+                }
+
                 Section("Optional") {
                     TextField("Title", text: $title)
                 }
@@ -82,19 +90,17 @@ struct NewClipSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        if kind == .image, let imageData {
-                            if store.addImageClip(data: imageData, title: title) {
-                                dismiss()
-                            }
-                        } else {
-                            store.addClip(
-                                kind: kind,
-                                text: text,
-                                title: title,
-                                colorHex: kind == .color ? colorHex : nil
-                            )
-                            dismiss()
-                        }
+                        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let savedKind: ClipKind = kind == .image && !trimmedText.isEmpty
+                            ? .text : kind
+                        store.addClip(
+                            kind: savedKind,
+                            text: text,
+                            title: title,
+                            colorHex: kind == .color ? colorHex : nil,
+                            imageData: imageData
+                        )
+                        dismiss()
                     }
                     .disabled(!canSave)
                 }

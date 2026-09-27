@@ -115,7 +115,12 @@ struct PestyClip: Identifiable, Codable, Hashable, Sendable {
         case .color:
             return colorHex == other.colorHex
         case .text, .richText, .link:
-            return text == other.text
+            guard text == other.text else { return false }
+            if imageHash != nil || other.imageHash != nil {
+                if let imageHash, let otherHash = other.imageHash { return imageHash == otherHash }
+                return imageAssetID == other.imageAssetID
+            }
+            return true
         }
     }
 

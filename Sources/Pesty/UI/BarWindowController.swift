@@ -27,6 +27,8 @@ final class BarWindowController: NSWindowController {
 
     private static let slideDuration: TimeInterval = 0.18
     private static let slideOvershoot: CGFloat = 16
+    private static let entranceBounceHeight: CGFloat = 4
+    private static let entranceSettleDuration: TimeInterval = 0.055
     private var isDismissing = false
     private var transitionID = 0
     private let searchBridge = BarSearchFieldBridge()
@@ -102,10 +104,23 @@ final class BarWindowController: NSWindowController {
         // available immediately while the entire bar slides in as one surface.
         panel.setFrame(offScreen, display: false)
         panel.makeKeyAndOrderFront(nil)
+        let entranceTransitionID = transitionID
+        let bounceFrame = onScreen.offsetBy(dx: 0, dy: Self.entranceBounceHeight)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.slideDuration
+            context.duration = Self.slideDuration - Self.entranceSettleDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(onScreen, display: true)
+            panel.animator().setFrame(bounceFrame, display: true)
+        } completionHandler: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self,
+                      self.transitionID == entranceTransitionID,
+                      !self.isDismissing else { return }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = Self.entranceSettleDuration
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    panel.animator().setFrame(onScreen, display: true)
+                }
+            }
         }
     }
 

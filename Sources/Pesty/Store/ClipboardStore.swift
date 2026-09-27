@@ -1074,7 +1074,7 @@ final class ClipboardStore {
             }
             return loadImage(for: item)
         default:
-            return nil
+            return loadImage(for: item)
         }
     }
 

@@ -116,12 +116,26 @@ final class LibraryStore {
         kind: ClipKind,
         text: String,
         title: String? = nil,
-        colorHex: String? = nil
+        colorHex: String? = nil,
+        imageData: Data? = nil
     ) {
         let now = Date.now
+        let image: (name: String, hash: String)?
+        if let imageData {
+            do {
+                image = try LocalAssetPersistence.storeImageData(imageData)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        } else {
+            image = nil
+        }
         let clip = PestyClip(
             kind: kind,
             text: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text,
+            imageAssetID: image?.name,
+            imageHash: image?.hash,
             colorHex: colorHex?.trimmingCharacters(in: .whitespacesAndNewlines),
             sourceDeviceName: UIDevice.current.name,
             customTitle: title?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -173,13 +187,24 @@ final class LibraryStore {
 
     private func importClipboard(from pasteboard: UIPasteboard, skippingDuplicates: Bool) throws -> Bool {
         let now = Date.now
-        let candidate: PestyClip
+        var candidate: PestyClip
         var imageData: Data?
         switch try ClipboardReader.read(from: pasteboard) {
         case .image(let data):
             imageData = data
             candidate = PestyClip(
                 kind: .image,
+                imageHash: LocalAssetPersistence.hash(of: data),
+                sourceDeviceName: UIDevice.current.name,
+                capturedAt: now,
+                updatedAt: now
+            )
+        case .textAndImage(let data, let text, let kind, let richText):
+            imageData = data
+            candidate = PestyClip(
+                kind: kind,
+                text: text,
+                richTextData: richText,
                 imageHash: LocalAssetPersistence.hash(of: data),
                 sourceDeviceName: UIDevice.current.name,
                 capturedAt: now,
@@ -210,7 +235,14 @@ final class LibraryStore {
         }
 
         if let imageData {
-            return addImageClip(data: imageData)
+            do {
+                let stored = try LocalAssetPersistence.storeImageData(imageData)
+                candidate.imageAssetID = stored.name
+                candidate.imageHash = stored.hash
+            } catch {
+                errorMessage = error.localizedDescription
+                return false
+            }
         }
         library.upsert(candidate)
         persist()

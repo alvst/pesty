@@ -183,15 +183,9 @@ final class ClipboardMonitor {
             return item
         }
 
-        if types.contains(.png) || types.contains(.tiff) {
-            if let data = pngData() {
-                let hash = Self.sha256Hex(data)
-                guard let name = ClipboardStore.shared.storeImageData(data) else { return nil }
-                var item = ClipItem(type: .image, imageFileName: name, imageHash: hash)
-                decorate(&item)
-                return item
-            }
-        }
+        // A pasteboard can expose text and pixels at the same time (for
+        // example, a message copied from a rich editor). Keep both on one clip.
+        let imageData = (types.contains(.png) || types.contains(.tiff)) ? pngData() : nil
 
         let rtf = pasteboard.data(forType: .rtf)
         // Browsers often provide HTML with no RTF; keep it for the Markdown
@@ -217,6 +211,18 @@ final class ClipboardMonitor {
                 type = .text
             }
             var item = ClipItem(type: type, text: string, rtfData: rtf, htmlData: html)
+            if let imageData {
+                item.imageHash = Self.sha256Hex(imageData)
+                item.imageFileName = ClipboardStore.shared.storeImageData(imageData)
+            }
+            decorate(&item)
+            return item
+        }
+
+        if let imageData {
+            let hash = Self.sha256Hex(imageData)
+            guard let name = ClipboardStore.shared.storeImageData(imageData) else { return nil }
+            var item = ClipItem(type: .image, imageFileName: name, imageHash: hash)
             decorate(&item)
             return item
         }

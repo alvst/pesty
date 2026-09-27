@@ -156,10 +156,13 @@ struct SourceIconSettings: View {
             + clipboard.pinboards.flatMap(\.items)
             + pasteStack.entries.map(\.item)
             + pasteStack.savedStacks.flatMap { $0.entries.map(\.item) }
-        // loginwindow can arrive from older/system metadata either as its full
-        // bundle ID or as the short executable name. Never expose either form
-        // as a configurable source-app icon.
-        let hiddenBundleIDs: Set<String> = ["com.apple.loginwindow", "loginwindow"]
+        // These system agents can appear as clipboard sources, but they are
+        // not user-facing apps with configurable source icons. Older records
+        // may identify them by bundle ID or short process name.
+        let hiddenBundleIDs: Set<String> = [
+            "com.apple.loginwindow", "loginwindow",
+            "com.apple.securityagent", "securityagent"
+        ]
         var names = Dictionary(uniqueKeysWithValues: overrides.bundleIDs
             .filter { !hiddenBundleIDs.contains($0.lowercased()) }
             .map { ($0, applicationName($0)) })
