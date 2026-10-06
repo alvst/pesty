@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 /// Edits a clip's payload and its optional card title together. Text editing
 /// is intentionally a dedicated surface, rather than an alert, so long
@@ -91,11 +92,38 @@ enum ClipEditorToolbar {
 }
 
 @MainActor
+private final class ClipEditorTextView: NSTextView {
+    weak var titleField: NSTextField?
+
+    override func insertBacktab(_ sender: Any?) {
+        if !focusTitle() { super.insertBacktab(sender) }
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        // macOS normally owns ⌘⇧Tab for app switching. Honor it when delivered
+        // to the editor; ⇧Tab also reaches the title through insertBacktab.
+        if event.type == .keyDown, event.keyCode == kVK_Tab,
+           modifiers == [.command, .shift], focusTitle() {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    private func focusTitle() -> Bool {
+        guard !hasMarkedText(),
+              let window, window.firstResponder === self,
+              let titleField, titleField.window === window else { return false }
+        return window.makeFirstResponder(titleField)
+    }
+}
+
+@MainActor
 private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWindowDelegate {
     private let item: ClipItem
     private let launchWritingTools: Bool
     private let panel: NSPanel
-    private let textView = NSTextView()
+    private let textView = ClipEditorTextView()
     private var initialBody = NSAttributedString(string: "")
     private let titleField = NSTextField()
     private let saveButton = NSButton()
@@ -329,6 +357,7 @@ private final class TextClipEditorController: NSObject, NSTextViewDelegate, NSWi
         titleField.target = self
         titleField.action = #selector(focusBody)
         titleField.nextKeyView = textView
+        textView.titleField = titleField
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false

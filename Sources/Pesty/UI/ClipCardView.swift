@@ -152,15 +152,19 @@ struct ClipCardView: View {
                     Text(cardTypeLabel)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.headerText)
+                        // The compact history header needs its second line
+                        // for the timestamp; other headers can wrap the title.
+                        .lineLimit(isPinboardCard || !settings.pasteStyleCards ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                     // Pinned clips are kept deliberately, so "when it was
                     // copied" is noise there — the timestamp is history-only.
                     if !isPinboardCard {
                         Text(item.createdAt.clipRelativeLong)
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.headerSubText)
+                            .lineLimit(1)
                     }
                 }
-                .lineLimit(1)
                 Spacer(minLength: 4)
                 if pinnedBoardID != nil { pinBadge }
                 if settings.pasteStyleCards {
