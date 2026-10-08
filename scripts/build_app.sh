@@ -4,12 +4,12 @@ cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-2.0.0}"
 BUILD="${BUILD:-1}"
-APP="packaging/Pesty.app"
+APP="macOS/packaging/Pesty.app"
 
 echo "==> Building universal release binary (arm64 + x86_64)"
-swift build -c release --arch arm64 --arch x86_64 --product Pesty
+swift build --package-path macOS -c release --arch arm64 --arch x86_64 --product Pesty
 
-BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/Pesty"
+BIN="$(swift build --package-path macOS -c release --arch arm64 --arch x86_64 --show-bin-path)/Pesty"
 echo "    binary: $BIN"
 
 echo "==> Generating icon"
@@ -19,10 +19,10 @@ echo "==> Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pesty"
-cp packaging/Pesty.icns "$APP/Contents/Resources/Pesty.icns"
+cp macOS/packaging/Pesty.icns "$APP/Contents/Resources/Pesty.icns"
 
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" \
-    packaging/Info.plist > "$APP/Contents/Info.plist"
+    macOS/packaging/Info.plist > "$APP/Contents/Info.plist"
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 

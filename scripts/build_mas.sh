@@ -4,10 +4,10 @@ cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-2.0.0}"
 BUILD="${BUILD:-5}"
-APP="packaging/Pesty.app"
-PKG="packaging/Pesty-MAS-$VERSION.pkg"
-ENT_TEMPLATE="packaging/Pesty-MAS.entitlements"
-PROFILE="${PROFILE:-packaging/Pesty_MAS.provisionprofile}"
+APP="macOS/packaging/Pesty.app"
+PKG="macOS/packaging/Pesty-MAS-$VERSION.pkg"
+ENT_TEMPLATE="macOS/packaging/Pesty-MAS.entitlements"
+PROFILE="${PROFILE:-macOS/packaging/Pesty_MAS.provisionprofile}"
 : "${TEAM_ID:?Set TEAM_ID to your Apple Developer Team ID}"
 : "${APP_IDENTITY:?Set APP_IDENTITY to your Apple Distribution identity}"
 : "${INSTALLER_IDENTITY:?Set INSTALLER_IDENTITY to your installer signing identity}"
@@ -19,16 +19,17 @@ sed "s/__TEAM_ID__/$TEAM_ID/g" "$ENT_TEMPLATE" > "$RESOLVED_ENT"
 [ -f "$PROFILE" ] || { echo "Missing provisioning profile at $PROFILE"; exit 1; }
 
 echo "==> Building universal release binary (sandboxed, no Accessibility — MAS flag)"
-swift build -c release --arch arm64 --arch x86_64 -Xswiftc -DMAS --product Pesty
-BIN="$(swift build -c release --arch arm64 --arch x86_64 -Xswiftc -DMAS --show-bin-path)/Pesty"
+swift build --package-path macOS -c release --arch arm64 --arch x86_64 -Xswiftc -DMAS --product Pesty
+BIN="$(swift build --package-path macOS -c release --arch arm64 --arch x86_64 -Xswiftc -DMAS --show-bin-path)/Pesty"
 bash scripts/make_icon.sh >/dev/null
 
 echo "==> Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pesty"
-cp packaging/Pesty.icns "$APP/Contents/Resources/Pesty.icns"
-sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" packaging/Info.plist > "$APP/Contents/Info.plist"
+cp macOS/packaging/Pesty.icns "$APP/Contents/Resources/Pesty.icns"
+cp macOS/Xcode/Resources/container-migration.plist "$APP/Contents/Resources/container-migration.plist"
+sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" macOS/packaging/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
 

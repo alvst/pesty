@@ -1,0 +1,15 @@
+# The generated project is shared by the iOS and macOS targets. The root
+# ignore rule excludes Xcode projects, so keep this one visible to Git.
+!Pesty.xcodeproj/
+!Pesty.xcodeproj/**
+
+# iCloud Drive sometimes creates numbered conflict copies of generated files.
+Pesty.xcodeproj/project [0-9]*.pbxproj
+Pesty.xcodeproj/project [0-9]*.xcworkspace/
+Pesty.xcodeproj/xcshareddata/xcschemes/* [0-9]*.xcscheme
+
+# Keep the generated shared project, but never commit per-user Xcode state.
+Pesty.xcodeproj/**/xcuserdata/
+
+# Signing teams belong to each contributor's local Xcode account.
+Config/Signing.local.xcconfig

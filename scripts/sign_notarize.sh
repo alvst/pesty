@@ -3,9 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-2.0.0}"
-APP="packaging/Pesty.app"
-DMG="packaging/Pesty-$VERSION.dmg"
-ENTITLEMENTS="packaging/Pesty.entitlements"
+APP="macOS/packaging/Pesty.app"
+DMG="macOS/packaging/Pesty-$VERSION.dmg"
+ENTITLEMENTS="macOS/packaging/Pesty.entitlements"
 
 : "${SIGN_IDENTITY:?Set SIGN_IDENTITY to your Developer ID Application identity}"
 : "${ASC_KEY:?Set ASC_KEY to your App Store Connect API key path}"
@@ -26,7 +26,7 @@ codesign --force --options runtime --timestamp \
 codesign --verify --strict --verbose=2 "$APP"
 
 echo "==> Notarizing app"
-ZIP="packaging/Pesty.zip"
+ZIP="macOS/packaging/Pesty.zip"
 rm -f "$ZIP"
 /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"
 xcrun notarytool submit "$ZIP" \

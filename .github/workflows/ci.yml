@@ -15,6 +15,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode 26.3
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
@@ -28,33 +30,33 @@ jobs:
 
       - name: Verify shared CloudKit contract and metadata
         run: |
-          cmp Sources/Pesty/Sync/CloudKitSchema.swift iOSApp/Pesty/Sync/CloudKitSchema.swift
-          plutil -lint iOSApp/Pesty/Resources/Info.plist
-          plutil -lint iOSApp/Pesty/Resources/Pesty.entitlements
-          plutil -lint packaging/Pesty-MAS.entitlements
+          cmp macOS/Sources/Pesty/Sync/CloudKitSchema.swift iOS/Pesty/Sync/CloudKitSchema.swift
+          plutil -lint iOS/Pesty/Resources/Info.plist
+          plutil -lint iOS/Pesty/Resources/Pesty.entitlements
+          plutil -lint macOS/packaging/Pesty-MAS.entitlements
 
       - name: Test macOS app
-        run: swift test
+        run: swift test --package-path macOS
 
       - name: Build Mac App Store code path
-        run: swift build -Xswiftc -DMAS
+        run: swift build --package-path macOS -Xswiftc -DMAS
 
       - name: Test iPhone and iPad companion
-        working-directory: iOSApp
+        working-directory: Xcode
         run: |
           xcodebuild test \
             -project Pesty.xcodeproj \
-            -scheme Pesty \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
+            -scheme 'Pesty iOS' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -derivedDataPath /tmp/PestyCI \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Build physical-device CloudKit code path
-        working-directory: iOSApp
+        working-directory: Xcode
         run: |
           xcodebuild build \
             -project Pesty.xcodeproj \
-            -scheme Pesty \
+            -scheme 'Pesty iOS' \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath /tmp/PestyDeviceCI \
@@ -64,4 +66,9 @@ jobs:
         run: VERSION=0.0.0 BUILD=ci ./scripts/build_app.sh
 
       - name: Check patch whitespace
-        run: git diff --check
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            git diff --check origin/main...HEAD
+          else
+            git diff --check HEAD^ HEAD
+          fi

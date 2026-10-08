@@ -2,21 +2,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ICON_OUTPUT="packaging/Pesty.icns"
+ICON_OUTPUT="macOS/packaging/Pesty.icns"
 if [[ -f "$ICON_OUTPUT" && "${FORCE_ICON_REBUILD:-0}" != "1" ]]; then
   echo "using tracked $ICON_OUTPUT"
   exit 0
 fi
 
-mkdir -p packaging
+mkdir -p macOS/packaging
 
-ICON_SOURCE="packaging/icon_1024.png"
+ICON_SOURCE="macOS/packaging/icon_1024.png"
 if [[ ! -f "$ICON_SOURCE" ]]; then
   echo "missing $ICON_SOURCE" >&2
   exit 1
 fi
 
-ICONSET="packaging/Pesty.iconset"
+ICONSET="macOS/packaging/Pesty.iconset"
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET"
 

@@ -50,7 +50,7 @@
   "mainEntity": [
     {"@type":"Question","name":"What is Pesty?","acceptedAnswer":{"@type":"Answer","text":"Pesty is an independently maintained fork of the open-source Pesty clipboard manager."}},
     {"@type":"Question","name":"How does this fork relate to upstream Pesty?","acceptedAnswer":{"@type":"Answer","text":"It keeps the Pesty app and code names for compatibility while continuing development independently."}},
-    {"@type":"Question","name":"How do I install Pesty?","acceptedAnswer":{"@type":"Answer","text":"Clone the alvst/pesty repository, run scripts/build_app.sh, and copy packaging/Pesty.app to Applications."}}
+    {"@type":"Question","name":"How do I install Pesty?","acceptedAnswer":{"@type":"Answer","text":"Clone the alvst/pesty repository, run scripts/build_app.sh, and copy macOS/packaging/Pesty.app to Applications."}}
   ]
 }
 </script>
@@ -93,7 +93,7 @@
     <a class="btn" href="https://github.com/alvst/pesty">Build for macOS</a>
     <a class="btn alt" href="https://github.com/momenbasel/pesty">View upstream Pesty</a>
   </div>
-  <p style="margin-top:14px;color:var(--muted);font-size:15px;">Local artifact: <code>packaging/Pesty.app</code></p>
+  <p style="margin-top:14px;color:var(--muted);font-size:15px;">Local artifact: <code>macOS/packaging/Pesty.app</code></p>
   <p style="margin-top:10px;color:var(--muted);font-size:13px;max-width:560px;margin-left:auto;margin-right:auto;">Homebrew and Mac App Store listings may track upstream Pesty rather than this fork.</p>
 </header>
 
@@ -133,7 +133,7 @@
   <pre>git clone https://github.com/alvst/pesty.git
 cd pesty
 bash scripts/build_app.sh
-cp -R packaging/Pesty.app /Applications/</pre>
+cp -R macOS/packaging/Pesty.app /Applications/</pre>
   <p>The local build is ad-hoc signed with the separate <code>com.alvst.pesty</code> identity. It requires macOS 14 (Sonoma) or later and runs on Apple Silicon and Intel.</p>
 </section>
 

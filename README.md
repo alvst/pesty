@@ -11,7 +11,7 @@
 ![iOS](https://img.shields.io/badge/iOS%20%2F%20iPadOS-17%2B-black?style=flat-square&logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?style=flat-square&logo=swift)
 
-[Features](#features) · [iPhone and iPad](#iphone-and-ipad-companion) · [Build from source](#build-from-source) · [Extensions](EXTENSIONS.md)
+[Features](#features) · [iPhone and iPad](#iphone-and-ipad-companion) · [Build from source](#build-from-source) · [Extensions](docs/extensions/EXTENSIONS.md)
 
 <img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard manager showing a color-coded clipboard strip on macOS" />
 
@@ -30,7 +30,7 @@ The project is written in Swift and SwiftUI with no third-party runtime dependen
 | Component | Requirement | Status |
 | --- | --- | --- |
 | Mac app | macOS 14+ | Active and buildable from `main` |
-| iPhone/iPad companion | iOS/iPadOS 17+ | Implemented in `iOSApp/` and under development for the 2.5 release |
+| iPhone/iPad companion | iOS/iPadOS 17+ | Implemented in `iOS/` and under development for the 2.5 release |
 | Home Screen widget | iOS/iPadOS 17+ | Included with the companion project |
 | Share extension | iOS/iPadOS 17+ | Included with the companion project |
 
@@ -76,8 +76,8 @@ The repository is an active development tree. A feature being present in source 
 ### Sync and privacy
 
 - **Two Mac sync paths** — direct builds can sync Macs through iCloud Drive; sandboxed Mac builds use private CloudKit records.
-- **Companion sync** — the sandboxed Mac target and iPhone/iPad companion share the private CloudKit record model used for 2.5 development. The direct-download Mac build does not sync with iOS.
-- **Sensitive clipboard protection** — concealed, confidential, transient, and app-generated pasteboard markers can be excluded.
+- **Companion sync** — signed Mac CloudKit builds and the iPhone/iPad companion share the private CloudKit record model used for 2.5 development. The ad hoc Swift package build only supports iCloud Drive sync between Macs.
+- **Sensitive clipboard protection** — concealed, transient, and automatically generated pasteboard content can be excluded.
 - **Per-app exclusions** — prevent selected apps, including password managers, from entering clipboard history.
 - **Capture controls** — pause Pesty, optionally ignore changes made while the Mac sleeps, and control whether the bar appears during screen sharing.
 - **Network control** — link metadata fetching can be disabled. The core clipboard workflow does not require a third-party service.
@@ -94,11 +94,11 @@ Pesty includes a deliberately narrow, Mac-only JavaScript extension system. Exte
 
 Extensions receive only the current clip's bounded text and type, plus their own settings. They have no network or file APIs, run with strict time limits, and are automatically disabled after a timeout or repeated failures. Pesty includes Token Count and JSON Detector examples.
 
-See the [extension overview](EXTENSIONS.md) and [authoring cookbook](EXTENSION-AUTHORING.md) for the full API and runnable examples.
+See the [extension overview](docs/extensions/EXTENSIONS.md) and [authoring cookbook](docs/extensions/EXTENSION-AUTHORING.md) for the full API and runnable examples.
 
 ## iPhone and iPad companion
 
-The native iOS/iPadOS companion in `iOSApp/` is development source for the 2.5 release line. It is not required to build or use the Mac app.
+The native iOS/iPadOS companion in `iOS/` is development source for the 2.5 release line. It is not required to build or use the Mac app.
 
 Its implemented features include:
 
@@ -112,7 +112,7 @@ Its implemented features include:
 - five-minute local deletion Undo before a hard delete is synced; and
 - owner-protected local files plus a one-time Mac `store.json` importer.
 
-The iOS simulator intentionally uses a local-only library. CloudKit, push delivery, and cross-device behavior require signed physical devices and a correctly provisioned iCloud container. See [iOSApp/README.md](iOSApp/README.md) for setup and release boundaries.
+The iOS simulator intentionally uses a local-only library. CloudKit, push delivery, and cross-device behavior require signed physical devices and a correctly provisioned iCloud container. See [iOS/README.md](iOS/README.md) for setup and release boundaries.
 
 ## Install and first run
 
@@ -156,24 +156,41 @@ Defaults can be changed in **Settings → Shortcuts** where noted.
 
 ### Mac app
 
-The Mac app requires macOS 14 or later and a Swift 6 toolchain. The Xcode projects are pinned to Xcode 26.3.
+The Mac app requires macOS 14 or later and a Swift 6 toolchain. The shared Xcode project is pinned to Xcode 26.3.
 
 ```bash
 git clone https://github.com/alvst/pesty.git
 cd pesty
 
 # Run directly with Swift Package Manager
-swift run Pesty
+swift run --package-path macOS Pesty
 
 # Or assemble a universal Apple Silicon + Intel app bundle
 VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
-open packaging/Pesty.app
+open macOS/packaging/Pesty.app
 ```
+
+For automatic sync with the iPhone/iPad companion, build the signed Mac app
+with the `Pesty macOS Cloud Sync` scheme after configuring your signing team
+in `Xcode/Config/Signing.local.xcconfig`:
+
+```bash
+xcodebuild build -project Xcode/Pesty.xcodeproj \
+  -scheme 'Pesty macOS Cloud Sync' -configuration Debug \
+  -destination 'platform=macOS' -derivedDataPath /tmp/PestyCloudSyncMac \
+  -allowProvisioningUpdates
+open /tmp/PestyCloudSyncMac/Build/Products/Debug/Pesty.app
+```
+
+Enable **Sync with iPhone, iPad, and Mac** in Pesty's Sync settings. Debug Mac
+and iOS builds use the Development CloudKit environment; Release builds use
+Production. Both devices must use the same environment. The Swift package
+packaging command above produces an ad hoc app without CloudKit capabilities.
 
 Run the Mac test suite with:
 
 ```bash
-swift test
+swift test --package-path macOS
 ```
 
 To produce a signed and notarized DMG, provide a Developer ID certificate and App Store Connect API key:
@@ -190,35 +207,33 @@ ASC_KEY_ID="XXXX" ASC_ISSUER="<issuer-uuid>" \
 Signing is configured per checkout so contributor team IDs are not committed. Start with the example configuration, add your Apple Developer team ID, and regenerate or open the project:
 
 ```bash
-cd iOSApp
+cd Xcode
 cp Config/Signing.local.xcconfig.example Config/Signing.local.xcconfig
 # Edit Config/Signing.local.xcconfig and replace YOUR_TEAM_ID.
 xcodegen generate --spec project.yml
 open Pesty.xcodeproj
 ```
 
-The companion, widget, and share extension use separate App IDs and the private `iCloud.com.alvst.pesty` container. Full provisioning instructions and the simulator test command are in [iOSApp/README.md](iOSApp/README.md).
+The shared project has `Pesty iOS`, `Pesty iOS Demo`, and `Pesty macOS Development` schemes. The Mac development scheme runs a separate `Pesty Development.app` with its own sandbox container and no library migration resource.
+
+The companion, widget, and share extension use separate App IDs and the private `iCloud.com.alvst.pesty` container. Full provisioning instructions and the simulator test command are in [iOS/README.md](iOS/README.md).
 
 ## Project structure
 
 ```text
-Sources/Pesty/                 Mac app
-  AppController.swift          app lifecycle, commands, paste handoff
-  Extensions/                  JavaScript extension host and catalog
-  Models/                      clips, clip types, and Pinboards
-  Monitor/                     clipboard capture and paste service
-  Settings/                    preferences and shortcut configuration
-  Store/                       history, selection, Paste Stacks, import
-  Sync/                        CloudKit schema, codec, and MAS sync
-  UI/                          Paste Bar, cards, previews, editor, stacks
-  Util/                        previews, formatting, icons, colors, export
-Tests/PestyTests/              Mac unit and behavior tests
-iOSApp/Pesty/                  iPhone/iPad companion app
-iOSApp/PestyWidget/            recent-clips Home Screen widget
-iOSApp/PestyShareExtension/    iOS/iPadOS Share extension
-scripts/                       build, signing, icon, and release scripts
-packaging/                     Mac app metadata, entitlements, and icon
-docs/                          project website and media
+macOS/                        Swift package, Mac sources and tests
+  Sources/Pesty/              app lifecycle, clipboard, UI, sync
+  Tests/PestyTests/           Mac tests
+  packaging/                 app bundle, signing metadata and icon
+  Xcode/                     Mac development target resources
+iOS/                          iPhone and iPad companion sources
+  Pesty/                     app, domain, persistence and sync
+  PestyWidget/               Home Screen widget
+  PestyShareExtension/       Share extension
+  Tests/                     iOS tests
+Xcode/                        shared Xcode project and signing config
+scripts/                      build, signing, icon and release tools
+docs/                         project website, guides and notes
 ```
 
 ## FAQ
@@ -237,7 +252,7 @@ Yes. Open **Settings → General → Import from Paste…** and choose the Paste
 
 **How does sync work?**
 
-Direct Mac builds can sync with other Macs through iCloud Drive. Sandboxed Mac builds use private CloudKit records and are the path intended to interoperate with the iPhone/iPad companion. Sync is opt-in.
+Ad hoc Mac builds sync with other Macs through iCloud Drive. Signed CloudKit Mac builds sync bidirectionally with the iPhone/iPad companion. Use the Pesty macOS Cloud Sync Xcode scheme for the direct Mac app with companion sync. Sync is opt-in.
 
 **Does Pesty upload my clipboard to a third party?**
 

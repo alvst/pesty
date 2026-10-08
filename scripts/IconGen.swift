@@ -62,6 +62,6 @@ img.unlockFocus()
 guard let tiff = img.tiffRepresentation,
       let rep = NSBitmapImageRep(data: tiff),
       let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
-let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "packaging/icon_1024.png"
+let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "macOS/packaging/icon_1024.png"
 try! png.write(to: URL(fileURLWithPath: out))
 print("wrote \(out)")

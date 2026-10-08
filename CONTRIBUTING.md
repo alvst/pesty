@@ -12,19 +12,24 @@ Thanks for your interest. Pesty is a small, native macOS app with no third-party
 ```bash
 git clone https://github.com/alvst/pesty.git
 cd pesty
-swift build                    # compile
-swift run Pesty          # run in place
-swift run Pesty --demo   # run with sample clips and the strip open (for UI work)
-swift test                     # macOS unit tests
-swift build -Xswiftc -DMAS     # sandboxed/CloudKit compile check
+swift build --package-path macOS                   # compile
+swift run --package-path macOS Pesty               # run in place
+swift run --package-path macOS Pesty --demo        # sample clips and open strip
+swift test --package-path macOS                    # macOS unit tests
+swift build --package-path macOS -Xswiftc -DMAS   # sandboxed/CloudKit compile check
 ```
 
 To build a distributable bundle:
 
 ```bash
 VERSION=2.0.0 BUILD=1 ./scripts/build_app.sh
-open packaging/Pesty.app
+open macOS/packaging/Pesty.app
 ```
+
+The `Pesty macOS Development` Xcode scheme builds `Pesty Development.app` in
+its own sandbox container. It does not include the migration resource that
+ships with the Mac App Store target, so debugging it cannot move your direct
+build's library.
 
 ## Architecture
 
@@ -46,7 +51,8 @@ open packaging/Pesty.app
 ## Pull requests
 
 1. Fork and branch from `main`.
-2. Make your change; run `swift test`, `swift build -Xswiftc -DMAS`, the iOS
+2. Make your change; run `swift test --package-path macOS`,
+   `swift build --package-path macOS -Xswiftc -DMAS`, the iOS
    simulator tests when relevant, and `git diff --check`.
 3. Open a PR with a clear description and before/after screenshots for visual
    changes, or an explicit no-visual-delta statement when screenshots do not

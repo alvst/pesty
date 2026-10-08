@@ -1,0 +1,218 @@
+name: Pesty
+options:
+  bundleIdPrefix: com.alvst
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  xcodeVersion: "26.3"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CURRENT_PROJECT_VERSION: "1"
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+targets:
+  Pesty iOS:
+    type: application
+    platform: iOS
+    productName: Pesty
+    sources:
+      - path: ../iOS/Pesty
+    dependencies:
+      - target: PestyWidget
+        embed: true
+      - target: PestyShareExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion
+        PRODUCT_NAME: Pesty
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: ../iOS/Pesty/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../iOS/Pesty/Resources/Pesty.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.5.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+          ICLOUD_CONTAINER_ENVIRONMENT: Development
+        Release:
+          APS_ENVIRONMENT: production
+          ICLOUD_CONTAINER_ENVIRONMENT: Production
+  PestyWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../iOS/PestyWidget
+      - path: ../iOS/Pesty/Domain/ClipKind.swift
+      - path: ../iOS/Pesty/Domain/PestyClip.swift
+      - path: ../iOS/Pesty/Domain/PestyBoard.swift
+      - path: ../iOS/Pesty/Domain/PestyLibrary.swift
+      - path: ../iOS/Pesty/Store/LocalLibraryPersistence.swift
+      - path: ../iOS/Pesty/Store/LocalFileProtection.swift
+      - path: ../iOS/Pesty/UI/PestyPalette.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.widget
+        PRODUCT_NAME: PestyWidget
+        PRODUCT_MODULE_NAME: PestyWidget
+        INFOPLIST_FILE: ../iOS/PestyWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../iOS/PestyWidget/PestyWidget.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  PestyShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../iOS/PestyShareExtension
+      - path: ../iOS/Pesty/Domain/ClipKind.swift
+      - path: ../iOS/Pesty/Domain/PestyClip.swift
+      - path: ../iOS/Pesty/Domain/PestyBoard.swift
+      - path: ../iOS/Pesty/Domain/PestyLibrary.swift
+      - path: ../iOS/Pesty/Store/LocalLibraryPersistence.swift
+      - path: ../iOS/Pesty/Store/LocalFileProtection.swift
+      - path: ../iOS/Pesty/Store/LocalAssetPersistence.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.share
+        PRODUCT_NAME: PestyShareExtension
+        PRODUCT_MODULE_NAME: PestyShareExtension
+        INFOPLIST_FILE: ../iOS/PestyShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../iOS/PestyShareExtension/PestyShareExtension.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  Pesty iOS Tests:
+    type: bundle.unit-test
+    platform: iOS
+    productName: PestyTests
+    sources:
+      - path: ../iOS/Tests
+    dependencies:
+      - target: Pesty iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.companion.tests
+        MARKETING_VERSION: "2.5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pesty.app/Pesty"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  Pesty macOS:
+    type: application
+    platform: macOS
+    productName: Pesty
+    sources:
+      - path: ../macOS/Sources/Pesty
+        name: Pesty macOS
+      - path: ../macOS/Xcode/Resources/container-migration.plist
+        buildPhase: resources
+      # Track the compiled icon: current iconutil releases cannot reliably
+      # rebuild an iconset produced by older toolchains.
+      - path: ../macOS/packaging/Pesty.icns
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty
+        PRODUCT_NAME: Pesty
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: ../macOS/Xcode/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../macOS/Xcode/Resources/Pesty-Mac.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.0.0"
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAS"
+  Pesty macOS Cloud Sync:
+    type: application
+    platform: macOS
+    productName: Pesty
+    sources:
+      - path: ../macOS/Sources/Pesty
+        name: Pesty macOS
+      - path: ../macOS/packaging/Pesty.icns
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty
+        PRODUCT_NAME: Pesty
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: ../macOS/Xcode/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../macOS/Xcode/Resources/Pesty-CloudSync.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.0.0"
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) CLOUDKIT"
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+          ICLOUD_CONTAINER_ENVIRONMENT: Development
+        Release:
+          APS_ENVIRONMENT: production
+          ICLOUD_CONTAINER_ENVIRONMENT: Production
+  Pesty macOS Development:
+    type: application
+    platform: macOS
+    productName: Pesty Development
+    sources:
+      - path: ../macOS/Sources/Pesty
+        name: Pesty macOS
+      - path: ../macOS/packaging/Pesty.icns
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alvst.pesty.development
+        PRODUCT_NAME: Pesty Development
+        PRODUCT_MODULE_NAME: Pesty
+        INFOPLIST_FILE: ../macOS/Xcode/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ../macOS/Xcode/Resources/Pesty-Development.entitlements
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "2.0.0"
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MAS"
+schemes:
+  Pesty iOS:
+    build:
+      targets:
+        Pesty iOS: all
+        Pesty iOS Tests: [test]
+    test:
+      targets:
+        - Pesty iOS Tests
+  # Screenshot build: launches with --demo so the library is the fixed seed
+  # from DemoLibrary, never the real one.
+  Pesty iOS Demo:
+    build:
+      targets:
+        Pesty iOS: all
+    run:
+      config: Debug
+      commandLineArguments:
+        "--demo": true
+  Pesty macOS Cloud Sync:
+    build:
+      targets:
+        Pesty macOS Cloud Sync: all
+    run:
+      config: Debug
+  Pesty macOS Development:
+    build:
+      targets:
+        Pesty macOS Development: all
+    run:
+      config: Debug

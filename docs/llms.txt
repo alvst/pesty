@@ -7,8 +7,8 @@ Pesty shows a slide-up strip of color-coded clipboard cards, with pinboards, sea
 ## Install
 - Source: https://github.com/alvst/pesty
 - Build: `bash scripts/build_app.sh`
-- Local app: `packaging/Pesty.app`
-- Upstream Homebrew and Mac App Store packages install Pesty, not Pesty.
+- Local app: `macOS/packaging/Pesty.app`
+- Upstream Homebrew and Mac App Store packages install the original Pesty, not this fork.
 
 ## Key facts
 - Category: clipboard manager / productivity utility for macOS

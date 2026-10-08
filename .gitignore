@@ -4,16 +4,17 @@
 *.xcodeproj
 *.xcuserstate
 DerivedData/
-iOSApp/build/
+iOS/build/
+Xcode/build/
 
-packaging/Pesty.app/
-packaging/*.dmg
-packaging/*.zip
-packaging/*.icns
-!packaging/Pesty.icns
-packaging/Pesty.iconset/
+macOS/packaging/*.app/
+macOS/packaging/*.dmg
+macOS/packaging/*.zip
+macOS/packaging/*.icns
+!macOS/packaging/Pesty.icns
+macOS/packaging/Pesty.iconset/
 
 *.log
 
-packaging/*.pkg
-packaging/*.provisionprofile
+macOS/packaging/*.pkg
+macOS/packaging/*.provisionprofile

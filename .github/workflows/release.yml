@@ -70,7 +70,7 @@ jobs:
         id: sum
         run: |
           set -euo pipefail
-          DMG="packaging/Pesty-${{ steps.ver.outputs.version }}.dmg"
+          DMG="macOS/packaging/Pesty-${{ steps.ver.outputs.version }}.dmg"
           echo "sha256=$(shasum -a 256 "$DMG" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
 
